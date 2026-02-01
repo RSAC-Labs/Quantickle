@@ -1,7 +1,7 @@
 # Quantickle - Network Graph Visualization for Threat Intelligence
 
 <br>
-<img width="1906" height="506" alt="image" src="https://github.com/user-attachments/assets/bf5587b8-9689-4574-89d6-b30ba84eb22b" />
+<img width="1906" height="506" alt="q-mainheader" src="https://github.com/user-attachments/assets/1a27834a-2eaa-47a8-8d0f-5cef8abd98cc" />
 <br>
 <br>
 <br>
@@ -84,8 +84,8 @@ Here are some examples of what Quantickle can do:
 
 ### Customize everything: Backgrounds, icons, callouts, node & edge types, as well as areas of research
 <div align="left">
-<img src="https://github.com/user-attachments/assets/ff25d429-553c-46a5-ac6f-4d98b2ef5d87" height=200>
-<img src="https://github.com/user-attachments/assets/937e74ca-661d-4668-9147-48455368c996" height=200>
+<img src="https://github.com/user-attachments/assets/38dd08fa-fb3a-47d3-8697-a9f2ee258914" height=200>
+<img src="https://github.com/user-attachments/assets/c64c6638-df92-4f20-a4fa-2d432f8ff568" height=200>
 <div>
 <br>
 
@@ -98,43 +98,43 @@ Here are some examples of what Quantickle can do:
 
 ### Enclose part of the graph in container nodes, and apply separate styling and layout
 <div align="left">
-<img src="https://github.com/user-attachments/assets/5dac30ef-ce38-4b37-86d1-d4878f049ded" height=200>
-<img src="https://github.com/user-attachments/assets/b0c4e39a-851d-4561-8d86-7dc2dc189822" height=200>
+<img src="https://github.com/user-attachments/assets/92a4791c-cb1a-4810-8c7a-b8d90a5f0801" height=200>
+<img src="https://github.com/user-attachments/assets/8d8e3c81-77be-4db1-bba6-5af301d8acab" height=200>
 </div>
 <br>
 
 ### Timestamp your nodes to create timelines or time-colored graphs
 <div align="left">
-<img src="https://github.com/user-attachments/assets/6658c181-b2f6-4c6b-8602-21bb2c18523c" height=200>
-<img src="https://github.com/user-attachments/assets/db916514-c7ce-410e-aead-1f6f102f79ed" height=200>
+<img src="https://github.com/user-attachments/assets/20f5c7a9-0113-4dc6-a1ef-c4290a2aead3" height=200>
+<img src="https://github.com/user-attachments/assets/79182787-3c45-44ef-9fad-bea3ec5eb675" height=200>
 </div>
 <br>
 
 ### Link graphs to create navigatable dashboards and logical connections
 <div align="left">
-<img src="https://github.com/user-attachments/assets/6315ecde-885b-4515-a69e-03cc7b394ed9" height=200>
-<img src="https://github.com/user-attachments/assets/ee2ff0a4-7d05-4001-9017-a59831dd88f4" height=200>
+<img src="https://github.com/user-attachments/assets/ab7570af-3c57-46cf-9be1-641d289f05ba" height=200>
+<img src="https://github.com/user-attachments/assets/f19648d4-01f8-4265-98d3-93ff9861f8ec" height=200>
 <div>
 <br>
 
 ### Save to JSON. Export to CSV, PDF, PNG, or static HTML. Import CSV, paste, or fetch content from integrations
 <div align="left">
-<img src="https://github.com/user-attachments/assets/436b0801-214d-46c7-9c74-dffea3492146" height=200>
-<img src="https://github.com/user-attachments/assets/9df18140-f2a0-4495-abb8-90e17a6aa165" height=200>
+<img src="https://github.com/user-attachments/assets/c9cf9fbb-31a0-449f-b2a0-f13979dbc81c" height=200>
+<img src="https://github.com/user-attachments/assets/608e7178-58ca-4e4e-912c-b54c075b45b5" height=200>
 <div>
 <br>
 
 ### Optionally save to Neo4j databases
 <div align="left">
-<img src="https://github.com/user-attachments/assets/eddb27c5-e00e-4707-80ea-436565fe8977" height=200>
-<img src="https://github.com/user-attachments/assets/74d27fbd-2656-49a4-b28b-1f5736109979" height=200>
+<img src="https://github.com/user-attachments/assets/ff904a31-f6ac-4422-8f79-1f31f5eb7286" height=200>
+<img src="https://github.com/user-attachments/assets/eaecfdfd-22e4-476a-832c-1892049f70c6" height=200>
 <div>
 <br>
   
 ### Query integrations like VirusTotal or OpenAI - get results back in separate containers
 <div align="left">
-<img src="https://github.com/user-attachments/assets/65ee688d-dea4-407b-a952-fda79a76655a" height=200>
-<img src="https://github.com/user-attachments/assets/a5b7334e-bbd8-4b33-8d4b-73d651601061" height=200>
+<img src="https://github.com/user-attachments/assets/19aa2ffd-2950-455e-a8f8-d25e0eefcd6d" height=200>
+<img src="https://github.com/user-attachments/assets/565ea96f-1ac1-42f8-b533-4d8abe31658a" height=200>
 <div>
 
 
