@@ -98,7 +98,7 @@ Here are some examples of what Quantickle can do:
 
 ### Enclose part of the graph in container nodes, and apply separate styling and layout
 <div align="left">
-<img src="https://github.com/user-attachments/assets/92a4791c-cb1a-4810-8c7a-b8d90a5f0801" height=200>
+<img src="https://github.com/user-attachments/assets/1d600a40-6848-48bf-a2bf-808804683b05" height=200>
 <img src="https://github.com/user-attachments/assets/8d8e3c81-77be-4db1-bba6-5af301d8acab" height=200>
 </div>
 <br>
