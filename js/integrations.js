@@ -3183,12 +3183,28 @@ window.IntegrationsManager = {
         if (typeof options.useServiceContainer === 'boolean') {
             useServiceContainer = options.useServiceContainer;
         }
-        const reparentNodes = options.reparent !== false;
 
         const source = cy.getElementById(sourceId);
         if (!source || source.empty()) {
             return;
         }
+
+        const layoutName = window.LayoutManager && typeof window.LayoutManager.currentLayout === 'string'
+            ? window.LayoutManager.currentLayout
+            : '';
+        const timelineLayoutActive = layoutName.startsWith('timeline');
+        const timelineScaffoldingPresent = cy.nodes('[type="timeline-bar"], [type="timeline-anchor"], [type="timeline-tick"]').length > 0;
+        const sourceTimelineScope = typeof source.data === 'function' ? source.data('_timelineScope') : null;
+        const avoidIntegrationContainer = timelineLayoutActive || timelineScaffoldingPresent || Boolean(sourceTimelineScope);
+
+        if (avoidIntegrationContainer) {
+            useServiceContainer = false;
+            if (options.reparent === undefined) {
+                options.reparent = false;
+            }
+        }
+
+        const reparentNodes = options.reparent !== false;
 
         const origin = source.position();
         const radius = 80;
