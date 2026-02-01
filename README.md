@@ -84,57 +84,57 @@ Here are some examples of what Quantickle can do:
 
 ### Customize everything: Backgrounds, icons, callouts, node & edge types, as well as areas of research
 <div align="left">
-<img src="https://github.com/user-attachments/assets/38dd08fa-fb3a-47d3-8697-a9f2ee258914" height=200>
-<img src="https://github.com/user-attachments/assets/c64c6638-df92-4f20-a4fa-2d432f8ff568" height=200>
+<img src="/assets/images/q-2.png" height=200>
+<img src="/assets/images/q-3.png" height=200>
 <div>
 <br>
 
 ### Choose between 20+ layouting algorithms (eg Klay vs Euler)
 <div align="left">
-<img src="https://github.com/user-attachments/assets/d917054b-f172-47b7-b349-1dc6b72f0f3c" height=200>
-<img src="https://github.com/user-attachments/assets/f1e429bc-d9db-4ffc-9a0a-9c2ea94217f1" height=200>
+<img src="/assets/images/q-4.png" height=200>
+<img src="/assets/images/q-5.png" height=200>
 </div>
 <br>
 
 ### Enclose part of the graph in container nodes, and apply separate styling and layout
 <div align="left">
-<img src="https://github.com/user-attachments/assets/1d600a40-6848-48bf-a2bf-808804683b05" height=200>
-<img src="https://github.com/user-attachments/assets/8d8e3c81-77be-4db1-bba6-5af301d8acab" height=200>
+<img src="/assets/images/q-6.png" height=200>
+<img src="/assets/images/q-7.png" height=200>
 </div>
 <br>
 
 ### Timestamp your nodes to create timelines or time-colored graphs
 <div align="left">
-<img src="https://github.com/user-attachments/assets/20f5c7a9-0113-4dc6-a1ef-c4290a2aead3" height=200>
-<img src="https://github.com/user-attachments/assets/79182787-3c45-44ef-9fad-bea3ec5eb675" height=200>
+<img src="/assets/images/q-8.png" height=200>
+<img src="/assets/images/q-9.png" height=200>
 </div>
 <br>
 
 ### Link graphs to create navigatable dashboards and logical connections
 <div align="left">
-<img src="https://github.com/user-attachments/assets/ab7570af-3c57-46cf-9be1-641d289f05ba" height=200>
-<img src="https://github.com/user-attachments/assets/f19648d4-01f8-4265-98d3-93ff9861f8ec" height=200>
+<img src="/assets/images/q-10.png" height=200>
+<img src="/assets/images/q-11.png" height=200>
 <div>
 <br>
 
 ### Save to JSON. Export to CSV, PDF, PNG, or static HTML. Import CSV, paste, or fetch content from integrations
 <div align="left">
-<img src="https://github.com/user-attachments/assets/c9cf9fbb-31a0-449f-b2a0-f13979dbc81c" height=200>
-<img src="https://github.com/user-attachments/assets/608e7178-58ca-4e4e-912c-b54c075b45b5" height=200>
+<img src="/assets/images/q-12.png" height=200>
+<img src="/assets/images/q-13.png" height=200>
 <div>
 <br>
 
 ### Optionally save to Neo4j databases
 <div align="left">
-<img src="https://github.com/user-attachments/assets/ff904a31-f6ac-4422-8f79-1f31f5eb7286" height=200>
-<img src="https://github.com/user-attachments/assets/eaecfdfd-22e4-476a-832c-1892049f70c6" height=200>
+<img src="/assets/images/q-14.png" height=200>
+<img src="/assets/images/q-15.png" height=200>
 <div>
 <br>
   
 ### Query integrations like VirusTotal or OpenAI - get results back in separate containers
 <div align="left">
-<img src="https://github.com/user-attachments/assets/19aa2ffd-2950-455e-a8f8-d25e0eefcd6d" height=200>
-<img src="https://github.com/user-attachments/assets/565ea96f-1ac1-42f8-b533-4d8abe31658a" height=200>
+<img src="/assets/images/q-16.png" height=200>
+<img src="/assets/images/q-17.png" height=200>
 <div>
 
 
