@@ -1,0 +1,3529 @@
+{
+  "nodes": [
+    {
+      "id": "public/index.html",
+      "label": "public/index.html",
+      "type": "source"
+    },
+    {
+      "id": "assets/css/graph-portal.css",
+      "label": "assets/css/graph-portal.css",
+      "type": "source"
+    },
+    {
+      "id": "assets/css/text-callout.css",
+      "label": "assets/css/text-callout.css",
+      "type": "source"
+    },
+    {
+      "id": "js/3d-globe-layout.js",
+      "label": "js/3d-globe-layout.js",
+      "type": "source"
+    },
+    {
+      "id": "js/absolute-layout.js",
+      "label": "js/absolute-layout.js",
+      "type": "source"
+    },
+    {
+      "id": "js/ai-input-manager.js",
+      "label": "js/ai-input-manager.js",
+      "type": "source"
+    },
+    {
+      "id": "js/api.js",
+      "label": "js/api.js",
+      "type": "source"
+    },
+    {
+      "id": "js/auto-refresh.js",
+      "label": "js/auto-refresh.js",
+      "type": "source"
+    },
+    {
+      "id": "js/config.js",
+      "label": "js/config.js",
+      "type": "source"
+    },
+    {
+      "id": "js/custom-layouts.js",
+      "label": "js/custom-layouts.js",
+      "type": "source"
+    },
+    {
+      "id": "js/domain-loader.js",
+      "label": "js/domain-loader.js",
+      "type": "source"
+    },
+    {
+      "id": "js/edge-editor.js",
+      "label": "js/edge-editor.js",
+      "type": "source"
+    },
+    {
+      "id": "js/extensions.js",
+      "label": "js/extensions.js",
+      "type": "source"
+    },
+    {
+      "id": "js/features/context-menu/context-menu-module.js",
+      "label": "js/features/context-menu/context-menu-module.js",
+      "type": "source"
+    },
+    {
+      "id": "js/features/data-manager/adapter.js",
+      "label": "js/features/data-manager/adapter.js",
+      "type": "source"
+    },
+    {
+      "id": "js/features/data-manager/data-manager-module.js",
+      "label": "js/features/data-manager/data-manager-module.js",
+      "type": "source"
+    },
+    {
+      "id": "js/features/file-manager/file-manager-module.js",
+      "label": "js/features/file-manager/file-manager-module.js",
+      "type": "source"
+    },
+    {
+      "id": "js/features/graph-area-editor/graph-area-editor-module.js",
+      "label": "js/features/graph-area-editor/graph-area-editor-module.js",
+      "type": "source"
+    },
+    {
+      "id": "js/features/graph-modules/3d-rotation-manager/bootstrap.js",
+      "label": "js/features/graph-modules/3d-rotation-manager/bootstrap.js",
+      "type": "source"
+    },
+    {
+      "id": "js/features/graph-modules/3d-rotation-manager/rotation-3d-module.js",
+      "label": "js/features/graph-modules/3d-rotation-manager/rotation-3d-module.js",
+      "type": "source"
+    },
+    {
+      "id": "js/features/graph-modules/debug-tools/debug-tools-module.js",
+      "label": "js/features/graph-modules/debug-tools/debug-tools-module.js",
+      "type": "source"
+    },
+    {
+      "id": "js/features/graph-modules/edge-creator/adapter.js",
+      "label": "js/features/graph-modules/edge-creator/adapter.js",
+      "type": "source"
+    },
+    {
+      "id": "js/features/graph-modules/graph-controls/graph-controls-bootstrap.js",
+      "label": "js/features/graph-modules/graph-controls/graph-controls-bootstrap.js",
+      "type": "source"
+    },
+    {
+      "id": "js/features/graph-modules/graph-controls/graph-controls-module.js",
+      "label": "js/features/graph-modules/graph-controls/graph-controls-module.js",
+      "type": "source"
+    },
+    {
+      "id": "js/features/graph-modules/graph-editor/adapter.js",
+      "label": "js/features/graph-modules/graph-editor/adapter.js",
+      "type": "source"
+    },
+    {
+      "id": "js/features/graph-modules/graph-styling/graph-styling-module.js",
+      "label": "js/features/graph-modules/graph-styling/graph-styling-module.js",
+      "type": "source"
+    },
+    {
+      "id": "js/features/graph-modules/lod-manager/adapter.js",
+      "label": "js/features/graph-modules/lod-manager/adapter.js",
+      "type": "source"
+    },
+    {
+      "id": "js/features/graph-modules/performance-manager/bootstrap.js",
+      "label": "js/features/graph-modules/performance-manager/bootstrap.js",
+      "type": "source"
+    },
+    {
+      "id": "js/features/graph-modules/performance-manager/performance-manager-module.js",
+      "label": "js/features/graph-modules/performance-manager/performance-manager-module.js",
+      "type": "source"
+    },
+    {
+      "id": "js/features/graph-modules/progress-manager/adapter.js",
+      "label": "js/features/graph-modules/progress-manager/adapter.js",
+      "type": "source"
+    },
+    {
+      "id": "js/features/graph-modules/selection-manager/adapter.js",
+      "label": "js/features/graph-modules/selection-manager/adapter.js",
+      "type": "source"
+    },
+    {
+      "id": "js/features/graph-modules/text-callout/text-callout.js",
+      "label": "js/features/graph-modules/text-callout/text-callout.js",
+      "type": "source"
+    },
+    {
+      "id": "js/features/layout-manager/adapter.js",
+      "label": "js/features/layout-manager/adapter.js",
+      "type": "source"
+    },
+    {
+      "id": "js/features/node-editor/node-editor-module.js",
+      "label": "js/features/node-editor/node-editor-module.js",
+      "type": "source"
+    },
+    {
+      "id": "js/graph-manager.js",
+      "label": "js/graph-manager.js",
+      "type": "source"
+    },
+    {
+      "id": "js/graph-reference-resolver.js",
+      "label": "js/graph-reference-resolver.js",
+      "type": "source"
+    },
+    {
+      "id": "js/graph.js",
+      "label": "js/graph.js",
+      "type": "source"
+    },
+    {
+      "id": "js/integrations.js",
+      "label": "js/integrations.js",
+      "type": "source"
+    },
+    {
+      "id": "js/integrations/misp-mapper.js",
+      "label": "js/integrations/misp-mapper.js",
+      "type": "source"
+    },
+    {
+      "id": "js/layouts.js",
+      "label": "js/layouts.js",
+      "type": "source"
+    },
+    {
+      "id": "js/lod-system.js",
+      "label": "js/lod-system.js",
+      "type": "source"
+    },
+    {
+      "id": "js/main.js",
+      "label": "js/main.js",
+      "type": "source"
+    },
+    {
+      "id": "js/rag-pipeline.js",
+      "label": "js/rag-pipeline.js",
+      "type": "source"
+    },
+    {
+      "id": "js/secure-storage.js",
+      "label": "js/secure-storage.js",
+      "type": "source"
+    },
+    {
+      "id": "js/source-editor.js",
+      "label": "js/source-editor.js",
+      "type": "source"
+    },
+    {
+      "id": "js/tables.js",
+      "label": "js/tables.js",
+      "type": "source"
+    },
+    {
+      "id": "js/ui.js",
+      "label": "js/ui.js",
+      "type": "source"
+    },
+    {
+      "id": "js/utils.js",
+      "label": "js/utils.js",
+      "type": "source"
+    },
+    {
+      "id": "js/validation.js",
+      "label": "js/validation.js",
+      "type": "source"
+    },
+    {
+      "id": "js/workspace-manager.js",
+      "label": "js/workspace-manager.js",
+      "type": "source"
+    },
+    {
+      "id": "utils/readability-shim.js",
+      "label": "utils/readability-shim.js",
+      "type": "source"
+    },
+    {
+      "id": "data_retrieval/index.js",
+      "label": "data_retrieval/index.js",
+      "type": "source"
+    },
+    {
+      "id": "data_retrieval/models.js",
+      "label": "data_retrieval/models.js",
+      "type": "source"
+    },
+    {
+      "id": "data_retrieval/tweets.js",
+      "label": "data_retrieval/tweets.js",
+      "type": "source"
+    },
+    {
+      "id": "data_retrieval/web_search.js",
+      "label": "data_retrieval/web_search.js",
+      "type": "source"
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge1",
+      "source": "public/index.html",
+      "target": "assets/css/graph-portal.css",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge2",
+      "source": "public/index.html",
+      "target": "assets/css/text-callout.css",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge3",
+      "source": "public/index.html",
+      "target": "js/3d-globe-layout.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge4",
+      "source": "public/index.html",
+      "target": "js/absolute-layout.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge5",
+      "source": "public/index.html",
+      "target": "js/ai-input-manager.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge6",
+      "source": "public/index.html",
+      "target": "js/api.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge7",
+      "source": "public/index.html",
+      "target": "js/auto-refresh.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge8",
+      "source": "public/index.html",
+      "target": "js/config.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge9",
+      "source": "public/index.html",
+      "target": "js/custom-layouts.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge10",
+      "source": "public/index.html",
+      "target": "js/domain-loader.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge11",
+      "source": "public/index.html",
+      "target": "js/edge-editor.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge12",
+      "source": "public/index.html",
+      "target": "js/extensions.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge13",
+      "source": "public/index.html",
+      "target": "js/features/context-menu/context-menu-module.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge14",
+      "source": "public/index.html",
+      "target": "js/features/data-manager/adapter.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge15",
+      "source": "public/index.html",
+      "target": "js/features/data-manager/data-manager-module.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge16",
+      "source": "public/index.html",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge17",
+      "source": "public/index.html",
+      "target": "js/features/graph-area-editor/graph-area-editor-module.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge18",
+      "source": "public/index.html",
+      "target": "js/features/graph-modules/3d-rotation-manager/bootstrap.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge19",
+      "source": "public/index.html",
+      "target": "js/features/graph-modules/3d-rotation-manager/rotation-3d-module.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge20",
+      "source": "public/index.html",
+      "target": "js/features/graph-modules/debug-tools/debug-tools-module.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge21",
+      "source": "public/index.html",
+      "target": "js/features/graph-modules/edge-creator/adapter.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge22",
+      "source": "public/index.html",
+      "target": "js/features/graph-modules/graph-controls/graph-controls-bootstrap.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge23",
+      "source": "public/index.html",
+    "target": "js/features/graph-modules/graph-controls/graph-controls-module.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge24",
+      "source": "public/index.html",
+      "target": "js/features/graph-modules/graph-editor/adapter.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge25",
+      "source": "public/index.html",
+      "target": "js/features/graph-modules/graph-styling/graph-styling-module.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge26",
+      "source": "public/index.html",
+      "target": "js/features/graph-modules/lod-manager/adapter.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge27",
+      "source": "public/index.html",
+      "target": "js/features/graph-modules/performance-manager/bootstrap.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge28",
+      "source": "public/index.html",
+      "target": "js/features/graph-modules/performance-manager/performance-manager-module.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge29",
+      "source": "public/index.html",
+      "target": "js/features/graph-modules/progress-manager/adapter.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge30",
+      "source": "public/index.html",
+      "target": "js/features/graph-modules/selection-manager/adapter.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge31",
+      "source": "public/index.html",
+      "target": "js/features/graph-modules/text-callout/text-callout.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge32",
+      "source": "public/index.html",
+      "target": "js/features/layout-manager/adapter.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge33",
+      "source": "public/index.html",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge34",
+      "source": "public/index.html",
+      "target": "js/graph-manager.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge35",
+      "source": "public/index.html",
+      "target": "js/graph-reference-resolver.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge36",
+      "source": "public/index.html",
+      "target": "js/graph.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge37",
+      "source": "public/index.html",
+      "target": "js/integrations.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge38",
+      "source": "public/index.html",
+      "target": "js/integrations/misp-mapper.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge39",
+      "source": "public/index.html",
+      "target": "js/layouts.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge40",
+      "source": "public/index.html",
+      "target": "js/lod-system.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge41",
+      "source": "public/index.html",
+      "target": "js/main.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge42",
+      "source": "public/index.html",
+      "target": "js/rag-pipeline.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge43",
+      "source": "public/index.html",
+      "target": "js/secure-storage.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge44",
+      "source": "public/index.html",
+      "target": "js/source-editor.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge45",
+      "source": "public/index.html",
+      "target": "js/tables.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge46",
+      "source": "public/index.html",
+      "target": "js/ui.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge47",
+      "source": "public/index.html",
+      "target": "js/utils.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge48",
+      "source": "public/index.html",
+      "target": "js/validation.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge49",
+      "source": "public/index.html",
+      "target": "js/workspace-manager.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge50",
+      "source": "public/index.html",
+      "target": "utils/readability-shim.js",
+      "label": "references",
+      "type": "dependency"
+    },
+    {
+      "id": "edge51",
+      "source": "js/rag-pipeline.js",
+      "target": "data_retrieval/index.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge52",
+      "source": "data_retrieval/index.js",
+      "target": "data_retrieval/models.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge53",
+      "source": "data_retrieval/index.js",
+      "target": "data_retrieval/tweets.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge54",
+      "source": "data_retrieval/index.js",
+      "target": "data_retrieval/web_search.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge55",
+      "source": "data_retrieval/tweets.js",
+      "target": "data_retrieval/models.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge56",
+      "source": "data_retrieval/web_search.js",
+      "target": "data_retrieval/models.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge57",
+      "source": "js/tables.js",
+      "target": "js/features/data-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge58",
+      "source": "js/tables.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge59",
+      "source": "js/tables.js",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge60",
+      "source": "js/tables.js",
+      "target": "js/graph-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge61",
+      "source": "js/tables.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge62",
+      "source": "js/tables.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge63",
+      "source": "js/tables.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge64",
+      "source": "js/tables.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge65",
+      "source": "js/tables.js",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge66",
+      "source": "js/tables.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge67",
+      "source": "js/tables.js",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge68",
+      "source": "js/tables.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge69",
+      "source": "js/tables.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge70",
+      "source": "js/tables.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge71",
+      "source": "js/tables.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge72",
+      "source": "js/tables.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge73",
+      "source": "js/tables.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge74",
+      "source": "js/tables.js",
+      "target": "js/extensions.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge75",
+      "source": "js/tables.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge76",
+      "source": "js/tables.js",
+      "target": "js/ui.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge77",
+      "source": "js/tables.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge78",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/custom-layouts.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge79",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/features/data-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge80",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge81",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/tables.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge82",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/main.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge83",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/graph-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge84",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge85",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge86",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge87",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge88",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge89",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/integrations.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge90",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge91",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/layouts.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge92",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/features/layout-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge93",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/main.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge94",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge95",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge96",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge97",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge98",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge99",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge100",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/extensions.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge101",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge102",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/source-editor.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge103",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/tables.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge104",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/features/graph-modules/text-callout/text-callout.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge105",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/workspace-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge106",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge107",
+      "source": "js/features/node-editor/node-editor-module.js",
+      "target": "js/rag-pipeline.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge108",
+      "source": "js/features/data-manager/adapter.js",
+      "target": "js/features/data-manager/data-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge109",
+      "source": "js/features/data-manager/adapter.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge110",
+      "source": "js/features/data-manager/adapter.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge111",
+      "source": "js/features/data-manager/adapter.js",
+      "target": "js/extensions.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge112",
+      "source": "js/features/data-manager/adapter.js",
+      "target": "js/ui.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge113",
+      "source": "js/ui.js",
+      "target": "js/features/data-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge114",
+      "source": "js/ui.js",
+      "target": "js/3d-globe-layout.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge115",
+      "source": "js/ui.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge116",
+      "source": "js/ui.js",
+      "target": "js/lod-system.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge117",
+      "source": "js/ui.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge118",
+      "source": "js/ui.js",
+      "target": "js/layouts.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge119",
+      "source": "js/config.js",
+      "target": "js/features/data-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge120",
+      "source": "js/config.js",
+      "target": "js/3d-globe-layout.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge121",
+      "source": "js/config.js",
+      "target": "js/main.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge122",
+      "source": "js/config.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge123",
+      "source": "js/config.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge124",
+      "source": "js/config.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge125",
+      "source": "js/config.js",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge126",
+      "source": "js/config.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge127",
+      "source": "js/config.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge128",
+      "source": "js/config.js",
+      "target": "js/layouts.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge129",
+      "source": "js/config.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge130",
+      "source": "js/config.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge131",
+      "source": "js/config.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge132",
+      "source": "js/config.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge133",
+      "source": "js/config.js",
+      "target": "js/extensions.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge134",
+      "source": "js/graph.js",
+      "target": "js/absolute-layout.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge135",
+      "source": "js/graph.js",
+      "target": "js/main.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge136",
+      "source": "js/graph.js",
+      "target": "js/features/data-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge137",
+      "source": "js/graph.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge138",
+      "source": "js/graph.js",
+      "target": "js/tables.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge139",
+      "source": "js/graph.js",
+      "target": "js/main.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge140",
+      "source": "js/graph.js",
+      "target": "js/3d-globe-layout.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge141",
+      "source": "js/graph.js",
+      "target": "js/main.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge142",
+      "source": "js/graph.js",
+      "target": "js/features/graph-modules/graph-controls/graph-controls-bootstrap.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge143",
+      "source": "js/graph.js",
+      "target": "js/features/graph-modules/graph-editor/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge144",
+      "source": "js/graph.js",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge145",
+      "source": "js/graph.js",
+      "target": "js/graph-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge146",
+      "source": "js/graph.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge147",
+      "source": "js/graph.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge148",
+      "source": "js/graph.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge149",
+      "source": "js/graph.js",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge150",
+      "source": "js/graph.js",
+      "target": "js/integrations.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge151",
+      "source": "js/graph.js",
+      "target": "js/features/graph-modules/lod-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge152",
+      "source": "js/graph.js",
+      "target": "js/lod-system.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge153",
+      "source": "js/graph.js",
+      "target": "js/layouts.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge154",
+      "source": "js/graph.js",
+      "target": "js/main.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge155",
+      "source": "js/graph.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge156",
+      "source": "js/graph.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge157",
+      "source": "js/graph.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge158",
+      "source": "js/graph.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge159",
+      "source": "js/graph.js",
+      "target": "js/features/graph-modules/performance-manager/bootstrap.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge160",
+      "source": "js/graph.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge161",
+      "source": "js/graph.js",
+      "target": "js/extensions.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge162",
+      "source": "js/graph.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge163",
+      "source": "js/graph.js",
+      "target": "js/tables.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge164",
+      "source": "js/graph.js",
+      "target": "js/features/graph-modules/text-callout/text-callout.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge165",
+      "source": "js/graph.js",
+      "target": "js/ui.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge166",
+      "source": "js/graph.js",
+      "target": "js/validation.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge167",
+      "source": "js/graph.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge168",
+      "source": "js/graph.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge169",
+      "source": "js/graph.js",
+      "target": "js/features/graph-area-editor/graph-area-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge170",
+      "source": "js/graph.js",
+      "target": "js/graph-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge171",
+      "source": "js/rag-pipeline.js",
+      "target": "js/features/context-menu/context-menu-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge172",
+      "source": "js/rag-pipeline.js",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge173",
+      "source": "js/layouts.js",
+      "target": "js/absolute-layout.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge174",
+      "source": "js/layouts.js",
+      "target": "js/custom-layouts.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge175",
+      "source": "js/layouts.js",
+      "target": "js/features/graph-modules/debug-tools/debug-tools-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge176",
+      "source": "js/layouts.js",
+      "target": "js/3d-globe-layout.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge177",
+      "source": "js/layouts.js",
+      "target": "js/main.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge178",
+      "source": "js/layouts.js",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge179",
+      "source": "js/layouts.js",
+      "target": "js/graph-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge180",
+      "source": "js/layouts.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge181",
+      "source": "js/layouts.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge182",
+      "source": "js/layouts.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge183",
+      "source": "js/layouts.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge184",
+      "source": "js/layouts.js",
+      "target": "js/extensions.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge185",
+      "source": "js/layouts.js",
+      "target": "js/features/graph-modules/text-callout/text-callout.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge186",
+      "source": "js/layouts.js",
+      "target": "js/ui.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge187",
+      "source": "js/features/graph-area-editor/graph-area-editor-module.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge188",
+      "source": "js/features/graph-area-editor/graph-area-editor-module.js",
+      "target": "js/tables.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge189",
+      "source": "js/features/graph-area-editor/graph-area-editor-module.js",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge190",
+      "source": "js/features/graph-area-editor/graph-area-editor-module.js",
+      "target": "js/graph-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge191",
+      "source": "js/features/graph-area-editor/graph-area-editor-module.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge192",
+      "source": "js/features/graph-area-editor/graph-area-editor-module.js",
+      "target": "js/layouts.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge193",
+      "source": "js/features/graph-area-editor/graph-area-editor-module.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge194",
+      "source": "js/features/graph-area-editor/graph-area-editor-module.js",
+      "target": "js/workspace-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge195",
+      "source": "js/features/graph-area-editor/graph-area-editor-module.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge196",
+      "source": "js/features/graph-area-editor/graph-area-editor-module.js",
+      "target": "js/graph-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge197",
+      "source": "js/features/graph-area-editor/graph-area-editor-module.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge198",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/features/data-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge199",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge200",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/tables.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge201",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/edge-editor.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge202",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/main.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge203",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/features/graph-modules/graph-editor/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge204",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge205",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/graph-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge206",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge207",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/integrations.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge208",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge209",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge210",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge211",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge212",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge213",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/main.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge214",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge215",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/extensions.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge216",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge217",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/rag-pipeline.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge218",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/ui.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge219",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge220",
+      "source": "js/features/context-menu/context-menu-module.js",
+      "target": "js/rag-pipeline.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge221",
+      "source": "js/features/graph-modules/text-callout/text-callout.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge222",
+      "source": "js/features/graph-modules/text-callout/text-callout.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge223",
+      "source": "js/features/graph-modules/text-callout/text-callout.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge224",
+      "source": "js/features/graph-modules/text-callout/text-callout.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge225",
+      "source": "js/features/graph-modules/text-callout/text-callout.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge226",
+      "source": "js/features/graph-modules/text-callout/text-callout.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge227",
+      "source": "js/features/graph-modules/text-callout/text-callout.js",
+      "target": "js/extensions.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge228",
+      "source": "js/features/graph-modules/text-callout/text-callout.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge229",
+      "source": "js/features/graph-modules/selection-manager/adapter.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge230",
+      "source": "js/main.js",
+      "target": "js/ai-input-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge231",
+      "source": "js/main.js",
+      "target": "js/features/context-menu/context-menu-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge232",
+      "source": "js/main.js",
+      "target": "js/custom-layouts.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge233",
+      "source": "js/main.js",
+      "target": "js/features/data-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge234",
+      "source": "js/main.js",
+      "target": "js/features/data-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge235",
+      "source": "js/main.js",
+      "target": "js/features/graph-modules/debug-tools/debug-tools-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge236",
+      "source": "js/main.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge237",
+      "source": "js/main.js",
+      "target": "js/tables.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge238",
+      "source": "js/main.js",
+      "target": "js/features/graph-modules/edge-creator/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge239",
+      "source": "js/main.js",
+      "target": "js/edge-editor.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge240",
+      "source": "js/main.js",
+      "target": "js/extensions.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge241",
+      "source": "js/main.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge242",
+      "source": "js/main.js",
+      "target": "js/features/graph-area-editor/graph-area-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge243",
+      "source": "js/main.js",
+      "target": "js/features/graph-modules/graph-controls/graph-controls-bootstrap.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge244",
+      "source": "js/main.js",
+      "target": "js/features/graph-modules/graph-editor/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge245",
+      "source": "js/main.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge246",
+      "source": "js/main.js",
+      "target": "js/integrations.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge247",
+      "source": "js/main.js",
+      "target": "js/features/graph-modules/lod-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge248",
+      "source": "js/main.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge249",
+      "source": "js/main.js",
+      "target": "js/layouts.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge250",
+      "source": "js/main.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge251",
+      "source": "js/main.js",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge252",
+      "source": "js/main.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge253",
+      "source": "js/main.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge254",
+      "source": "js/main.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge255",
+      "source": "js/main.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge256",
+      "source": "js/main.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge257",
+      "source": "js/main.js",
+      "target": "js/features/graph-modules/performance-manager/bootstrap.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge258",
+      "source": "js/main.js",
+      "target": "js/features/graph-modules/progress-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge259",
+      "source": "js/main.js",
+      "target": "js/features/graph-modules/3d-rotation-manager/bootstrap.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge260",
+      "source": "js/main.js",
+      "target": "js/features/graph-modules/selection-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge261",
+      "source": "js/main.js",
+      "target": "js/tables.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge262",
+      "source": "js/main.js",
+      "target": "js/ui.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge263",
+      "source": "js/main.js",
+      "target": "js/workspace-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge264",
+      "source": "js/main.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge265",
+      "source": "js/main.js",
+      "target": "js/features/graph-modules/graph-styling/graph-styling-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge266",
+      "source": "js/main.js",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge267",
+      "source": "js/domain-loader.js",
+      "target": "js/tables.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge268",
+      "source": "js/domain-loader.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge269",
+      "source": "js/domain-loader.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge270",
+      "source": "js/domain-loader.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge271",
+      "source": "js/domain-loader.js",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge272",
+      "source": "js/domain-loader.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge273",
+      "source": "js/domain-loader.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge274",
+      "source": "js/domain-loader.js",
+      "target": "js/layouts.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge275",
+      "source": "js/domain-loader.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge276",
+      "source": "js/domain-loader.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge277",
+      "source": "js/domain-loader.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge278",
+      "source": "js/domain-loader.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge279",
+      "source": "js/domain-loader.js",
+      "target": "js/tables.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge280",
+      "source": "js/domain-loader.js",
+      "target": "js/ui.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge281",
+      "source": "js/domain-loader.js",
+      "target": "js/workspace-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge282",
+      "source": "js/auto-refresh.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge283",
+      "source": "js/auto-refresh.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge284",
+      "source": "js/auto-refresh.js",
+      "target": "js/layouts.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge285",
+      "source": "js/features/graph-modules/debug-tools/debug-tools-module.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge286",
+      "source": "js/features/graph-modules/debug-tools/debug-tools-module.js",
+      "target": "js/ui.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge287",
+      "source": "js/features/graph-modules/debug-tools/debug-tools-module.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge288",
+      "source": "js/utils.js",
+      "target": "js/ai-input-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge289",
+      "source": "js/utils.js",
+      "target": "js/features/data-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge290",
+      "source": "js/utils.js",
+      "target": "js/main.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge291",
+      "source": "js/utils.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge292",
+      "source": "js/utils.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge293",
+      "source": "js/utils.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge294",
+      "source": "js/utils.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge295",
+      "source": "js/utils.js",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge296",
+      "source": "js/utils.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge297",
+      "source": "js/utils.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge298",
+      "source": "js/utils.js",
+      "target": "js/layouts.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge299",
+      "source": "js/utils.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge300",
+      "source": "js/utils.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge301",
+      "source": "js/utils.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge302",
+      "source": "js/utils.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge303",
+      "source": "js/utils.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge304",
+      "source": "js/utils.js",
+      "target": "js/extensions.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge305",
+      "source": "js/utils.js",
+      "target": "js/source-editor.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge306",
+      "source": "js/utils.js",
+      "target": "js/tables.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge307",
+      "source": "js/utils.js",
+      "target": "js/ui.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge308",
+      "source": "js/utils.js",
+      "target": "js/workspace-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge309",
+      "source": "js/features/graph-modules/performance-manager/bootstrap.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge310",
+      "source": "js/features/graph-modules/performance-manager/bootstrap.js",
+      "target": "js/features/graph-modules/performance-manager/performance-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge311",
+      "source": "js/features/graph-modules/performance-manager/bootstrap.js",
+      "target": "js/ui.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge312",
+      "source": "js/features/graph-modules/performance-manager/bootstrap.js",
+      "target": "js/features/graph-modules/lod-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge313",
+      "source": "js/features/graph-modules/3d-rotation-manager/bootstrap.js",
+      "target": "js/3d-globe-layout.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge314",
+      "source": "js/features/graph-modules/3d-rotation-manager/bootstrap.js",
+      "target": "js/ui.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge315",
+      "source": "js/features/graph-modules/3d-rotation-manager/bootstrap.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge316",
+      "source": "js/features/graph-modules/3d-rotation-manager/bootstrap.js",
+      "target": "js/graph-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge317",
+      "source": "js/features/graph-modules/lod-manager/adapter.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge318",
+      "source": "js/features/graph-modules/lod-manager/adapter.js",
+      "target": "js/features/graph-modules/performance-manager/bootstrap.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge319",
+      "source": "js/lod-system.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge320",
+      "source": "js/lod-system.js",
+      "target": "js/extensions.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge321",
+      "source": "js/integrations.js",
+      "target": "js/main.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge322",
+      "source": "js/integrations.js",
+      "target": "js/features/data-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge323",
+      "source": "js/integrations.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge324",
+      "source": "js/integrations.js",
+      "target": "js/tables.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge325",
+      "source": "js/integrations.js",
+      "target": "js/main.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge326",
+      "source": "js/integrations.js",
+      "target": "js/main.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge327",
+      "source": "js/integrations.js",
+      "target": "js/features/graph-modules/graph-editor/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge328",
+      "source": "js/integrations.js",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge329",
+      "source": "js/integrations.js",
+      "target": "js/graph-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge330",
+      "source": "js/integrations.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge331",
+      "source": "js/integrations.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge332",
+      "source": "js/integrations.js",
+      "target": "js/layouts.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge333",
+      "source": "js/integrations.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge334",
+      "source": "js/integrations.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge335",
+      "source": "js/integrations.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge336",
+      "source": "js/integrations.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge337",
+      "source": "js/integrations.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge338",
+      "source": "js/integrations.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge339",
+      "source": "js/integrations.js",
+      "target": "js/tables.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge340",
+      "source": "js/integrations.js",
+      "target": "js/ui.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge341",
+      "source": "js/integrations.js",
+      "target": "js/workspace-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge342",
+      "source": "js/source-editor.js",
+      "target": "js/features/data-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge343",
+      "source": "js/source-editor.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge344",
+      "source": "js/features/graph-modules/graph-controls/graph-controls-module.js",
+      "target": "js/features/graph-modules/text-callout/text-callout.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge345",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/custom-layouts.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge346",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/features/data-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge347",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/features/graph-modules/debug-tools/debug-tools-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge348",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge349",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/tables.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge350",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/3d-globe-layout.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge351",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/main.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge352",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge353",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/graph-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge354",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge355",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge356",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge357",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge358",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge359",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/integrations.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge360",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge361",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/layouts.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge362",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge363",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge364",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge365",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge366",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/layouts.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge367",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge368",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/extensions.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge369",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge370",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/workspace-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge371",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge372",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/features/graph-area-editor/graph-area-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge373",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/graph-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge374",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge375",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/features/graph-modules/3d-rotation-manager/bootstrap.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge376",
+      "source": "js/features/file-manager/file-manager-module.js",
+      "target": "js/graph-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge377",
+      "source": "js/features/graph-modules/graph-styling/graph-styling-module.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge378",
+      "source": "js/features/graph-modules/graph-styling/graph-styling-module.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge379",
+      "source": "js/features/graph-modules/graph-styling/graph-styling-module.js",
+      "target": "js/extensions.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge380",
+      "source": "js/features/graph-modules/graph-editor/adapter.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge381",
+      "source": "js/features/graph-modules/graph-editor/adapter.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge382",
+      "source": "js/features/graph-modules/graph-editor/adapter.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge383",
+      "source": "js/features/graph-modules/graph-editor/adapter.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge384",
+      "source": "js/features/graph-modules/graph-editor/adapter.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge385",
+      "source": "js/features/graph-modules/graph-editor/adapter.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge386",
+      "source": "js/features/graph-modules/graph-editor/adapter.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge387",
+      "source": "js/features/graph-modules/graph-editor/adapter.js",
+      "target": "js/extensions.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge388",
+      "source": "js/features/graph-modules/progress-manager/adapter.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge389",
+      "source": "js/workspace-manager.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge390",
+      "source": "js/workspace-manager.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge391",
+      "source": "js/workspace-manager.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge392",
+      "source": "js/workspace-manager.js",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge393",
+      "source": "js/workspace-manager.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge394",
+      "source": "js/workspace-manager.js",
+      "target": "js/integrations.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge395",
+      "source": "js/features/data-manager/data-manager-module.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge396",
+      "source": "js/features/data-manager/data-manager-module.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge397",
+      "source": "js/features/data-manager/data-manager-module.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge398",
+      "source": "js/features/data-manager/data-manager-module.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge399",
+      "source": "js/features/data-manager/data-manager-module.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge400",
+      "source": "js/features/data-manager/data-manager-module.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge401",
+      "source": "js/features/data-manager/data-manager-module.js",
+      "target": "js/extensions.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge402",
+      "source": "js/features/data-manager/data-manager-module.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge403",
+      "source": "js/features/data-manager/data-manager-module.js",
+      "target": "js/ui.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge404",
+      "source": "js/ai-input-manager.js",
+      "target": "js/features/data-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge405",
+      "source": "js/ai-input-manager.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge406",
+      "source": "js/ai-input-manager.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge407",
+      "source": "js/3d-globe-layout.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge408",
+      "source": "js/3d-globe-layout.js",
+      "target": "js/extensions.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge409",
+      "source": "js/extensions.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge410",
+      "source": "js/extensions.js",
+      "target": "js/layouts.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge411",
+      "source": "js/extensions.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge412",
+      "source": "js/custom-layouts.js",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge413",
+      "source": "js/custom-layouts.js",
+      "target": "js/graph-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge414",
+      "source": "js/absolute-layout.js",
+      "target": "js/features/data-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge415",
+      "source": "js/absolute-layout.js",
+      "target": "js/3d-globe-layout.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge416",
+      "source": "js/absolute-layout.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge417",
+      "source": "js/absolute-layout.js",
+      "target": "js/extensions.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge418",
+      "source": "js/features/graph-modules/graph-controls/graph-controls-bootstrap.js",
+      "target": "js/features/graph-modules/graph-controls/graph-controls-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge419",
+      "source": "js/features/graph-modules/graph-controls/graph-controls-bootstrap.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge420",
+      "source": "js/features/graph-modules/graph-controls/graph-controls-bootstrap.js",
+      "target": "js/ui.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge421",
+      "source": "js/graph-manager.js",
+      "target": "js/custom-layouts.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge422",
+      "source": "js/graph-manager.js",
+      "target": "js/features/data-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge423",
+      "source": "js/graph-manager.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge424",
+      "source": "js/graph-manager.js",
+      "target": "js/tables.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge425",
+      "source": "js/graph-manager.js",
+      "target": "js/main.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge426",
+      "source": "js/graph-manager.js",
+      "target": "js/3d-globe-layout.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge427",
+      "source": "js/graph-manager.js",
+      "target": "js/main.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge428",
+      "source": "js/graph-manager.js",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge429",
+      "source": "js/graph-manager.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge430",
+      "source": "js/graph-manager.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge431",
+      "source": "js/graph-manager.js",
+      "target": "js/layouts.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge432",
+      "source": "js/graph-manager.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge433",
+      "source": "js/graph-manager.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge434",
+      "source": "js/graph-manager.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge435",
+      "source": "js/graph-manager.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge436",
+      "source": "js/graph-manager.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge437",
+      "source": "js/graph-manager.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge438",
+      "source": "js/graph-manager.js",
+      "target": "js/extensions.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge439",
+      "source": "js/graph-manager.js",
+      "target": "js/utils.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge440",
+      "source": "js/graph-manager.js",
+      "target": "js/tables.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge441",
+      "source": "js/graph-manager.js",
+      "target": "js/ui.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge442",
+      "source": "js/graph-manager.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge443",
+      "source": "js/graph-manager.js",
+      "target": "js/features/graph-area-editor/graph-area-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge444",
+      "source": "js/graph-manager.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge445",
+      "source": "js/graph-manager.js",
+      "target": "js/features/file-manager/file-manager-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge446",
+      "source": "js/graph-manager.js",
+      "target": "js/features/graph-modules/3d-rotation-manager/bootstrap.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge447",
+      "source": "js/features/graph-modules/3d-rotation-manager/rotation-3d-module.js",
+      "target": "js/features/data-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge448",
+      "source": "js/features/graph-modules/3d-rotation-manager/rotation-3d-module.js",
+      "target": "js/3d-globe-layout.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge449",
+      "source": "js/features/graph-modules/3d-rotation-manager/rotation-3d-module.js",
+      "target": "js/ui.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge450",
+      "source": "js/features/graph-modules/3d-rotation-manager/rotation-3d-module.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge451",
+      "source": "js/features/graph-modules/edge-creator/adapter.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge452",
+      "source": "js/api.js",
+      "target": "js/features/data-manager/adapter.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge453",
+      "source": "js/api.js",
+      "target": "js/domain-loader.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge454",
+      "source": "js/api.js",
+      "target": "js/tables.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge455",
+      "source": "js/api.js",
+      "target": "js/features/node-editor/node-editor-module.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge456",
+      "source": "js/api.js",
+      "target": "js/graph-manager.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge457",
+      "source": "js/api.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge458",
+      "source": "js/api.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge459",
+      "source": "js/api.js",
+      "target": "js/layouts.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge460",
+      "source": "js/api.js",
+      "target": "js/config.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge461",
+      "source": "js/api.js",
+      "target": "js/extensions.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge462",
+      "source": "js/api.js",
+      "target": "js/tables.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge463",
+      "source": "js/features/layout-manager/adapter.js",
+      "target": "js/graph.js",
+      "label": "uses",
+      "type": "dependency"
+    },
+    {
+      "id": "edge464",
+      "source": "js/features/layout-manager/adapter.js",
+      "target": "js/layouts.js",
+      "label": "uses",
+      "type": "dependency"
+    }
+  ]
+}

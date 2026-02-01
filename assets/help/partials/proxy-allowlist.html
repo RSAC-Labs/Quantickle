@@ -1,0 +1,37 @@
+<p class="help-lede">The built-in proxy only contacts hosts that appear on your allowlist. Check the list before fetching remote data so you know which sites are approved.</p>
+
+<div class="help-section">
+    <h4>Why the proxy is required</h4>
+    <p>
+        Fetching remote data goes through the Quantickle proxy so the app can block unsafe protocols, hide
+        your local network details, and prevent accidental requests to untrusted hosts. The allowlist keeps
+        that proxy limited to destinations you explicitly approve.
+    </p>
+</div>
+
+<div class="help-section">
+    <h4>See what’s allowed</h4>
+    <ul>
+        <li>Open the <strong>Block/Allowlists</strong> tab in the main toolbar.</li>
+        <li>Scroll to <strong>Proxy Allowlist</strong> to view the read-only host list loaded from the server.</li>
+        <li>If the field is empty or shows an error, the server could not load <code>config/proxy-allowlist.json</code>.</li>
+    </ul>
+</div>
+
+<div class="help-section">
+    <h4>Update the allowlist</h4>
+    <ul>
+        <li>Edit <code>config/proxy-allowlist.json</code> on the server or set the <code>PROXY_ALLOWLIST</code> environment variable (comma-separated).</li>
+        <li>Use plain hostnames (for example, <code>api.example.com</code>) or wildcards like <code>*.example.com</code> to cover subdomains.</li>
+        <li>Restart the Quantickle server after saving changes so the new entries load.</li>
+    </ul>
+</div>
+
+<div class="help-section">
+    <h4>When it’s checked</h4>
+    <ul>
+        <li>All requests sent through <strong>/api/proxy</strong> are compared against the allowlist before leaving the server.</li>
+        <li>Requests to hosts not on the list are rejected for safety—add the host and restart if you need to permit it.</li>
+        <li>Only <code>http://</code> and <code>https://</code> targets are allowed; other protocols are blocked.</li>
+    </ul>
+</div>

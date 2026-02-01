@@ -1,0 +1,193 @@
+.graph-portal-overlay {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    background: rgba(9, 14, 23, 0.88);
+    backdrop-filter: blur(10px);
+    z-index: 2000;
+}
+
+.graph-portal-overlay.is-visible {
+    display: flex;
+}
+
+body.graph-portal-open {
+    overflow: hidden;
+}
+
+.graph-portal-shell {
+    width: min(1100px, 100%);
+    height: min(780px, 100%);
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.98));
+    border-radius: 20px;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.55);
+    overflow: hidden;
+    position: relative;
+}
+
+.graph-portal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 28px;
+    background: linear-gradient(90deg, rgba(79, 70, 229, 0.25), rgba(45, 212, 191, 0.15));
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.graph-portal-title {
+    color: #f8fafc;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-shadow: 0 2px 8px rgba(15, 23, 42, 0.5);
+}
+
+.graph-portal-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.graph-portal-return {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-radius: 9999px;
+    border: 1px solid rgba(226, 232, 240, 0.35);
+    background: rgba(248, 250, 252, 0.12);
+    color: #e2e8f0;
+    font-weight: 600;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.graph-portal-return:hover {
+    background: rgba(248, 250, 252, 0.25);
+    box-shadow: 0 10px 25px rgba(79, 70, 229, 0.35);
+    transform: translateY(-1px);
+}
+
+.graph-portal-return:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.45);
+}
+
+.graph-portal-return-icon {
+    font-size: 16px;
+    line-height: 1;
+}
+
+.graph-portal-body {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
+}
+
+.graph-portal-viewport {
+    flex: 1;
+    position: relative;
+    min-height: 0;
+    background: radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.25), transparent 55%),
+        radial-gradient(circle at 80% 30%, rgba(236, 72, 153, 0.18), transparent 60%),
+        linear-gradient(135deg, rgba(30, 64, 175, 0.3), rgba(15, 118, 110, 0.2));
+    border-right: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.graph-portal-canvas {
+    position: absolute;
+    inset: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+}
+
+.graph-portal-empty {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+    font-size: 16px;
+    font-style: italic;
+    text-align: center;
+    padding: 24px;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(4px);
+    pointer-events: none;
+}
+
+.graph-portal-viewport--empty .graph-portal-empty {
+    display: flex;
+}
+
+.graph-portal-viewport--empty .graph-portal-canvas {
+    opacity: 0;
+}
+
+.graph-portal-sidebar {
+    width: 260px;
+    background: rgba(15, 23, 42, 0.82);
+    backdrop-filter: blur(6px);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    color: #e2e8f0;
+}
+
+.graph-portal-sidebar-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #a5b4fc;
+}
+
+.graph-portal-metadata {
+    display: grid;
+    gap: 16px;
+    margin: 0;
+}
+
+.graph-portal-meta-item dt {
+    margin-bottom: 4px;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #94a3b8;
+}
+
+.graph-portal-meta-item dd {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+    word-break: break-word;
+    color: #e2e8f0;
+}
+
+@media (max-width: 920px) {
+    .graph-portal-shell {
+        border-radius: 14px;
+    }
+
+    .graph-portal-sidebar {
+        display: none;
+    }
+}

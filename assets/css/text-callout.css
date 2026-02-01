@@ -1,0 +1,92 @@
+:root {
+    --text-node-font-family: 'Arial', sans-serif;
+    --text-node-font-size: 14px;
+    --text-node-line-height: 1.5;
+    --text-node-font-color: #333333;
+    --text-node-border-color: rgba(15, 23, 42, 0.28);
+    --text-node-border-width: 1px;
+    --text-node-border-radius: 12px;
+    --text-callout-background: rgba(255, 255, 255, 0.92);
+    --text-callout-padding-inline: 16px;
+    --text-callout-padding-block: 12px;
+    --text-callout-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+    --text-callout-max-width: 400px;
+}
+
+.text-callout-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    contain: layout style;
+    z-index: 0;
+}
+
+.text-callout {
+    position: absolute;
+    pointer-events: none;
+    box-sizing: border-box;
+    width: fit-content;
+    max-width: min(var(--text-callout-max-width), calc(100vw - 48px));
+    padding: var(--text-callout-padding-block) var(--text-callout-padding-inline);
+    font-family: var(--text-node-font-family);
+    font-size: var(--text-node-font-size);
+    line-height: var(--text-node-line-height);
+    color: var(--text-node-font-color);
+    background-color: var(--text-callout-background);
+    border-radius: var(--text-node-border-radius);
+    border: var(--text-node-border-width) solid var(--text-node-border-color);
+    white-space: pre-wrap;
+    word-break: break-word;
+    backdrop-filter: blur(2px);
+    box-shadow: var(--text-callout-shadow);
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.text-callout:hover {
+    box-shadow: 0 20px 44px rgba(15, 23, 42, 0.24);
+    transform: translateY(-1px);
+}
+
+.text-callout__article {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+}
+
+.text-callout__header {
+    margin: 0;
+    padding: 0;
+}
+
+.text-callout__title {
+    margin: 0;
+    font-size: 1.15em;
+    line-height: 1.2;
+    font-weight: 600;
+    color: inherit;
+}
+
+.text-callout__body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65em;
+    color: inherit;
+}
+
+.text-callout__body p {
+    margin: 0;
+}
+
+.text-callout__body p + p {
+    margin-top: 0.65em;
+}
+
+.text-callout__body ul,
+.text-callout__body ol {
+    margin: 0;
+    padding-left: 1.25em;
+}
+
+.text-callout__body li + li {
+    margin-top: 0.35em;
+}

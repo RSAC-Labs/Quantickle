@@ -1,0 +1,2798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantickle - Network your nodes</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"
+            integrity="sha384-IWROdLKRsN1UuJywMlWl7/blXQ8GEooN2n7dzTxfEPd7ybYIKCUJ2Ol/1Gpf3YV4"
+            crossorigin="anonymous"></script>
+    <script>
+        (function ensureCytoscapeAvailable() {
+            if (typeof window.cytoscape === 'undefined') {
+                console.warn('CDN Cytoscape failed to load, using local fallback.');
+                document.write('<script src="/node_modules/cytoscape/dist/cytoscape.min.js"><\\/script>');
+            }
+        })();
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"
+            integrity="sha384-D/t0ZMqQW31H3az8ktEiNb39wyKnS82iFY52QPACM+IjKW3jDUhyIgh2PApRqJZs"
+            crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
+            integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk"
+            crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.5/purify.min.js"
+            integrity="sha384-rneZSW/1QE+3/U5/u+/7eRNi/tRc+SzS+yXy36fltr1tDN9EHaVo1Bwz2Z8o8DA4"
+            crossorigin="anonymous"></script>
+
+    <!-- CodeMirror for JSON source editing -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+    <link rel="stylesheet" href="assets/css/text-callout.css">
+    <link rel="stylesheet" href="assets/css/graph-portal.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/javascript/javascript.min.js"></script>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "@mozilla/readability": "/utils/readability-shim.js"
+        }
+      }
+    </script>
+
+    <script>
+        // Ensure passive event listeners for smoother scrolling
+        (function() {
+            if (typeof window !== 'undefined' && window.EventTarget) {
+                const passiveEvents = ['touchstart', 'touchmove', 'mousewheel', 'wheel'];
+                const originalAddEventListener = EventTarget.prototype.addEventListener;
+                EventTarget.prototype.addEventListener = function(type, listener, options) {
+                    if (passiveEvents.indexOf(type) !== -1) {
+                        if (typeof options === 'boolean') {
+                            options = { capture: options, passive: true };
+                        } else if (!options || typeof options !== 'object') {
+                            options = { passive: true };
+                        } else if (!Object.prototype.hasOwnProperty.call(options, 'passive')) {
+                            options = Object.assign({}, options, { passive: true });
+                        }
+                    }
+                    return originalAddEventListener.call(this, type, listener, options);
+                };
+            }
+        })();
+    </script>
+
+    <!-- Load extensions after window load to ensure Cytoscape is ready -->
+    <script>
+        window.addEventListener('load', function() {
+            console.log('=== DYNAMIC EXTENSION LOADING STARTED ===');
+            console.log('Loading Cytoscape extensions after window load...');
+
+            let loadedExtensions = 0;
+            const totalExtensions = 6; // cose-bilkent, cola, dagre, klay, euler, bubblesets
+            
+            const checkAllExtensionsLoaded = function() {
+                loadedExtensions++;
+                console.log(`Extension loaded (${loadedExtensions}/${totalExtensions})`);
+                if (loadedExtensions >= totalExtensions) {
+                    console.log('All extensions loaded, triggering registration...');
+                    // Wait a bit more to ensure all scripts are fully processed
+                    setTimeout(() => {
+                        if (window.ExtensionsManager) {
+                            window.ExtensionsManager.registerAllExtensions();
+                        } else {
+                            console.error('ExtensionsManager not available');
+                        }
+                    }, 500);
+                }
+            };
+            
+            // Load Cose-bilkent dependencies and extension
+            const layoutBaseScript = document.createElement('script');
+            layoutBaseScript.src = 'https://unpkg.com/layout-base/layout-base.js';
+            layoutBaseScript.onload = function() {
+                const coseBaseScript = document.createElement('script');
+                coseBaseScript.src = 'https://unpkg.com/cose-base/cose-base.js';
+                coseBaseScript.onload = function() {
+                    const coseBilkentScript = document.createElement('script');
+                    coseBilkentScript.src = 'https://cdn.jsdelivr.net/npm/cytoscape-cose-bilkent@4.1.0/cytoscape-cose-bilkent.min.js';
+                    coseBilkentScript.onload = checkAllExtensionsLoaded;
+                    coseBilkentScript.onerror = function() {
+                        console.error('Failed to load Cose-bilkent extension');
+                        checkAllExtensionsLoaded();
+                    };
+                    document.head.appendChild(coseBilkentScript);
+                };
+                coseBaseScript.onerror = function() {
+                    console.error('Failed to load Cose-base dependency');
+                    checkAllExtensionsLoaded();
+                };
+                document.head.appendChild(coseBaseScript);
+            };
+            layoutBaseScript.onerror = function() {
+                console.error('Failed to load Layout-base dependency');
+                checkAllExtensionsLoaded();
+            };
+            document.head.appendChild(layoutBaseScript);
+            
+            // Load Cola dependencies and extension
+            const colaScript = document.createElement('script');
+            colaScript.src = 'https://cdn.jsdelivr.net/npm/webcola/WebCola/cola.min.js';
+            colaScript.onload = function() {
+                const cytoscapeColaScript = document.createElement('script');
+                cytoscapeColaScript.src = 'https://cdn.jsdelivr.net/npm/cytoscape-cola@2.4.0/cytoscape-cola.min.js';
+                cytoscapeColaScript.onload = checkAllExtensionsLoaded;
+                cytoscapeColaScript.onerror = function() {
+                    console.error('Failed to load Cytoscape Cola extension');
+                    checkAllExtensionsLoaded();
+                };
+                document.head.appendChild(cytoscapeColaScript);
+            };
+            colaScript.onerror = function() {
+                console.error('Failed to load WebCola dependency');
+                checkAllExtensionsLoaded();
+            };
+            document.head.appendChild(colaScript);
+            
+            // Load Dagre dependencies and extension
+            const dagreScript = document.createElement('script');
+            dagreScript.src = 'https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js';
+            dagreScript.onload = function() {
+                const graphlibScript = document.createElement('script');
+                graphlibScript.src = 'https://cdn.jsdelivr.net/npm/graphlib@2.1.8/dist/graphlib.min.js';
+                graphlibScript.onload = function() {
+                    const cytoscapeDagreScript = document.createElement('script');
+                    cytoscapeDagreScript.src = 'https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js';
+                    cytoscapeDagreScript.onload = checkAllExtensionsLoaded;
+                    cytoscapeDagreScript.onerror = function() {
+                        console.error('Failed to load Cytoscape Dagre extension');
+                        checkAllExtensionsLoaded();
+                    };
+                    document.head.appendChild(cytoscapeDagreScript);
+                };
+                graphlibScript.onerror = function() {
+                    console.error('Failed to load Graphlib dependency');
+                    checkAllExtensionsLoaded();
+                };
+                document.head.appendChild(graphlibScript);
+            };
+            dagreScript.onerror = function() {
+                console.error('Failed to load Dagre dependency');
+                checkAllExtensionsLoaded();
+            };
+            document.head.appendChild(dagreScript);
+            
+            // Load Klay dependencies and extension
+            const klayScript = document.createElement('script');
+            klayScript.src = 'https://cdn.jsdelivr.net/npm/klayjs@0.4.1/klay.js';
+            klayScript.onload = function() {
+                const cytoscapeKlayScript = document.createElement('script');
+                cytoscapeKlayScript.src = 'https://cdn.jsdelivr.net/npm/cytoscape-klay@3.1.4/cytoscape-klay.js';
+                cytoscapeKlayScript.onload = function() {
+                    // Manually register the Klay extension if it's available
+                    if (typeof cytoscape !== 'undefined' && typeof cytoscapeKlay !== 'undefined') {
+                        try {
+                            cytoscape.use(cytoscapeKlay);
+                            console.log('Klay extension manually registered');
+                        } catch (e) {
+                            console.error('Failed to manually register Klay extension:', e);
+                        }
+                    }
+                    checkAllExtensionsLoaded();
+                };
+                cytoscapeKlayScript.onerror = function() {
+                    console.error('Failed to load Cytoscape Klay extension');
+                    checkAllExtensionsLoaded();
+                };
+                document.head.appendChild(cytoscapeKlayScript);
+            };
+            klayScript.onerror = function() {
+                console.error('Failed to load Klay dependency');
+                checkAllExtensionsLoaded();
+            };
+            document.head.appendChild(klayScript);
+            
+            // Load Euler extension
+            const eulerScript = document.createElement('script');
+            eulerScript.src = 'https://unpkg.com/cytoscape-euler@1.2.3/cytoscape-euler.js';
+            eulerScript.onload = checkAllExtensionsLoaded;
+            eulerScript.onerror = function() {
+                console.error('Failed to load Cytoscape Euler extension');
+                checkAllExtensionsLoaded();
+            };
+            document.head.appendChild(eulerScript);
+	
+	
+			const registerBubblesetsIfNeeded = function() {
+				if (typeof cytoscape === 'undefined') return;
+				if (typeof window === 'undefined') return;
+
+				const ns = window.CytoscapeBubbleSets; // fix name
+				const bubblesetsExport = ns && typeof ns === "object" ? (ns.default || ns) : ns;
+
+				if (typeof bubblesetsExport !== 'function') return;
+
+				const hasBubbleSets =
+					cytoscape.prototype && typeof cytoscape.prototype.bubbleSets === 'function';
+
+				if (!hasBubbleSets) {
+					console.log("Loaded the Bubbleset export");
+					cytoscape.use(bubblesetsExport); // use the resolved export
+				}
+			};
+				
+					
+			const layersScript = document.createElement('script');
+			layersScript.src = "https://cdn.jsdelivr.net/npm/cytoscape-layers@3.1.0/build/index.umd.min.js";
+			layersScript.onload = function() {
+				checkAllExtensionsLoaded();
+				const bubbleSetsScript = document.createElement('script');
+				bubbleSetsScript.src = 'https://cdn.jsdelivr.net/npm/cytoscape-bubblesets@4.1.0/build/index.umd.min.js';
+				bubbleSetsScript.onload = function() {
+					try {
+						const Layers = window.CytoscapeLayers?.default || window.CytoscapeLayers;
+						const BubbleSets = window.CytoscapeBubbleSets?.default || window.CytoscapeBubbleSets;
+
+						if (typeof Layers !== "function") throw new Error("Layers export missing/invalid");
+						if (typeof BubbleSets !== "function") throw new Error("BubbleSets export missing/invalid");
+
+					} catch (error) {
+					  console.error("Failed to register extensions", error);
+					}
+				}
+				document.head.appendChild(bubbleSetsScript);
+			};
+			document.head.appendChild(layersScript);
+		
+		});
+		
+    </script>
+    
+    <!-- Load ExtensionsManager early so it's available when extensions finish loading -->
+    <script src="js/extensions.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #000;
+            color: #ffffff;
+            overflow: hidden;
+        }
+
+        /* Menu Bar Styles */
+        .menu-bar {
+            background: #2d2d2d;
+            border-bottom: 1px solid #404040;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            font-size: 13px;
+            user-select: none;
+        }
+
+        .menu-item {
+            padding: 5px 10px;
+            cursor: pointer;
+            border-radius: 3px;
+            transition: background-color 0.2s;
+            position: relative;
+        }
+
+        .menu-item:hover {
+            background: #404040;
+        }
+
+        .menu-item.active {
+            background: #667eea;
+        }
+
+        .menu-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: #2d2d2d;
+            border: 1px solid #404040;
+            border-radius: 4px;
+            min-width: 200px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 1000;
+            display: none;
+        }
+
+        .menu-item:hover .menu-dropdown {
+            display: block;
+        }
+
+        .menu-option {
+            padding: 8px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #404040;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .menu-option:last-child {
+            border-bottom: none;
+        }
+
+        .menu-option:hover {
+            background: #404040;
+        }
+
+        .menu-option.disabled {
+            color: #666;
+            cursor: not-allowed;
+        }
+
+        .menu-option.disabled:hover {
+            background: none;
+        }
+
+        .menu-option.has-submenu {
+            position: relative;
+            padding-right: 24px;
+        }
+
+        .menu-option.has-submenu::after {
+            content: '▸';
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 12px;
+            color: #aaa;
+        }
+
+        .menu-submenu {
+            position: absolute;
+            top: 0;
+            left: 100%;
+            margin-left: 4px;
+            background: #2d2d2d;
+            border: 1px solid #404040;
+            border-radius: 4px;
+            min-width: 200px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            display: none;
+            z-index: 1100;
+        }
+
+        .menu-option.has-submenu:hover > .menu-submenu {
+            display: block;
+        }
+
+        .menu-separator {
+            height: 1px;
+            background: #404040;
+            margin: 4px 0;
+        }
+
+        /* CSS Reset for containers */
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        /* Main Container */
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* View Tabs */
+        .view-tabs {
+            background: #2d2d2d;
+            border-bottom: 1px solid #404040;
+            display: flex;
+            height: 35px;
+        }
+
+        .view-tab {
+            background: none;
+            border: none;
+            color: #b0b0b0;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 13px;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .view-tab:hover {
+            background: #404040;
+            color: #ffffff;
+        }
+
+        .view-tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            background: #000;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #000;
+            min-height: 0; /* Allow flex items to shrink */
+        }
+
+        /* View Panels */
+        .view-panel {
+            display: none;
+            flex: 1;
+            flex-direction: column;
+            min-height: 0; /* Allow flex items to shrink */
+        }
+
+        .view-panel.active {
+            display: flex;
+        }
+
+        /* Graph View */
+        #graphView {
+            position: relative;
+            height: 100%;
+        }
+
+        .toolbar {
+            background: #2d2d2d;
+            border-bottom: 1px solid #404040;
+            padding: 8px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+        }
+
+        .stats {
+            color: #b0b0b0;
+        }
+
+        .toolbar-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* Cytoscape Container */
+        #cy-wrapper {
+            flex: 1;
+            height: 100%;
+            min-height: 400px;
+            overflow: hidden;
+            position: relative;
+        }
+        #cy {
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            background: #000;
+        }
+
+        .graph-search-overlay {
+            position: absolute;
+            top: 16px;
+            right: 20px;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid #404040;
+            background: rgba(30, 30, 30, 0.95);
+            box-shadow: 0 16px 32px rgba(0, 0, 0, 0.45);
+            z-index: 1200;
+        }
+
+        .graph-search-overlay.visible {
+            display: flex;
+        }
+
+        .graph-search-input {
+            width: 220px;
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid #404040;
+            background: #1a1a1a;
+            color: #f9fafb;
+            font-size: 13px;
+        }
+
+        .graph-search-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.25);
+        }
+
+        .graph-search-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .graph-search-count {
+            min-width: 60px;
+            text-align: center;
+            font-size: 12px;
+            color: #cbd5f5;
+        }
+
+        .graph-search-count.graph-search-empty {
+            color: #9ca3af;
+        }
+
+        .graph-search-button {
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: 1px solid rgba(102, 126, 234, 0.4);
+            background: rgba(102, 126, 234, 0.18);
+            color: #cbd5f5;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background 0.15s ease, border-color 0.15s ease;
+        }
+
+        .graph-search-button:hover {
+            background: rgba(102, 126, 234, 0.35);
+            border-color: rgba(102, 126, 234, 0.6);
+        }
+
+        .graph-search-close {
+            background: none;
+            border: none;
+            color: #9ca3af;
+            padding: 4px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .graph-search-close:hover {
+            color: #f9fafb;
+        }
+
+        /* Source View */
+        #sourceView {
+            position: relative;
+            height: 100%;
+        }
+
+        #jsonSource, .CodeMirror {
+            height: 100%;
+            font-family: monospace;
+            font-size: 13px;
+        }
+
+        /* Table View */
+        .table-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #2d2d2d;
+            height: 100%;
+            min-height: 0;
+        }
+
+        .table-toolbar {
+            background: #1a1a1a;
+            border-bottom: 1px solid #404040;
+            padding: 12px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .table-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .table-search {
+            padding: 8px 12px;
+            background: rgba(80, 80, 80, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            color: #ffffff;
+            font-size: 12px;
+            width: 200px;
+        }
+
+        .table-search::placeholder {
+            color: #b0b0b0;
+        }
+
+        .table-tabs {
+            display: flex;
+            gap: 5px;
+        }
+
+        .table-tab {
+            padding: 6px 12px;
+            background: rgba(80, 80, 80, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            color: #ffffff;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .table-tab:hover {
+            background: rgba(102, 126, 234, 0.2);
+        }
+
+        .table-tab.active {
+            background: #667eea;
+            border-color: #667eea;
+        }
+
+        .table-wrapper {
+            flex: 1;
+            overflow: auto;
+            padding: 16px;
+            min-height: 0;
+            max-height: calc(100vh - 200px);
+        }
+
+        .table-content {
+            display: none;
+        }
+
+        .table-content.active {
+            display: block;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #2d2d2d;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #404040;
+        }
+
+        .data-table th {
+            background: #1a1a1a;
+            font-weight: 600;
+            color: #e5e7eb;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .data-table td {
+            color: #d1d5db;
+            font-size: 13px;
+        }
+
+        .data-table tr:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .data-table tr.selected {
+            background: rgba(102, 126, 234, 0.2);
+        }
+
+        .node-type-badge, .edge-type-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .node-type-badge.server { background: #10b981; color: white; }
+        .node-type-badge.client { background: #06b6d4; color: white; }
+        .node-type-badge.database { background: #8b5cf6; color: white; }
+        .node-type-badge.service { background: #f59e0b; color: white; }
+        .node-type-badge.default { background: #667eea; color: white; }
+
+        .edge-type-badge.connection { background: #4a5568; color: white; }
+        .edge-type-badge.query { background: #667eea; color: white; }
+        .edge-type-badge.direct { background: #10b981; color: white; }
+
+        /* Buttons */
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a67d8;
+        }
+
+        .btn-secondary {
+            background: #4a5568;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #2d3748;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .menu-bar {
+                font-size: 12px;
+                padding: 0 5px;
+            }
+            
+            .menu-item {
+                padding: 5px 8px;
+            }
+            
+            .view-tab {
+                padding: 8px 12px;
+                font-size: 12px;
+            }
+        }
+
+        /* Notification System */
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 16px;
+            border-radius: 6px;
+            color: white;
+            font-size: 14px;
+            z-index: 10000;
+            max-width: 300px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification.success {
+            background: #10b981;
+        }
+
+        .notification.error {
+            background: #ef4444;
+        }
+
+        .notification.info {
+            background: #3b82f6;
+        }
+
+        .notification.warning {
+            background: #f59e0b;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 15% 20%, rgba(102, 126, 234, 0.22), transparent 35%),
+                        radial-gradient(circle at 80% 10%, rgba(118, 75, 162, 0.2), transparent 32%),
+                        rgba(12, 14, 26, 0.82);
+            backdrop-filter: blur(10px);
+        }
+
+        .modal-content {
+            background: linear-gradient(150deg, rgba(16, 18, 27, 0.96), rgba(11, 13, 22, 0.94));
+            margin: 5% auto;
+            padding: 22px 24px;
+            border-radius: 14px;
+            width: min(560px, 86vw);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 30px 70px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(102, 126, 234, 0.14);
+            color: #e5e7eb;
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding: 14px 0 12px;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.16), rgba(118, 75, 162, 0.12));
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 10px 10px 0 0;
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #f3f4f6;
+            letter-spacing: 0.01em;
+        }
+
+        .close {
+            color: #cbd5e1;
+            font-size: 22px;
+            font-weight: 700;
+            cursor: pointer;
+            padding: 6px 10px;
+            border-radius: 10px;
+            transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+        }
+
+        .close:hover,
+        .close:focus {
+            color: #f9fafb;
+            background: rgba(102, 126, 234, 0.24);
+            outline: none;
+            transform: translateY(-1px);
+        }
+
+        .modal-description {
+            margin: 6px 0 18px 0;
+            color: #cbd5f5;
+            line-height: 1.6;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding-top: 8px;
+        }
+
+        #workspacePromptModal .btn-primary {
+            background: linear-gradient(135deg, #8b5cf6, #4f46e5);
+            color: #f9fafb;
+            box-shadow: 0 12px 22px rgba(79, 70, 229, 0.35);
+        }
+
+        #workspacePromptModal .btn-primary:hover {
+            background: linear-gradient(135deg, #7c3aed, #4338ca);
+        }
+
+        #workspacePromptModal .btn-secondary {
+            background: rgba(255, 255, 255, 0.08);
+            color: #e5e7eb;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        #workspacePromptModal .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.14);
+        }
+
+        /* Form Styles */
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #e5e7eb;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #404040;
+            border-radius: 4px;
+            background: #1a1a1a;
+            color: #ffffff;
+            font-size: 14px;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        /* Loading Spinner */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Status Bar */
+        .status-bar {
+            background: #1a1a1a;
+            border-top: 1px solid #404040;
+            padding: 4px 16px;
+            font-size: 11px;
+            color: #9ca3af;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 24px;
+        }
+        #graphFileName {
+            margin-right: 12px;
+        }
+        #workspacePath {
+            margin-left: 12px;
+        }
+
+        /* Cheat Sheet Panel */
+        .cheat-sheet-panel {
+            position: fixed;
+            top: 70px;
+            right: 32px;
+            width: min(520px, 90vw);
+            max-height: calc(100vh - 120px);
+            background: rgba(18, 18, 18, 0.96);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(6px);
+            z-index: 4000;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .cheat-sheet-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.18), rgba(118, 75, 162, 0.12));
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .cheat-sheet-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #f3f4f6;
+        }
+
+        .cheat-sheet-close {
+            background: none;
+            border: none;
+            color: #9ca3af;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 4px 8px;
+            line-height: 1;
+            border-radius: 6px;
+        }
+
+        .cheat-sheet-close:hover,
+        .cheat-sheet-close:focus {
+            color: #f9fafb;
+            background: rgba(102, 126, 234, 0.2);
+            outline: none;
+        }
+
+        .cheat-sheet-body {
+            padding: 20px 24px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .help-panel {
+            left: 50%;
+            right: auto;
+            transform: translateX(-50%);
+            width: min(960px, 94vw);
+        }
+
+        .help-panel .cheat-sheet-body {
+            padding: 22px 26px 28px;
+        }
+
+        .cheat-sheet-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 24px 0;
+        }
+
+        .cheat-sheet-table td {
+            vertical-align: top;
+            width: 50%;
+        }
+
+        .cheat-sheet-table h4 {
+            margin-bottom: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #cbd5f5;
+        }
+
+        .cheat-sheet-table dl {
+            margin: 0 0 18px 0;
+        }
+
+        .cheat-sheet-table dt {
+            font-weight: 600;
+            color: #e5e7eb;
+            font-size: 13px;
+        }
+
+        .cheat-sheet-table dd {
+            margin: 4px 0 12px 0;
+            color: #9ca3af;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .cheat-sheet-section:last-of-type dl {
+            margin-bottom: 0;
+        }
+
+        @media (max-width: 768px) {
+            .cheat-sheet-panel {
+                top: 60px;
+                right: 16px;
+                left: 16px;
+                width: auto;
+                max-height: calc(100vh - 100px);
+            }
+
+            .cheat-sheet-table,
+            .cheat-sheet-table tbody,
+            .cheat-sheet-table tr,
+            .cheat-sheet-table td {
+                display: block;
+                width: 100%;
+            }
+
+            .cheat-sheet-table td {
+                padding-bottom: 16px;
+            }
+
+            .cheat-sheet-table td:last-child {
+                padding-bottom: 0;
+            }
+        }
+
+        .help-content {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .help-lede {
+            color: #e5e7eb;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .help-section {
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 14px 16px 16px;
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .help-section h4 {
+            margin-bottom: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #cbd5f5;
+        }
+
+        .help-section p,
+        .help-section ul {
+            color: #d1d5db;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .help-section ul {
+            padding-left: 18px;
+            margin: 6px 0 0;
+        }
+
+        .help-section li + li {
+            margin-top: 6px;
+        }
+
+        .help-tip {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 8px;
+            background: rgba(102, 126, 234, 0.2);
+            color: #e5e7eb;
+            font-size: 12px;
+            margin-left: 6px;
+        }
+
+        .help-figure {
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.03);
+            padding: 12px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .help-figure img {
+            max-width: 100%;
+            border-radius: 8px;
+        }
+
+        .about-body {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .about-section {
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 16px 18px;
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .about-section h4 {
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #cbd5f5;
+        }
+
+        .about-section p,
+        .about-section ul {
+            color: #d1d5db;
+            font-size: 13px;
+            line-height: 1.6;
+            margin: 0;
+        }
+
+        .about-section ul {
+            padding-left: 18px;
+            margin-top: 6px;
+        }
+
+        .about-figure {
+            display: flex;
+            justify-content: center;
+            padding: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .about-figure img {
+            max-width: min(320px, 100%);
+            width: 100%;
+            height: auto;
+            border-radius: 10px;
+        }
+
+        /* Utility Classes */
+        .hidden {
+            display: none !important;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .mb-2 {
+            margin-bottom: 8px;
+        }
+
+        .mt-2 {
+            margin-top: 8px;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #404040;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        /* Integrations Styles */
+        .integrations-container {
+            padding: 24px;
+            background: #1e1e1e;
+            height: 100%;
+            overflow-y: auto;
+        }
+
+        .integrations-header {
+            margin-bottom: 32px;
+            text-align: center;
+        }
+
+        .integrations-header h2 {
+            color: #ffffff;
+            font-size: 28px;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .integrations-header p {
+            color: #b0b0b0;
+            font-size: 16px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .integrations-content {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        /* Blocklists Styles */
+        .blocklists-container {
+            padding: 24px;
+            background: #1e1e1e;
+            height: 100%;
+            overflow-y: auto;
+        }
+
+        .blocklists-header {
+            margin-bottom: 32px;
+            text-align: center;
+        }
+
+        .blocklists-header h2 {
+            color: #ffffff;
+            font-size: 28px;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .blocklists-header p {
+            color: #b0b0b0;
+            font-size: 16px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .blocklists-content {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .blocklist-textarea {
+            min-height: 200px;
+        }
+
+        .readonly-textarea {
+            background: #1a1a1a;
+            color: #d0d0d0;
+            cursor: not-allowed;
+        }
+
+        .readonly-input {
+            background: #1a1a1a;
+            color: #d0d0d0;
+            cursor: not-allowed;
+        }
+
+        .readonly-textarea.error {
+            border-color: #e53e3e;
+            color: #fba5a5;
+        }
+
+        .integration-section {
+            background: #2a2a2a;
+            border: 1px solid #404040;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .integration-header {
+            margin-bottom: 20px;
+        }
+
+        .integration-header h3 {
+            color: #ffffff;
+            font-size: 20px;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .integration-header p {
+            color: #b0b0b0;
+            font-size: 14px;
+        }
+
+        .integration-form {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .form-group label {
+            color: #ffffff;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .form-input {
+            background: #1a1a1a;
+            border: 1px solid #404040;
+            border-radius: 6px;
+            padding: 12px 16px;
+            color: #ffffff;
+            font-size: 14px;
+            transition: border-color 0.2s ease;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-input::placeholder {
+            color: #666666;
+        }
+
+        .input-group {
+            display: flex;
+            position: relative;
+        }
+
+        .input-group .form-input {
+            flex: 1;
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+
+        .toggle-visibility-btn {
+            background: #333333;
+            border: 1px solid #404040;
+            border-left: none;
+            border-top-right-radius: 6px;
+            border-bottom-right-radius: 6px;
+            padding: 12px 16px;
+            color: #b0b0b0;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s ease;
+        }
+
+        .toggle-visibility-btn:hover {
+            background: #404040;
+            color: #ffffff;
+        }
+
+        .form-help {
+            color: #888888;
+            font-size: 12px;
+            margin-top: 4px;
+        }
+
+        .form-help a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .form-help a:hover {
+            text-decoration: underline;
+        }
+
+        .form-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 8px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border-radius: 6px;
+            border: none;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a6fd8;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #404040;
+            color: #ffffff;
+            border: 1px solid #555555;
+        }
+
+        .btn-secondary:hover {
+            background: #4a4a4a;
+            border-color: #666666;
+        }
+
+        .btn-accent {
+            background: #10b981;
+            color: white;
+            border: 1px solid #059669;
+        }
+
+        .btn-accent:hover {
+            background: #059669;
+            border-color: #047857;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-warning {
+            background: #f59e0b;
+            color: white;
+            border: 1px solid #d97706;
+        }
+
+        .btn-warning:hover {
+            background: #d97706;
+            border-color: #b45309;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+        }
+
+        .status-indicator {
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-indicator.success {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .status-indicator.error {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .status-indicator.testing {
+            background: rgba(249, 115, 22, 0.2);
+            color: #f97316;
+            border: 1px solid rgba(249, 115, 22, 0.3);
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .integrations-container {
+                padding: 16px;
+            }
+
+            .integration-section {
+                padding: 16px;
+            }
+
+            .form-actions {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .btn {
+                justify-content: center;
+            }
+        }
+
+        /* Loading Progress Bar */
+        #loading-progress {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: #1a1a1a;
+            color: #ffffff;
+            font-size: 12px;
+            padding: 4px 8px;
+            box-sizing: border-box;
+            display: none;
+            z-index: 1000;
+        }
+
+        #loading-progress .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #333333;
+            margin-top: 4px;
+        }
+
+        #progress-fill {
+            height: 100%;
+            width: 0%;
+            background: #667eea;
+            transition: width 0.2s ease;
+        }
+
+        #progress-text {
+            text-align: right;
+        }
+
+        /* Node type tree */
+        .node-type-tree {
+            height: 100%;
+            overflow: auto;
+        }
+
+        .tree-lines ul {
+            list-style: none;
+            margin: 0;
+            padding-left: 1em;
+            position: relative;
+        }
+
+        .tree-lines ul:before {
+            content: '';
+            border-left: 1px solid #555;
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0.5em;
+        }
+
+        .tree-lines li {
+            margin: 0;
+            padding: 0 0 0 1em;
+            position: relative;
+        }
+
+        .tree-lines li:before {
+            content: '';
+            border-top: 1px solid #555;
+            position: absolute;
+            top: 0.8em;
+            left: 0;
+            width: 0.5em;
+        }
+
+        .tree-lines .node {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 13px;
+        }
+
+        .tree-lines .domain-active-checkbox {
+            width: 14px;
+            height: 14px;
+            margin-right: 2px;
+            accent-color: #4caf50;
+            cursor: pointer;
+        }
+
+        .tree-lines .domain-active-checkbox:disabled {
+            opacity: 0.6;
+            accent-color: #888888;
+            cursor: not-allowed;
+        }
+
+        .tree-lines .node:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .tree-lines .add-type-btn {
+            margin-left: auto;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #ffffff;
+            border-radius: 8px;
+            padding: 2px 6px;
+            font-size: 12px;
+            cursor: pointer;
+            box-shadow: inset 0 1px 2px rgba(255,255,255,0.1), 0 1px 2px rgba(0,0,0,0.5);
+        }
+
+        .tree-lines .twisty {
+            width: 1em;
+            height: 1em;
+            background: none;
+            border: none;
+            color: #ffffff;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .tree-lines li:not(.has-children) > .node > .twisty {
+            visibility: hidden;
+        }
+
+        .tree-lines .children {
+            display: none;
+            margin: 0;
+            padding-left: 1em;
+        }
+
+        .tree-lines .node[data-open="true"] + .children {
+            display: block;
+        }
+
+        .tree-lines .node.type-entry {
+            display: grid;
+            grid-template-columns: 16px minmax(0, 1fr) 20px 44px 72px minmax(0, 120px) 28px 24px 24px;
+            align-items: center;
+            gap: 4px;
+            margin: 2px 0;
+            font-size: 13px;
+        }
+
+        .tree-lines .node.type-entry > * {
+            min-width: 0;
+        }
+
+        .tree-lines .node.type-entry .delete-type-btn {
+            background: none;
+            border: none;
+            color: #ffffff;
+            cursor: pointer;
+        }
+
+        .type-label {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
+        }
+
+        .color-swatch {
+            width: 14px;
+            height: 14px;
+            border-radius: 2px;
+            border: 1px solid #555555;
+            display: inline-block;
+        }
+
+        .color-input {
+            -webkit-appearance: none;
+            border: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            padding: 0;
+        }
+
+        .color-input::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+
+        .color-input::-webkit-color-swatch {
+            border: none;
+            border-radius: 50%;
+        }
+
+        .shape-select {
+            width: 50px;
+            height: 24px;
+            font-size: 16px;
+            text-align: center;
+            padding: 0;
+        }
+
+        .size-input,
+        .icon-input {
+            height: 24px;
+            line-height: 24px;
+            font-size: 13px;
+            padding: 0 2px;
+            box-sizing: border-box;
+            border-radius: 6px;
+            width: 100%;
+        }
+
+        .icon-swatch {
+            width: 24px;
+            height: 24px;
+            background: #ffffff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: #ffffff;
+            border-radius: 6px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.2s;
+            position: relative;
+        }
+
+        .icon-swatch:hover {
+            transform: scale(5);
+            z-index: 10;
+        }
+
+        .na-icon {
+            background: #ffffff;
+        }
+
+
+        .text-callout {
+            position: absolute;
+            pointer-events: none;
+            background: #fff;
+            padding: var(--text-callout-padding, 4px);
+            border-radius: 8px;
+            border: 1px solid transparent;
+            box-sizing: border-box;
+            box-shadow: var(--text-callout-shadow, none);
+            white-space: pre-wrap;
+            width: fit-content;
+            max-width: 400px; /* match summaryNodeMaxWidth */
+        }
+
+        .text-callout__article {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .text-callout__header {
+            margin: 0;
+            padding: 0;
+        }
+
+        .text-callout__title {
+            margin: 0;
+            font-size: 1.15em;
+            line-height: 1.2;
+            font-weight: 600;
+            color: inherit;
+        }
+
+        .text-callout__body {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            color: inherit;
+        }
+
+        .text-callout__body p {
+            margin: 0;
+        }
+
+        .text-callout__body ul,
+        .text-callout__body ol {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .text-callout__body li + li {
+            margin-top: 6px;
+        }
+
+        .example-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .example-graph-option {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #23233b;
+            color: #ffffff;
+            border: none;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            text-align: left;
+            transition: background 0.2s ease;
+        }
+
+        .example-graph-option:hover {
+            background: #2f2f4f;
+        }
+
+        .example-graph-option .example-meta {
+            font-size: 12px;
+            opacity: 0.75;
+            margin-left: 12px;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Menu Bar -->
+        <div class="menu-bar">
+            <div class="menu-item">
+                File
+                <div class="menu-dropdown">
+                    <div class="menu-option" onclick="window.WorkspaceManager.selectWorkspace()">
+                        📂 Set workspace
+                    </div>
+                    <div class="menu-separator"></div>
+                    <div class="menu-option" onclick="window.FileManager.openFileDialog()">
+                        📁 Open Graph File
+                    </div>
+                    <div class="menu-option" onclick="window.FileManager && window.FileManager.openExamplesDialog && window.FileManager.openExamplesDialog()">
+                        📚 Load Example Graph
+                    </div>
+                    <div class="menu-option" onclick="window.FileManager.saveFileDialog()">
+                        💾 Save Graph As...
+                    </div>
+                    <div
+                        class="menu-option disabled"
+                        id="neo4jDesktopOption"
+                        aria-disabled="true"
+                        title="Configure Neo4j credentials to enable this action"
+                        onclick="window.FileManager.openGraphDesktop()"
+                    >
+                        🖥️ Graph Desktop
+                    </div>
+                    <div class="menu-separator" id="neo4jSetupSeparator" style="display: none;"></div>
+                    <div
+                        id="neo4jSetupOption"
+                        class="menu-option"
+                        style="display: none;"
+                        onclick="window.FileManager.showNeo4jSetupGuide()"
+                    >
+                        📘 Neo4j Setup Guide
+                    </div>
+                    <div class="menu-option" onclick="window.FileManager.createNewGraph()">
+                        🆕 New Graph
+                    </div>
+                    <div class="menu-separator"></div>
+                    <div class="menu-option" onclick="window.GraphManager.showImportDialog()">
+                        📥 Import Data
+                    </div>
+                    <div class="menu-option has-submenu">
+                        📤 Export to…
+                        <div class="menu-submenu">
+                            <div class="menu-option" onclick="window.FileManager.exportGraph('csv')">
+                                📈 Export as CSV
+                            </div>
+                            <div class="menu-option" onclick="window.FileManager.exportGraph('png')">
+                                🖼️ Export as PNG
+                            </div>
+                            <div class="menu-option" onclick="window.FileManager.exportGraph('pdf')">
+                                📄 Export as PDF
+                            </div>
+                            <div class="menu-option" onclick="window.FileManager.exportGraph('html')">
+                                🌐 Export as HTML
+                            </div>
+                        </div>
+                    </div>
+                    <div class="menu-separator"></div>
+                    <div class="menu-option" onclick="window.print()">
+                        🖨️ Print
+                    </div>
+                </div>
+            </div>
+            
+            <div class="menu-item">
+                Edit
+                <div class="menu-dropdown">
+                    <div class="menu-option" onclick="window.GraphRenderer.undo()">
+                        ↩️ Undo
+                    </div>
+                    <div class="menu-option" onclick="window.GraphRenderer.redo()">
+                        ↪️ Redo
+                    </div>
+                    <div class="menu-separator"></div>
+                    <div class="menu-option" onclick="window.GraphRenderer.cy?.elements().select()">
+                        ☑️ Select All
+                    </div>
+                    <div class="menu-option" onclick="window.GraphRenderer.clearSelection()">
+                        ❌ Clear Selection
+                    </div>
+                    <div class="menu-separator"></div>
+                    <div class="menu-option" onclick="window.GraphRenderer.cy?.elements().copy()">
+                        📋 Copy
+                    </div>
+                    <div class="menu-option" onclick="window.GraphRenderer.cy?.paste()">
+                        📋 Paste
+                    </div>
+                    <div class="menu-option" onclick="window.GraphRenderer.cy?.elements().remove()">
+                        🗑️ Delete
+                    </div>
+                </div>
+            </div>
+            
+            <div class="menu-item">
+                View
+                <div class="menu-dropdown">
+                    <div class="menu-option" onclick="switchView('graph')">
+                        📊 Graph View
+                    </div>
+                    <div class="menu-option" onclick="switchView('table')">
+                        📋 Type Definitions
+                    </div>
+                    <div class="menu-option" onclick="switchView('totalData')">
+                        📊 Data Table
+                    </div>
+                    <div class="menu-separator"></div>
+                    <div class="menu-option" onclick="window.GraphRenderer.cy?.fit()">
+                        🔍 Fit to View
+                    </div>
+                    <div class="menu-option" onclick="window.globalFunctions.tileTopLevelNodes()">
+                        🧩 Tile Nodes
+                    </div>
+                    <div class="menu-option" onclick="window.GraphRenderer.cy?.center()">
+                        🎯 Center Graph
+                    </div>
+                    <div class="menu-separator"></div>
+                    <div class="menu-option" onclick="window.GraphRenderer.cy?.zoom(1.2)">
+                        ➕ Zoom In
+                    </div>
+                    <div class="menu-option" onclick="window.GraphRenderer.cy?.zoom(0.8)">
+                        ➖ Zoom Out
+                    </div>
+                    <div class="menu-separator"></div>
+                    <div class="menu-option" onclick="window.UI.toggle3DDepthEffects()">
+                        🌫️ Toggle Depth Effects
+                    </div>
+                    <div class="menu-option" onclick="window.UI.toggle3DAutoRotation()">
+                        🔄 Toggle Auto-Rotation
+                    </div>
+                </div>
+            </div>
+            
+            <div class="menu-item">
+                Layout
+                <div class="menu-dropdown">
+                    <div class="menu-option" onclick="window.LayoutManager.applyLayout('grid')">
+                        🔲 Grid
+                    </div>
+                    <div class="menu-option" onclick="window.LayoutManager.applyLayout('hexagonal')">
+                        🔷 Hexagonal
+                    </div>
+                    <div class="menu-option" onclick="window.LayoutManager.applyLayout('circle')">
+                        ⭕ Circular
+                    </div>
+                    <div class="menu-option" onclick="window.LayoutManager.applyLayout('concentric')">
+                        🎯 Radial
+                    </div>
+                    <div class="menu-option" onclick="window.LayoutManager.applyLayout('breadthfirst')">
+                        🌳 Wide Tree
+                    </div>
+                    <div class="menu-option" onclick="window.LayoutManager.applyLayout('cose')">
+                        🌊 Force Organic
+                    </div>
+                    <div class="menu-option" onclick="window.LayoutManager.applyLayout('cose-bilkent')">
+                        🌊 Force Organic Clustering
+                    </div>
+                    <div class="menu-option" onclick="window.LayoutManager.applyLayout('cola')">
+                        🌊 Cola
+                    </div>
+                    <div class="menu-option" onclick="window.LayoutManager.applyLayout('dagre')">
+                        📊 Dagre
+                    </div>
+                    <div class="menu-option" onclick="window.LayoutManager.applyLayout('klay')">
+                        📐 Klay
+                    </div>
+                    <div class="menu-option" onclick="window.LayoutManager.applyLayout('euler')">
+                        🌊 Euler
+                    </div>
+                    <div class="menu-option" onclick="window.LayoutManager.applyLayout('spiral')">
+                        🌀 Spiral
+                    </div>
+                    <div class="menu-option" onclick="window.LayoutManager.applyLayout('radial-recency')">
+                        🎈 Radial Time
+                    </div>
+                    <div class="menu-option" onclick="window.LayoutManager.applyLayout('bulbous')">
+                        🎈 Radial Time Bulbous
+                    </div>
+                    <div class="menu-option" onclick="window.LayoutManager.applyLayout('circle-packing')">
+                        🎯 Nested Circles
+                    </div>
+                    <div class="menu-option" onclick="window.LayoutManager.applyLayout('weighted-force')">
+                        ⚖️ Edge Weighted Force
+                    </div>
+                    <div class="menu-option" onclick="window.LayoutManager.applyLayout('temporal-attraction')">
+                        ⏱️ Temporal Force
+                    </div>
+                    <div class="menu-option" onclick="window.LayoutManager.applyLayout('timeline')">
+                        📅 Timeline
+                    </div>
+                    <div class="menu-option" onclick="window.LayoutManager.applyLayout('timeline-scatter')">
+                        📅 Timeline scatter
+                    </div>
+                    <div class="menu-option" onclick="window.LayoutManager.applyLayout('true-3d-globe')">
+                        🌍 3D Globe
+                    </div>
+                    <div class="menu-option" onclick="window.LayoutManager.applyLayout('absolute')">
+                        📍 3D Absolute 
+                    </div>
+                </div>
+            </div>
+            
+            <div class="menu-item">
+                Tools
+                <div class="menu-dropdown">
+                    <div class="menu-option" onclick="window.NodeEditor.showEditor()">
+                        ✏️ Node Editor
+                    </div>
+                    <div class="menu-option" onclick="window.GraphAreaEditor.showEditor()">
+                        🎨 Graph Area Editor
+                    </div>
+                    <div class="menu-separator"></div>
+                    <div class="menu-option" onclick="window.DataAnalyzer.analyzeGraph()">
+                        📊 Data Analysis
+                    </div>
+                    <div class="menu-separator"></div>
+                    <div class="menu-option" onclick="window.GraphRenderer.addNodeAtCenter()">
+                        ➕ Add Node
+                    </div>
+                </div>
+            </div>
+            
+            <div class="menu-item">
+                Help
+                <div class="menu-dropdown">
+                    <div class="menu-option" id="viewCheatSheetToggle" role="menuitemcheckbox" aria-checked="false" onclick="window.UI.toggleCheatSheet()">
+                        🧠 Cheat Sheet
+                    </div>
+                    <div class="menu-option has-submenu">
+                        📖 User Guide
+                        <div class="menu-submenu">
+                            <div class="menu-option" onclick="window.UI.showHelpPanel('importing-data')">
+                                📥 Importing Data
+                            </div>
+                            <div class="menu-option" onclick="window.UI.showHelpPanel('node-domains')">
+                                🗂️ Node Domains
+                            </div>
+                            <div class="menu-option" onclick="window.UI.showHelpPanel('containers')">
+                                🧳 Containers
+                            </div>
+                            <div class="menu-option" onclick="window.UI.showHelpPanel('external-content')">
+                                🖼️ External Content
+                            </div>
+                            <div class="menu-option" onclick="window.UI.showHelpPanel('proxy-allowlist')">
+                                🖼️ The Proxy Allowlist
+                            </div>
+                            <div class="menu-option" onclick="window.UI.showHelpPanel('linking-graphs')">
+                                🔗 Linking Graphs
+                            </div>
+                        </div>
+                    </div>
+                    <div class="menu-option" onclick="window.open('https://github.com/RSAC-Labs/Quantickle', '_blank')">
+                        🌐 GitHub
+                    </div>
+                    <div class="menu-separator"></div>
+                    <div class="menu-option" onclick="window.UI.showHelpPanel('about')">
+                        ℹ️ About
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- View Tabs -->
+        <div class="view-tabs">
+            <button class="view-tab active" onclick="switchView('graph')">Graph View</button>
+            <button class="view-tab" onclick="switchView('table')">Type definitions</button>
+            <button class="view-tab" onclick="switchView('totalData')">Data table</button>
+            <button class="view-tab" onclick="switchView('aiInput')" style="display: none;">AI Input</button>
+            <button class="view-tab" onclick="switchView('integrations')">Integrations</button>
+            <button class="view-tab" onclick="switchView('blocklists')">Block/Allowlists</button>
+            <button class="view-tab" onclick="switchView('source')">JSON Source</button>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Graph View Panel -->
+            <div id="graphView" class="view-panel active">
+                <div id="cy-wrapper">
+                    <div id="cy" tabindex="0"></div>
+                </div>
+            </div>
+
+            <!-- Source View Panel -->
+            <div id="sourceView" class="view-panel">
+                <textarea id="jsonSource"></textarea>
+                <button id="applyJsonSource" style="display: none; margin-top: 8px;">Apply</button>
+            </div>
+
+            <!-- Table View Panel -->
+            <div id="tableView" class="view-panel">
+                <div class="table-container">
+                    <div class="table-toolbar">
+                        <div class="table-controls">
+                            <input type="text" class="table-search" id="tableSearch" placeholder="Search node types..." />
+                            <div class="table-stats">
+                                Showing <span id="filteredCount">0</span> of <span id="totalCount">0</span> node types
+                            </div>
+                        </div>
+                        <button id="reloadDomainsBtn" onclick="reloadTypeDefinitions()">Reload all</button>
+                    </div>
+
+                    <div id="fileApiWarning" style="display: none; color: #ff9800; font-size: 12px; margin: 10px 0;"></div>
+                    <div class="table-wrapper">
+                        <!-- Node Type Tree -->
+                        <div id="nodeTypesTable" class="table-content active">
+                            <div id="nodeTypeTree" class="node-type-tree tree-lines"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Total Data Table Panel -->
+            <div id="totalDataView" class="view-panel">
+                <div class="table-container">
+                    <div class="table-toolbar">
+                        <div class="table-controls">
+                            <input type="text" class="table-search" id="totalDataSearch" placeholder="Search nodes and edges..." />
+                            <div class="table-stats">
+                                Showing <span id="totalFilteredCount">0</span> of <span id="totalDataCount">0</span> items
+                            </div>
+                        </div>
+                        <div class="table-tabs">
+                            <button class="table-tab active" onclick="switchDataTable('nodes')">Nodes</button>
+                            <button class="table-tab" onclick="switchDataTable('edges')">Edges</button>
+                        </div>
+                    </div>
+
+                    <div class="table-wrapper">
+                        <!-- Nodes Table -->
+                        <div id="nodesDataTable" class="table-content active">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Type</th>
+                                        <th>Label</th>
+                                        <th>Date</th>
+                                        <th>Properties</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="nodesDataTableBody">
+                                    <!-- Populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Edges Table -->
+                        <div id="edgesDataTable" class="table-content">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Source</th>
+                                        <th>Target</th>
+                                        <th>Label</th>
+                                        <th>Color</th>
+                                        <th>Thickness</th>
+                                        <th>Style</th>
+                                        <th>Shape</th>
+                                        <th>Weight</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="edgesDataTableBody">
+                                    <!-- Populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <!-- Integrations Panel -->
+            <div id="integrationsView" class="view-panel">
+                <div class="integrations-container">
+                    <div class="integrations-header">
+                        <h2>🔗 External Service Integrations</h2>
+                        <p>Configure connections to external security and threat intelligence services.</p>
+                    </div>
+
+                    <div class="integrations-content">
+                        <!-- VirusTotal Section -->
+                        <div class="integration-section">
+                            <div class="integration-header">
+                                <h3>🛡️ VirusTotal</h3>
+                                <p>API integration for file and URL reputation analysis</p>
+                            </div>
+                            <form class="integration-form" onsubmit="return false;">
+                                <div class="form-group">
+                                    <label for="virustotalApiKey">API Key:</label>
+                                    <div class="input-group">
+                                        <input 
+                                            type="password" 
+                                            id="virustotalApiKey" 
+                                            class="form-input" 
+                                            placeholder="Enter your VirusTotal API key"
+                                            autocomplete="off"
+                                        />
+                                        <button type="button" class="toggle-visibility-btn" onclick="togglePasswordVisibility('virustotalApiKey')">👁️</button>
+                                    </div>
+                                    <small class="form-help">Get your API key from <a href="https://www.virustotal.com/gui/my-apikey" target="_blank">VirusTotal API settings</a></small>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="button" class="btn btn-primary" onclick="saveVirusTotalConfig()">Save Configuration</button>
+                                    <button type="button" class="btn btn-secondary" onclick="testVirusTotalConnection()">Test Connection</button>
+                                    <span id="virustotalStatus" class="status-indicator"></span>
+                                </div>
+                                
+                                <!-- VirusTotal Query Actions -->
+                                <div class="form-section">
+                                    <h4 style="color: #ffffff; font-size: 16px; margin: 16px 0 12px 0;">🔍 Query VirusTotal</h4>
+                                    <div class="query-actions" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+                                        <button type="button" class="btn btn-accent" onclick="queryVirusTotalFile()">📄 Query File Hash</button>
+                                        <button type="button" class="btn btn-accent" onclick="queryVirusTotalDomain()">🌐 Query Domain</button>
+                                        <button type="button" class="btn btn-accent" onclick="queryVirusTotalIP()">🔢 Query IP Address</button>
+                                        <button type="button" class="btn btn-accent" onclick="queryVirusTotalURL()">🔗 Query URL</button>
+                                    </div>
+                                    <div class="submit-actions" style="display: flex; gap: 8px;">
+                                        <button type="button" class="btn btn-warning" onclick="submitVirusTotalURL()">📤 Submit URL for Analysis</button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- OpenAI Section -->
+                        <div class="integration-section">
+                            <div class="integration-header">
+                                <h3>🤖 OpenAI</h3>
+                                <p>API key for AI-assisted features</p>
+                            </div>
+                            <form class="integration-form" onsubmit="return false;">
+                                <div class="form-group">
+                                    <label for="openaiApiKey">API Key:</label>
+                                    <div class="input-group">
+                                        <input
+                                            type="password"
+                                            id="openaiApiKey"
+                                            class="form-input"
+                                            placeholder="Enter your OpenAI API key"
+                                            autocomplete="off"
+                                        />
+                                        <button type="button" class="toggle-visibility-btn" onclick="togglePasswordVisibility('openaiApiKey')">👁️</button>
+                                    </div>
+                                    <small class="form-help">Create an API key in your <a href="https://platform.openai.com/account/api-keys" target="_blank">OpenAI account settings</a></small>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="button" class="btn btn-primary" onclick="saveOpenAIConfig()">Save Configuration</button>
+                                    <button type="button" class="btn btn-secondary" onclick="testOpenAIConnection()">Test Connection</button>
+                                    <span id="openaiStatus" class="status-indicator"></span>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- SerpApi Section -->
+                        <div class="integration-section">
+                            <div class="integration-header">
+                                <h3>🔍 SerpApi</h3>
+                                <p>API key for search engine result queries</p>
+                            </div>
+                            <form class="integration-form" onsubmit="return false;">
+                                <div class="form-group">
+                                    <label for="serpApiKey">API Key:</label>
+                                    <div class="input-group">
+                                        <input
+                                            type="password"
+                                            id="serpApiKey"
+                                            class="form-input"
+                                            placeholder="Enter your SerpApi key"
+                                            autocomplete="off"
+                                        />
+                                        <button type="button" class="toggle-visibility-btn" onclick="togglePasswordVisibility('serpApiKey')">👁️</button>
+                                    </div>
+                                    <small class="form-help">Get your API key from <a href="https://serpapi.com/dashboard" target="_blank">SerpApi dashboard</a></small>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="button" class="btn btn-primary" onclick="saveSerpApiConfig()">Save Configuration</button>
+                                    <button type="button" class="btn btn-secondary" onclick="testSerpApiConnection()">Test Connection</button>
+                                    <span id="serpapiStatus" class="status-indicator"></span>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- OPML RSS Watcher Section -->
+                <div class="integration-section">
+                    <div class="integration-header">
+                        <h3>📰 OPML RSS Watcher</h3>
+                        <p>Ingest an OPML list of RSS/Atom feeds and manually monitor them for IOC-bearing articles.</p>
+                    </div>
+                    <form class="integration-form" onsubmit="return false;">
+                        <div class="form-group">
+                            <label for="opmlFeedUrl">OPML URL (optional):</label>
+                            <div class="input-group">
+                                <input
+                                    type="url"
+                                    id="opmlFeedUrl"
+                                    class="form-input"
+                                    placeholder="https://example.com/feeds.opml"
+                                    autocomplete="off"
+                                />
+                                <button type="button" class="btn btn-secondary" onclick="loadOpmlFromUrl()">Load</button>
+                            </div>
+                            <small class="form-help">Fetch an OPML file via the configured proxy allowlist, or paste the XML below.</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="opmlFeedInput">OPML XML:</label>
+                            <textarea
+                                id="opmlFeedInput"
+                                class="form-input blocklist-textarea"
+                                placeholder="Paste OPML content here to import RSS/Atom feeds"
+                            ></textarea>
+                            <small class="form-help">Feeds are stored locally. Use “Run Check Now” to scan for new articles.</small>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-primary" onclick="importOpmlFeeds()">Import OPML</button>
+                            <button type="button" id="opmlRunButton" class="btn btn-secondary" onclick="runOpmlScanNow()">Run Check Now</button>
+                            <button type="button" id="opmlCancelButton" class="btn btn-link" onclick="cancelOpmlScan()" disabled>Cancel Run</button>
+                            <span id="opmlStatus" class="status-indicator"></span>
+                        </div>
+                        <div class="form-group">
+                            <label for="opmlFeedListDisplay">Tracked feeds:</label>
+                            <textarea
+                                id="opmlFeedListDisplay"
+                                class="form-input blocklist-textarea"
+                                placeholder="Enter feeds like “Blog — https://example.com/feed”."
+                            ></textarea>
+                            <small id="opmlFeedListHelp" class="form-help">Import OPML above or edit this list directly. One feed per line.</small>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- CIRCL-LU OSINT Feed Section -->
+                <div class="integration-section">
+                    <div class="integration-header">
+                        <h3>🛰️ CIRCL-LU OSINT Feed</h3>
+                        <p>Synchronize open source intelligence events from the CIRCL-LU feed</p>
+                    </div>
+                    <form class="integration-form" onsubmit="return false;">
+                        <div class="form-group">
+                            <label for="circlMispFeedUrl">CIRCL MISP Feed URL:</label>
+                            <input
+                                type="url"
+                                id="circlMispFeedUrl"
+                                class="form-input readonly-input"
+                                placeholder="Configured by server"
+                                readonly
+                                aria-readonly="true"
+                            />
+                            <small class="form-help">Configured via the server's MISP_CIRCL environment variable.</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="circlLuAuthUsername">Username (optional):</label>
+                            <input
+                                type="text"
+                                id="circlLuAuthUsername"
+                                class="form-input"
+                                placeholder="Enter feed username if required"
+                                autocomplete="username"
+                            />
+                        </div>
+                        <div class="form-group">
+                            <label for="circlLuAuthKey">API Key / Password (optional):</label>
+                            <div class="input-group">
+                                <input
+                                    type="password"
+                                    id="circlLuAuthKey"
+                                    class="form-input"
+                                    placeholder="Enter access token or password"
+                                    autocomplete="off"
+                                />
+                                <button type="button" class="toggle-visibility-btn" onclick="togglePasswordVisibility('circlLuAuthKey')">👁️</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="circlLuLastSync">Last Sync Timestamp:</label>
+                            <input
+                                type="text"
+                                id="circlLuLastSync"
+                                class="form-input"
+                                placeholder="Not synced yet"
+                                autocomplete="off"
+                            />
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-primary" onclick="saveCirclLuConfig()">Save Configuration</button>
+                            <button type="button" class="btn btn-secondary" onclick="testCirclLuConnection()">Test Connection</button>
+                            <span id="circlLuStatus" class="status-indicator"></span>
+                        </div>
+                        <div class="form-actions" style="gap: 8px;">
+                            <button type="button" class="btn btn-accent" onclick="fetchCirclLuManifest()">📥 Fetch Manifest</button>
+                            <button type="button" class="btn btn-accent" onclick="syncCirclLuLatestEvent()">🔄 Sync Latest Event</button>
+                            <button type="button" class="btn btn-accent" onclick="syncCirclMispWholeFeed()">🗂️ Sync Whole Feed (Slow)</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Neo4j Section -->
+                <div class="integration-section">
+                    <div class="integration-header">
+                        <h3>🕸️ Neo4j</h3>
+                        <p>Credentials for Neo4j graph database</p>
+                    </div>
+                    <form class="integration-form" onsubmit="return false;">
+                        <div class="form-group">
+                            <label for="neo4jUrl">Bolt URL:</label>
+                            <input
+                                type="text"
+                                id="neo4jUrl"
+                                class="form-input readonly-input"
+                                placeholder="Configured by server"
+                                autocomplete="off"
+                                readonly
+                                aria-readonly="true"
+                            />
+                            <small class="form-help">This value reflects the server's NEO4J_URL setting.</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="neo4jUsername">Username:</label>
+                            <input
+                                type="text"
+                                id="neo4jUsername"
+                                class="form-input"
+                                placeholder="Enter your Neo4j username"
+                                autocomplete="username"
+                            />
+                        </div>
+                        <div class="form-group">
+                            <label for="neo4jPassword">Password:</label>
+                            <div class="input-group">
+                                <input
+                                    type="password"
+                                    id="neo4jPassword"
+                                    class="form-input"
+                                    placeholder="Enter your Neo4j password"
+                                    autocomplete="current-password"
+                                />
+                                <button type="button" class="toggle-visibility-btn" onclick="togglePasswordVisibility('neo4jPassword')">👁️</button>
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-primary" onclick="saveNeo4jConfig()">Save Configuration</button>
+                            <button type="button" class="btn btn-secondary" onclick="testNeo4jConnection()">Test Connection</button>
+                            <span id="neo4jStatus" class="status-indicator"></span>
+                        </div>
+                    </form>
+                </div>
+            </div>
+                </div>
+            </div>
+
+            <!-- Blocklists Panel -->
+            <div id="blocklistsView" class="view-panel">
+                <div class="blocklists-container">
+                    <div class="blocklists-header">
+                        <h2>🚦 Block / Allow Lists</h2>
+                        <p>Control which domains are ignored or pre-approved</p>
+                    </div>
+                    <div class="blocklists-content">
+                        <div class="integration-section">
+                            <form class="integration-form" onsubmit="return false;">
+                                <div class="form-group">
+                                    <label for="virustotalBlocklist">VirusTotal Domain Blocklist:</label>
+                                    <textarea id="virustotalBlocklist" class="form-input blocklist-textarea" placeholder="one domain per line"></textarea>
+                                    <small class="form-help">Domains to ignore in VirusTotal results</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="proxyAllowlistDisplay">Proxy Allowlist (read-only):</label>
+                                    <textarea id="proxyAllowlistDisplay" class="form-input blocklist-textarea readonly-textarea" placeholder="Loading proxy allowlist..." readonly></textarea>
+                                    <small id="proxyAllowlistHelp" class="form-help">Hosts approved for proxy requests are listed here.</small>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Input Panel -->
+            <div id="aiInputView" class="view-panel">
+                <div id="aiInputManager"></div>
+            </div>
+        </div>
+
+        <div id="cheatSheetPanel" class="cheat-sheet-panel hidden" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="cheatSheetTitle" tabindex="-1">
+            <div class="cheat-sheet-header">
+                <h3 id="cheatSheetTitle" class="cheat-sheet-title">Cheat Sheet</h3>
+                <button type="button" class="cheat-sheet-close" data-action="close-cheat-sheet" aria-label="Close cheat sheet">✕</button>
+            </div>
+            <div class="cheat-sheet-body">
+                <table class="cheat-sheet-table">
+                    <tbody>
+                        <tr>
+                            <td>
+							
+							    <div class="cheat-sheet-section">
+                                    <h4>Tabs</h4>
+                                    <dl>
+                                        <dt>Graph View</dt>
+                                        <dd>This is your work area.</dd>
+                                        <dt>Type definitions</dt>
+                                        <dd>Here all node types are defined, organized into groups (aka domains)</dd>
+										<dt>Data table</dt>
+                                        <dd>Graph data as a table.</dd>
+                                        <dt>Integrations</dt>
+                                        <dd>Here you will find adaptations to external services like VirusTotal or OpenAI.</dd>
+                                        <dt>Block/Allowlists</dt>
+                                        <dd>This is where your data filters live</dd>
+                                        <dt>JSON Source</dt>
+                                        <dd>The graph source. This can be manually edited.</dd>
+                                    </dl>
+                                </div>
+							
+                                <div class="cheat-sheet-section">
+                                    <h4>Nodes &amp; Edges</h4>
+                                    <dl>
+                                        <dt>Ctrl + A</dt>
+                                        <dd>Select every node and edge in the current graph.</dd>
+                                        <dt>Ctrl + C</dt>
+                                        <dd>Copy the active selection, including metadata and styling.</dd>
+										<dt>Shift + C</dt>
+                                        <dd>Copy the selected node labels only, for pasting externally.</dd>
+                                        <dt>Ctrl + V</dt>
+                                        <dd>Paste copied nodes near the cursor.</dd>
+                                        <dt>Delete</dt>
+                                        <dd>Remove highlighted nodes or edges from the canvas.</dd>
+                                        <dt>Space</dt>
+                                        <dd>Fit the entire network into the viewport for quick navigation.</dd>
+                                        <dt>Esc</dt>
+                                        <dd>Clear the current selection to reset focus.</dd>
+                                    </dl>
+                                </div>
+                                <div class="cheat-sheet-section">
+                                    <h4>Containers</h4>
+                                    <dl>
+                                        <dt>Right-click canvas → Containerize</dt>
+                                        <dd>Wrap all nodes in containers sorted by type.</dd>
+                                        <dt>Right-click selection → Send to container</dt>
+                                        <dd>Move the selected nodes into the chosen container.</dd>
+                                        <dt>Right-click selection → Move out of container</dt>
+                                        <dd>Release nodes from the container back into the main graph.</dd>
+                                        <dt>Right-click container → Remove container</dt>
+                                        <dd>Delete the container while keeping its child nodes.</dd>
+                                    </dl>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="cheat-sheet-section">
+                                    <h4>Content</h4>
+                                    <dl>
+                                        <dt>File → Import Data</dt>
+                                        <dd>Launch the importer to bring in CSV or edges files.</dd>
+                                        <dt>File → Open Graph File</dt>
+                                        <dd>Load an existing graph snapshot from your workspace.</dd>
+                                        <dt>File → Export to CSV, PDF, PNG, HTML</dt>
+                                        <dd>Share the current network as raw data, image or a printable report.</dd>
+                                    </dl>
+                                </div>
+                                <div class="cheat-sheet-section">
+                                    <h4>Default integrations</h4>
+                                    <dl>
+									    <dt>VirusTotal</dt>
+										<dd>Available from the context menu for <b>malware</b>, <b>domain</b> and <b>ipaddress</b> node types.</dd>
+                              
+                                        <dt>OpenAI</dt>
+                                        <dd>Available from the context menu for <b>report</b> node types. Used for summarizing and extracting IOC's from blogs etc.</dd>
+										<dd>It is also used for the <b>person</b>, <b>company</b> and <b>user</b> nodes for OSINT searches.</dd>
+                                        <dt>SerpApi</dt>
+                                        <dd>Used for OSINT searches. SerpApi is a web search wrapper that avoids throttling.</dd>
+										<dt>OPML RSS Watcher</dt>
+                                        <dd>Use this to ingest OPML/RSS feeds of threat reports and blogs.</dd>
+										<dt>CIRCL-LU OSINT Feed</dt>
+                                        <dd>Quantickle can ingest MISP feeds. The CIRCL-LU feed is one of the best.</dd>
+										<dt>Neo4j</dt>
+                                        <dd>Optional database for saving graphs.</dd>						
+                                        
+                                    </dl>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div
+            id="helpPanelContainer"
+            class="cheat-sheet-panel help-panel hidden"
+            data-help-panel-container
+            role="dialog"
+            aria-modal="true"
+            aria-hidden="true"
+            aria-labelledby="helpPanelTitle"
+            tabindex="-1"
+        >
+            <div class="cheat-sheet-header">
+                <h3 id="helpPanelTitle" class="cheat-sheet-title" data-help-panel-title>Help</h3>
+                <button type="button" class="cheat-sheet-close" data-action="close-help-panel" aria-label="Close help dialog">✕</button>
+            </div>
+            <div class="cheat-sheet-body" data-help-panel-body>
+                <div class="help-content" data-help-panel-content>
+                    <p class="help-loading" role="status">Loading…</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-left">
+                <span id="graphFileName">Unsaved graph</span>
+                <span id="statusText">Ready</span>
+            </div>
+            <div class="status-right">
+                <span id="statusInfo"></span><span id="workspacePath">No workspace</span>
+            </div>
+        </div>
+    </div>
+    <!-- Loading Progress Bar -->
+    <div id="loading-progress">
+        <div class="progress-bar">
+            <div id="progress-fill"></div>
+        </div>
+        <div id="progress-text"></div>
+    </div>
+
+    <!-- Workspace Prompt Modal -->
+    <div id="workspacePromptModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="workspacePromptTitle" aria-hidden="true">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span id="workspacePromptTitle" class="modal-title">Choose a workspace</span>
+                <span id="workspacePromptClose" class="close" aria-label="Close workspace prompt">&times;</span>
+            </div>
+            <p class="modal-description">
+                Quantickle keeps your graphs, assets, and configuration files inside a workspace folder on your device.
+                Please pick a workspace so you can save work and reload it later.
+            </p>
+            <div class="modal-actions">
+                <button id="workspacePromptSkip" class="btn btn-secondary" type="button">Maybe later</button>
+                <button id="workspacePromptSet" class="btn btn-primary" type="button">Set workspace</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/workspace-manager.js"></script>
+    <script src="js/domain-loader.js"></script>
+    <script src="js/custom-layouts.js"></script>
+    <script src="js/layouts.js"></script>
+    <script src="js/lod-system.js"></script>
+    <script src="js/3d-globe-layout.js"></script>
+    <script src="js/absolute-layout.js"></script>
+    <script src="js/validation.js"></script>
+    <script src="js/graph-reference-resolver.js"></script>
+    <script src="js/graph.js"></script>
+    <script src="js/tables.js"></script>
+    <script src="js/auto-refresh.js"></script>
+    <script src="js/graph-manager.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/features/node-editor/node-editor-module.js"></script>
+    <script src="js/edge-editor.js"></script>
+    <script src="js/secure-storage.js"></script>
+    <script src="js/integrations/misp-mapper.js"></script>
+    <script src="js/integrations.js"></script>
+    <script src="js/ai-input-manager.js"></script>
+    <script type="module" src="js/rag-pipeline.js"></script>
+    <!-- Context Menu Module -->
+    <script src="js/features/context-menu/context-menu-module.js"></script>
+    <!-- Graph Area Editor Module -->
+    <script src="js/features/graph-area-editor/graph-area-editor-module.js"></script>
+    <script src="js/features/layout-manager/adapter.js"></script>
+    <!-- MODULAR FILE MANAGER -->
+    <script src="js/features/file-manager/file-manager-module.js"></script>
+    <!-- NEW MODULAR DATA MANAGER (testing) -->
+    <script src="js/features/data-manager/data-manager-module.js"></script>
+    <script src="js/features/data-manager/adapter.js"></script>
+    <script src="js/source-editor.js"></script>
+    <script src="js/features/graph-modules/text-callout/text-callout.js"></script>
+    <!-- NEW MODULAR DEBUG TOOLS (testing) -->
+    <script src="js/features/graph-modules/debug-tools/debug-tools-module.js"></script>
+    <!-- NEW MODULAR PERFORMANCE MANAGER (testing) -->
+    <script src="js/features/graph-modules/performance-manager/performance-manager-module.js"></script>
+    <script src="js/features/graph-modules/performance-manager/bootstrap.js"></script>
+    <!-- NEW MODULAR GRAPH STYLING (testing) -->
+    <script src="js/features/graph-modules/graph-styling/graph-styling-module.js"></script>
+    
+    <!-- NEW MODULAR GRAPH CONTROLS (testing) -->
+    <script src="js/features/graph-modules/graph-controls/graph-controls-module.js"></script>
+    <script src="js/features/graph-modules/graph-controls/graph-controls-bootstrap.js"></script>
+    
+    <!-- NEW MODULAR SELECTION MANAGER (testing) -->
+    <script src="js/features/graph-modules/selection-manager/adapter.js"></script>
+    
+    <!-- GRAPH EDITOR ADAPTER -->
+    <script src="js/features/graph-modules/graph-editor/adapter.js"></script>
+    
+    <script src="js/features/graph-modules/edge-creator/adapter.js"></script>
+    
+    <!-- NEW MODULAR LOD MANAGER (testing) -->
+    <script src="js/features/graph-modules/lod-manager/adapter.js"></script>
+    
+    <!-- NEW MODULAR PROGRESS MANAGER (testing) -->
+    <script src="js/features/graph-modules/progress-manager/adapter.js"></script>
+
+    <!-- NEW MODULAR 3D ROTATION MANAGER (testing) -->
+    <script src="js/features/graph-modules/3d-rotation-manager/rotation-3d-module.js"></script>
+    <script src="js/features/graph-modules/3d-rotation-manager/bootstrap.js"></script>
+
+    <!--
+      Dev-only console test loaders were removed from the production bundle to avoid 404s
+      and MIME type errors in the browser. The test harnesses remain under tests/graph-modules
+      for use with the test runner.
+    -->
+    <script src="js/main.js"></script>
+</body>
+</html>

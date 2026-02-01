@@ -1,0 +1,28 @@
+services:
+  app:
+    build: .
+    container_name: quanticle-app
+    ports:
+      - "3000:3000"
+    environment:
+      NEO4J_URL: http://neo4j:7474
+      NEO4J_USERNAME: neo4j
+      NEO4J_PASSWORD: supersecret
+    depends_on:
+      - neo4j
+
+  neo4j:
+    image: neo4j:community
+    container_name: quanticle-neo4j
+    ports:
+      - "7474:7474" # HTTP UI
+      - "7687:7687" # Bolt
+    environment:
+      NEO4J_AUTH: "neo4j/supersecret"
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+
+volumes:
+  neo4j-data:
+  neo4j-logs:

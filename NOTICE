@@ -1,0 +1,180 @@
+Quantickle NOTICE
+=================
+
+This software bundles or depends on the following third-party components.
+Each component's license terms continue to govern the respective code.
+
+
+JavaScript runtime and tooling
+------------------------------
+
+Component: Express.js
+License: MIT
+Copyright (c) 2009-2014 TJ Holowaychuk <tj@vision-media.ca>
+Copyright (c) 2013-2014 Roman Shtylman <shtylman+expressjs@gmail.com>
+Copyright (c) 2014-2015 Douglas Christopher Wilson <doug@somethingdoug.com>
+
+Component: cors
+License: MIT
+Copyright (c) 2013 Troy Goode <troygoode@gmail.com>
+
+Component: serve-index
+License: MIT
+Copyright (c) 2010 Sencha Inc.
+Copyright (c) 2011 LearnBoost
+Copyright (c) 2011 TJ Holowaychuk
+Copyright (c) 2014-2015 Douglas Christopher Wilson
+
+
+Component: dotenv
+License: BSD 2-Clause
+Copyright (c) 2015, Scott Motte
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+Component: jsdom
+License: MIT
+Copyright (c) 2010 Elijah Insua
+
+Component: @mozilla/readability
+License: Apache License 2.0
+Copyright (c) 2010 Arc90 Inc
+
+Component: nodemon
+License: MIT
+Copyright (c) 2010 - present, Remy Sharp, https://remysharp.com <remy@remysharp.com>
+
+Component: cytoscape
+License: MIT
+Copyright (c) 2016-2025, The Cytoscape Consortium.
+
+
+
+
+Browser-delivered libraries
+---------------------------
+
+Component: PapaParse 
+License: MIT
+Copyright (c) 2015 Matthew Holt
+
+Component: jsPDF
+License: Apache License 2.0
+Copyright (c) 2010-2021 James Hall <james@parall.ax>, https://github.com/MrRio/jsPDF
+Copyright (c) 2015-2021 yWorks GmbH, http://www.yworks.com
+Copyright (c) 2015-2021 Lukas Holländer <lukas.hollaender@yworks.com>, https://github.com/HackbrettXXX
+Copyright (c) 2016-2018 Aras Abbasi <aras.abbasi@gmail.com>
+Copyright (c) 2010 Aaron Spike, https://github.com/acspike
+Copyright (c) 2012 Willow Systems Corporation, https://github.com/willowsystems
+Copyright (c) 2012 Pablo Hess, https://github.com/pablohess
+Copyright (c) 2012 Florian Jenett, https://github.com/fjenett
+Copyright (c) 2013 Warren Weckesser, https://github.com/warrenweckesser
+Copyright (c) 2013 Youssef Beddad, https://github.com/lifof
+Copyright (c) 2013 Lee Driscoll, https://github.com/lsdriscoll
+Copyright (c) 2013 Stefan Slonevskiy, https://github.com/stefslon
+Copyright (c) 2013 Jeremy Morel, https://github.com/jmorel
+Copyright (c) 2013 Christoph Hartmann, https://github.com/chris-rock
+Copyright (c) 2014 Juan Pablo Gaviria, https://github.com/juanpgaviria
+Copyright (c) 2014 James Makes, https://github.com/dollaruw
+Copyright (c) 2014 Diego Casorran, https://github.com/diegocr
+Copyright (c) 2014 Steven Spungin, https://github.com/Flamenco
+Copyright (c) 2014 Kenneth Glassey, https://github.com/Gavvers
+
+Component: DOMPurify
+License: Apache License 2.0
+Copyright (c) 2023 Dr.-Ing. Mario Heiderich, Cure53
+
+Component: CodeMirror 5
+License: MIT
+Copyright (C) 2018 by Marijn Haverbeke <marijn@haverbeke.berlin>, Adrian
+Heine <mail@adrianheine.de>, and others
+
+Component: layout-base
+License: MIT
+Copyright (c) 2019 iVis@Bilkent
+
+Component: cose-base
+License: MIT
+Copyright (c) 2019 - present, iVis@Bilkent.
+
+Component: cytoscape-cose-bilkent
+License: MIT
+Copyright (c) 2016-2018, The Cytoscape Consortium.
+
+Component: webcola
+License: MIT
+Copyright (c) 2013 Tim Dwyer
+
+Component: cytoscape-cola
+License: MIT
+Copyright (c) 2016-2018, The Cytoscape Consortium.
+
+Component: graphlib
+License: MIT
+Copyright (c) 2014, Chris Pettitt
+
+Component: dagre
+License: MIT
+Copyright (c) 2012-2014 Chris Pettitt
+
+Component: cytoscape-dagre
+License: MIT
+Copyright (c) 2016-2018, 2020, 2022, The Cytoscape Consortium.
+
+Component: klayjs 0.4.1
+License: EPL-1.0
+
+Component: cytoscape-klay
+License: MIT
+Copyright (c) 2016-2020, The Cytoscape Consortium.
+
+Component: cytoscape-euler
+License: MIT
+Copyright (c) 2016-2018, 2020, 2024, The Cytoscape Consortium.
+
+Component: cytoscape-layers 3.1.0
+License: MIT
+Copyright (c) 2020 Samuel Gratzl
+
+Component: cytoscape-bubblesets 4.1.0
+License: MIT
+Copyright (c) 2021-2022 Samuel Gratzl
+
+
+
+Third-party web services
+------------------------
+Quantickle can integrate with external services such as SerpAPI, VirusTotal, and OpenAI. Usage of these services is subject to their respective terms of service and may require separate accounts or API keys.
+
+
+
+TRADEMARKS
+-----------
+This project includes custom, non-official icons to label real entities (e.g. social media companies).
+Brand names and logos are trademarks or registered trademarks of their respective owners.
+Use here is for identification/nominative purposes only. No affiliation, endorsement, or
+sponsorship is implied. On request from a rights holder, we will replace or remove any asset.
+
+
+

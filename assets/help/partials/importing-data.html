@@ -1,0 +1,51 @@
+<p class="help-lede">Bring spreadsheets or saved graphs into Quantickle without touching code. The importer understands common node-and-edge layouts and keeps your existing graph safe by asking before it replaces anything.</p>
+
+<div class="help-section">
+    <h4>CSV file import</h4>
+    <ul>
+        <li>Works with a node table followed by an edges table separated by an empty row.<br>
+            Valid fieldname synonums are shown in parentheses. Only ID, type and labels are mandatory.</li>
+        <div class="help-figure" aria-hidden="true">
+            <img src="/assets/help/csvnormal.png" alt="A minimal CSV import" loading="lazy">
+        </div>
+        <li>Node fields supported are: node_id, node_type (type), node_label (label), node_color (color), node_x (x), node_y (y).</li>
+        <li>Edge fields supported are: source_id (source,from), target_id (target,to), edge_type (type), edge_label (label).</li>
+    </ul>
+</div>
+
+<div class="help-section">
+    <h4>Edges file import</h4>
+    <ul>
+        <li>Simple source–target pairs, separated by commas or spaces. Missing nodes are created automatically.</li>
+        <div class="help-figure" aria-hidden="true">
+            <img src="/assets/help/edgelist.png" alt="A minimal CSV import" loading="lazy">
+        </div>
+    </ul>
+</div>
+
+<div class="help-section">
+    <h4>HOW:</h4>
+    <ul>
+        <li>Choose <strong>File → Import Data</strong> and pick a <span class="help-tip">CSV</span> or <span class="help-tip">.edges</span> file.</li>
+        <li>If a graph is already open, decide whether to <strong>Replace</strong> it or <strong>Merge</strong> the new nodes and edges into it.</li>
+        <li>Imported items appear immediately. Use <strong>Layouts</strong> to tidy the view or open the <strong>Data Table</strong> to check rows.</li>
+    </ul>
+</div>
+
+<div class="help-section">
+    <h4>CSV pointers</h4>
+    <ul>
+        <li>Keep node rows first with clear headings (for example: <code>node_id</code>, <code>label</code>, <code>type</code>).</li>
+        <li>Add a header that includes <code>source</code> and <code>target</code> when you switch to edges; everything below is treated as relationships.</li>
+        <li>Edge-only sheets are fine—missing nodes are filled in so every relationship has endpoints.</li>
+    </ul>
+</div>
+
+<div class="help-section">
+    <h4>After you import</h4>
+    <ul>
+        <li>Use <strong>Arrange</strong> or your preferred layout to space things out.</li>
+        <li>Rename the graph title in the toolbar if you want to keep multiple imported versions.</li>
+        <li>Save as <strong>.qut</strong> to keep the structure, styling, and any new edits.</li>
+    </ul>
+</div>
