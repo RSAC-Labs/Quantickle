@@ -91,8 +91,8 @@ Here are some examples of what Quantickle can do:
 
 ### Choose between 20+ layouting algorithms (eg Klay vs Euler)
 <div align="left">
-<img src="https://github.com/user-attachments/assets/50b6b551-67d5-476f-baaa-49d0393d7d1f" height=200>
-<img src="https://github.com/user-attachments/assets/b81d6cbe-6601-4ca4-91e6-d7ab9a3b4f7e" height=200>
+<img src="https://github.com/user-attachments/assets/d917054b-f172-47b7-b349-1dc6b72f0f3c" height=200>
+<img src="https://github.com/user-attachments/assets/f1e429bc-d9db-4ffc-9a0a-9c2ea94217f1" height=200>
 </div>
 <br>
 
