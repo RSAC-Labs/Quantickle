@@ -1,7 +1,7 @@
 # Quantickle - Network Graph Visualization for Threat Intelligence
 
 <br>
-<img width="1906" height="506" alt="q-mainheader" src="https://github.com/user-attachments/assets/1a27834a-2eaa-47a8-8d0f-5cef8abd98cc" />
+<img width="1906" height="506" alt="q-mainheader" src="/assets/images/q-mainheader.png">
 <br>
 <br>
 <br>
