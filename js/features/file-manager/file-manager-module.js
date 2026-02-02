@@ -6383,13 +6383,19 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
         const nodesToAdd = [...graphData.nodes];
         if (nodesToAdd.length) {
             const idMap = new Map(nodesToAdd.map(n => [n.id, n]));
+            const depthCache = new Map();
             const getDepth = (node) => {
-                let depth = 0;
-                let p = node.parent;
-                while (p && idMap.has(p)) {
-                    depth++;
-                    p = idMap.get(p).parent;
+                if (!node) {
+                    return 0;
                 }
+                if (depthCache.has(node.id)) {
+                    return depthCache.get(node.id);
+                }
+                let depth = 0;
+                if (node.parent && idMap.has(node.parent)) {
+                    depth = getDepth(idMap.get(node.parent)) + 1;
+                }
+                depthCache.set(node.id, depth);
                 return depth;
             };
             nodesToAdd.sort((a, b) => getDepth(a) - getDepth(b));
