@@ -6323,40 +6323,6 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
             console.error('Error resetting 3D state:', error);
         }
 
-        // Normalize container nodes to ensure collapsible behavior
-        if (graphData && Array.isArray(graphData.nodes)) {
-            graphData.nodes.forEach(node => {
-                if (!node) return;
-                const isContainer = node.type === 'container' || node.isContainer;
-                if (isContainer) {
-                    // Ensure the node has the container class
-                    let classes = (node.classes || '').split(/\s+/).filter(Boolean);
-                    if (!classes.includes('container')) {
-                        classes.push('container');
-                        node.classes = classes.join(' ');
-                    }
-
-                    // Provide sane defaults for container styling
-                    node.shape = node.shape || 'round-rectangle';
-                    if (node.width === undefined) node.width = 200;
-                    if (node.height === undefined) node.height = 150;
-                    if (node.color === undefined) node.color = '#d3d3d3';
-
-                    // Preserve base label and remove collapse indicators
-                    let baseLabel = node.baseLabel || node.label || '';
-                    baseLabel = baseLabel.replace(/\s*[\u25B6\u25BC]\s*$/, '');
-                    node.baseLabel = baseLabel;
-                    const collapsed = !!node.collapsed;
-                    if (collapsed) {
-                        node.collapsed = true;
-                    } else {
-                        delete node.collapsed;
-                    }
-                    node.label = baseLabel;
-                }
-            });
-        }
-
         // Clear existing graph
         if (this.cy && typeof this.cy.elements === 'function') {
             const elements = this.cy.elements();
@@ -6383,13 +6349,19 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
         const nodesToAdd = [...graphData.nodes];
         if (nodesToAdd.length) {
             const idMap = new Map(nodesToAdd.map(n => [n.id, n]));
+            const depthCache = new Map();
             const getDepth = (node) => {
-                let depth = 0;
-                let p = node.parent;
-                while (p && idMap.has(p)) {
-                    depth++;
-                    p = idMap.get(p).parent;
+                if (!node) {
+                    return 0;
                 }
+                if (depthCache.has(node.id)) {
+                    return depthCache.get(node.id);
+                }
+                let depth = 0;
+                if (node.parent && idMap.has(node.parent)) {
+                    depth = getDepth(idMap.get(node.parent)) + 1;
+                }
+                depthCache.set(node.id, depth);
                 return depth;
             };
             nodesToAdd.sort((a, b) => getDepth(a) - getDepth(b));
@@ -6447,9 +6419,51 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
             }
         }
 
+        const coercePosition = entry => {
+            if (!entry || typeof entry !== 'object') {
+                return null;
+            }
+            const x = Number(entry.x);
+            const y = Number(entry.y);
+            if (!Number.isFinite(x) || !Number.isFinite(y)) {
+                return null;
+            }
+            return { x, y };
+        };
+
         // Prepare node and edge elements before adding to Cytoscape
         const nodeElements = [];
+        const storedNodeState = new Map();
         graphData.nodes.forEach(nodeData => {
+            if (!nodeData) {
+                return;
+            }
+
+            const isContainer = nodeData.type === 'container' || nodeData.isContainer;
+            if (isContainer) {
+                let classes = (nodeData.classes || '').split(/\s+/).filter(Boolean);
+                if (!classes.includes('container')) {
+                    classes.push('container');
+                    nodeData.classes = classes.join(' ');
+                }
+
+                nodeData.shape = nodeData.shape || 'round-rectangle';
+                if (nodeData.width === undefined) nodeData.width = 200;
+                if (nodeData.height === undefined) nodeData.height = 150;
+                if (nodeData.color === undefined) nodeData.color = '#d3d3d3';
+
+                let baseLabel = nodeData.baseLabel || nodeData.label || '';
+                baseLabel = baseLabel.replace(/\s*[\u25B6\u25BC]\s*$/, '');
+                nodeData.baseLabel = baseLabel;
+                const collapsed = !!nodeData.collapsed;
+                if (collapsed) {
+                    nodeData.collapsed = true;
+                } else {
+                    delete nodeData.collapsed;
+                }
+                nodeData.label = baseLabel;
+            }
+
             if (nodeData.info === undefined) {
                 nodeData.info = '';
             }
@@ -6461,7 +6475,6 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
                 delete nodeData['background-image'];
             }
 
-            // Remove persisted border styling so pinned state controls borders
             delete nodeData['border-width'];
             delete nodeData['border-color'];
             delete nodeData.borderWidth;
@@ -6476,13 +6489,57 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
                     delete data.lockedX;
                 }
             }
+
+            const position = data.x !== undefined && data.y !== undefined ? { x: data.x, y: data.y } : undefined;
+
             nodeElements.push({
                 group: 'nodes',
                 data,
                 classes,
                 locked,
-                position: data.x !== undefined && data.y !== undefined ? { x: data.x, y: data.y } : undefined
+                position
             });
+
+            const entryData = nodeData.data && typeof nodeData.data === 'object' ? nodeData.data : nodeData;
+            const id = entryData && entryData.id != null ? String(entryData.id) : nodeData.id != null ? String(nodeData.id) : null;
+            if (!id) {
+                return;
+            }
+
+            const topLevelPosition = nodeData.position && typeof nodeData.position === 'object' ? nodeData.position : null;
+            const nestedPosition = entryData && typeof entryData.position === 'object' ? entryData.position : null;
+            const simplePosition =
+                nodeData.x !== undefined && nodeData.y !== undefined
+                    ? { x: nodeData.x, y: nodeData.y }
+                    : entryData && entryData.x !== undefined && entryData.y !== undefined
+                    ? { x: entryData.x, y: entryData.y }
+                    : null;
+
+            const storedPosition =
+                coercePosition(topLevelPosition) ||
+                coercePosition(nestedPosition) ||
+                coercePosition(simplePosition);
+
+            const normalizedLockedX = Number(
+                Object.prototype.hasOwnProperty.call(entryData, 'lockedX')
+                    ? entryData.lockedX
+                    : Object.prototype.hasOwnProperty.call(nodeData, 'lockedX')
+                    ? nodeData.lockedX
+                    : undefined
+            );
+
+            const record = {
+                position: storedPosition,
+                locked: nodeData.locked !== undefined ? nodeData.locked : entryData?.locked,
+                grabbable: nodeData.grabbable !== undefined ? nodeData.grabbable : entryData?.grabbable,
+                selectable: nodeData.selectable !== undefined ? nodeData.selectable : entryData?.selectable
+            };
+
+            if (Number.isFinite(normalizedLockedX)) {
+                record.lockedX = normalizedLockedX;
+            }
+
+            storedNodeState.set(id, record);
         });
 
         const edgeElements = graphData.edges.map(edgeData => ({
@@ -6558,68 +6615,6 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
                     }
                 }
             }
-        }
-
-        const coercePosition = entry => {
-            if (!entry || typeof entry !== 'object') {
-                return null;
-            }
-            const x = Number(entry.x);
-            const y = Number(entry.y);
-            if (!Number.isFinite(x) || !Number.isFinite(y)) {
-                return null;
-            }
-            return { x, y };
-        };
-
-        const storedNodeState = new Map();
-        if (Array.isArray(graphData?.nodes)) {
-            graphData.nodes.forEach(entry => {
-                if (!entry || typeof entry !== 'object') {
-                    return;
-                }
-
-                const data = entry.data && typeof entry.data === 'object' ? entry.data : entry;
-                const id = data && data.id != null ? String(data.id) : entry.id != null ? String(entry.id) : null;
-                if (!id) {
-                    return;
-                }
-
-                const topLevelPosition = entry.position && typeof entry.position === 'object' ? entry.position : null;
-                const nestedPosition = data && typeof data.position === 'object' ? data.position : null;
-                const simplePosition =
-                    entry.x !== undefined && entry.y !== undefined
-                        ? { x: entry.x, y: entry.y }
-                        : data && data.x !== undefined && data.y !== undefined
-                        ? { x: data.x, y: data.y }
-                        : null;
-
-                const position =
-                    coercePosition(topLevelPosition) ||
-                    coercePosition(nestedPosition) ||
-                    coercePosition(simplePosition);
-
-                const normalizedLockedX = Number(
-                    Object.prototype.hasOwnProperty.call(data, 'lockedX')
-                        ? data.lockedX
-                        : Object.prototype.hasOwnProperty.call(entry, 'lockedX')
-                        ? entry.lockedX
-                        : undefined
-                );
-
-                const record = {
-                    position,
-                    locked: entry.locked !== undefined ? entry.locked : data?.locked,
-                    grabbable: entry.grabbable !== undefined ? entry.grabbable : data?.grabbable,
-                    selectable: entry.selectable !== undefined ? entry.selectable : data?.selectable
-                };
-
-                if (Number.isFinite(normalizedLockedX)) {
-                    record.lockedX = normalizedLockedX;
-                }
-
-                storedNodeState.set(id, record);
-            });
         }
 
         if (storedNodeState.size > 0) {
