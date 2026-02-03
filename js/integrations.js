@@ -3152,10 +3152,19 @@ window.IntegrationsManager = {
         if (!edgeData || !edgeData.source || !edgeData.target) {
             return false;
         }
-        if (this.edgeExists(cy, edgeData.source, edgeData.target)) {
+        const edgeCache = options.edgeCache instanceof Set ? options.edgeCache : null;
+        const edgeKey = `${edgeData.source}::${edgeData.target}`;
+        if (edgeCache) {
+            if (edgeCache.has(edgeKey)) {
+                return false;
+            }
+        } else if (this.edgeExists(cy, edgeData.source, edgeData.target)) {
             return false;
         }
         cy.add({ group: 'edges', data: edgeData });
+        if (edgeCache) {
+            edgeCache.add(edgeKey);
+        }
         const skipLayout = typeof options === 'boolean' ? options : options.skipLayout;
         if (!skipLayout && window.LayoutManager && typeof window.LayoutManager.calculateOptimalSizing === 'function' && typeof window.LayoutManager.updateNodeStyles === 'function') {
             const sizing = window.LayoutManager.calculateOptimalSizing(cy);
@@ -4288,6 +4297,8 @@ window.IntegrationsManager = {
         const cy = window.GraphRenderer.cy;
         const existingNodeIds = new Set(cy.nodes().map(n => n.id()));
         const bulkOptions = { skipLayout: true };
+        const edgeCache = new Set(cy.edges().map(edge => `${edge.data('source')}::${edge.data('target')}`));
+        const edgeOptions = { ...bulkOptions, edgeCache };
         let nodesAdded = 0;
         let edgesAdded = 0;
         
@@ -4362,7 +4373,7 @@ window.IntegrationsManager = {
                 target: domainNodeId,
                 label: 'connects to'
             };
-            if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
+            if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
                 edgesAdded++;
             }
         }
@@ -4399,7 +4410,7 @@ window.IntegrationsManager = {
                 target: ipNodeId,
                 label: 'connects to'
             };
-            if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
+            if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
                 edgesAdded++;
             } else {
             }
@@ -4420,7 +4431,7 @@ window.IntegrationsManager = {
                     target: domainNodeId,
                     label: 'refers to'
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
                     edgesAdded++;
                 }
             }
@@ -4447,7 +4458,7 @@ window.IntegrationsManager = {
                     target: fileNodeId,
                     label: 'downloaded from'
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
                     edgesAdded++;
                 }
             }
@@ -4475,7 +4486,7 @@ window.IntegrationsManager = {
                 target: fileNodeId,
                 label: 'submitted'
             };
-            if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
+            if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
                 edgesAdded++;
             }
         }
@@ -4506,7 +4517,7 @@ window.IntegrationsManager = {
                     target: fileNodeId,
                     label: 'downloaded from (ITW)'
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
                     edgesAdded++;
                 }
             }
@@ -4536,7 +4547,7 @@ window.IntegrationsManager = {
                     target: fileNodeId,
                     label: 'downloaded from (ITW)'
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
                     edgesAdded++;
                 }
             }
@@ -4566,7 +4577,7 @@ window.IntegrationsManager = {
                     target: domainNodeId,
                     label: 'memory pattern'
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
                     edgesAdded++;
                 }
             }
@@ -4596,7 +4607,7 @@ window.IntegrationsManager = {
                     target: ipNodeId,
                     label: 'memory pattern'
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
                     edgesAdded++;
                 }
             }
@@ -4627,7 +4638,7 @@ window.IntegrationsManager = {
                     target: relatedNodeId,
                     label: rel.label
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
                     edgesAdded++;
                 }
             }
@@ -4657,7 +4668,7 @@ window.IntegrationsManager = {
                     target: fileNodeId,
                     label: 'executed'
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
                     edgesAdded++;
                 }
             }
@@ -4696,7 +4707,7 @@ window.IntegrationsManager = {
                     target: fileNodeId,
                     label: 'submitted (enhanced)'
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
                     edgesAdded++;
                 }
             }
@@ -4725,7 +4736,7 @@ window.IntegrationsManager = {
                         target: threatNodeId,
                         label: `detected by ${engine}`
                     };
-                    if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
+                    if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
                         edgesAdded++;
                     }
                 }
@@ -4809,6 +4820,8 @@ window.IntegrationsManager = {
         const cy = window.GraphRenderer.cy;
         const existingNodeIds = new Set(cy.nodes().map(n => n.id()));
         const bulkOptions = { skipLayout: true };
+        const edgeCache = new Set(cy.edges().map(edge => `${edge.data('source')}::${edge.data('target')}`));
+        const edgeOptions = { ...bulkOptions, edgeCache };
         let nodesAdded = 0;
         let edgesAdded = 0;
         const createdNodes = [];
@@ -4888,7 +4901,7 @@ window.IntegrationsManager = {
                 target: ipNodeId,
                 label: 'resolves to'
             };
-            if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
+            if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
                 edgesAdded++;
                 createdEdges.push(edgeData.id);
             }
@@ -4923,7 +4936,7 @@ window.IntegrationsManager = {
                     target: targetId,
                     label: rel.label
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
                     edgesAdded++;
                     createdEdges.push(edgeData.id);
                 }
@@ -4990,6 +5003,8 @@ window.IntegrationsManager = {
         const cy = window.GraphRenderer.cy;
         const existingNodeIds = new Set(cy.nodes().map(n => n.id()));
         const bulkOptions = { skipLayout: true };
+        const edgeCache = new Set(cy.edges().map(edge => `${edge.data('source')}::${edge.data('target')}`));
+        const edgeOptions = { ...bulkOptions, edgeCache };
         let nodesAdded = 0;
         let edgesAdded = 0;
 
@@ -5043,7 +5058,7 @@ window.IntegrationsManager = {
                 target: ipNodeId,
                 label: 'resolves to'
             };
-            if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
+            if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
                 edgesAdded++;
             }
         }
@@ -5076,7 +5091,7 @@ window.IntegrationsManager = {
                     target: targetId,
                     label: rel.label
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
                     edgesAdded++;
                 }
             }
@@ -5132,6 +5147,8 @@ window.IntegrationsManager = {
         const cy = window.GraphRenderer.cy;
         const existingNodeIds = new Set(cy.nodes().map(n => n.id()));
         const bulkOptions = { skipLayout: true };
+        const edgeCache = new Set(cy.edges().map(edge => `${edge.data('source')}::${edge.data('target')}`));
+        const edgeOptions = { ...bulkOptions, edgeCache };
         let nodesAdded = 0;
         let edgesAdded = 0;
 
@@ -5179,7 +5196,7 @@ window.IntegrationsManager = {
                     target: domainNodeId,
                     label: 'links to'
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
                     edgesAdded++;
                 }
             }
