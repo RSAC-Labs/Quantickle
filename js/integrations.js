@@ -3031,7 +3031,7 @@ window.IntegrationsManager = {
     },
 
     // Add a node only if a node with the same ID or label doesn't already exist
-    getOrCreateNode: async function(cy, id, data = {}) {
+    getOrCreateNode: async function(cy, id, data = {}, options = {}) {
         if (!id) {
             return { id: null, created: false };
         }
@@ -3138,7 +3138,8 @@ window.IntegrationsManager = {
             });
         }
 
-        if (window.LayoutManager && typeof window.LayoutManager.calculateOptimalSizing === 'function' && typeof window.LayoutManager.updateNodeStyles === 'function') {
+        const skipLayout = typeof options === 'boolean' ? options : options.skipLayout;
+        if (!skipLayout && window.LayoutManager && typeof window.LayoutManager.calculateOptimalSizing === 'function' && typeof window.LayoutManager.updateNodeStyles === 'function') {
             const sizing = window.LayoutManager.calculateOptimalSizing(cy);
             window.LayoutManager.updateNodeStyles(cy, sizing);
         }
@@ -3147,7 +3148,7 @@ window.IntegrationsManager = {
     },
 
     // Add an edge only if one with the same source and target doesn't exist
-    addEdgeIfNotExists: function(cy, edgeData) {
+    addEdgeIfNotExists: function(cy, edgeData, options = {}) {
         if (!edgeData || !edgeData.source || !edgeData.target) {
             return false;
         }
@@ -3155,7 +3156,8 @@ window.IntegrationsManager = {
             return false;
         }
         cy.add({ group: 'edges', data: edgeData });
-        if (window.LayoutManager && typeof window.LayoutManager.calculateOptimalSizing === 'function' && typeof window.LayoutManager.updateNodeStyles === 'function') {
+        const skipLayout = typeof options === 'boolean' ? options : options.skipLayout;
+        if (!skipLayout && window.LayoutManager && typeof window.LayoutManager.calculateOptimalSizing === 'function' && typeof window.LayoutManager.updateNodeStyles === 'function') {
             const sizing = window.LayoutManager.calculateOptimalSizing(cy);
             window.LayoutManager.updateNodeStyles(cy, sizing);
         }
@@ -3747,7 +3749,7 @@ window.IntegrationsManager = {
     },
 
     // Helper to create a domain node enriched with VirusTotal info
-    createDomainNodeWithInfo: async function(cy, domain, extraData = {}) {
+    createDomainNodeWithInfo: async function(cy, domain, extraData = {}, options = {}) {
         const cleanDomain = this.sanitizeDomain(domain);
         if (this.isDomainBlocked(cleanDomain)) {
             return { id: null, created: false };
@@ -3768,7 +3770,7 @@ window.IntegrationsManager = {
             infoHtml: infoData.infoHtml,
             ...extraData
         };
-        const { id, created } = await this.getOrCreateNode(cy, cleanDomain, nodeData);
+        const { id, created } = await this.getOrCreateNode(cy, cleanDomain, nodeData, options);
 
         cy.getElementById(id).data('info', infoData.info);
         cy.getElementById(id).data('infoHtml', infoData.infoHtml);
@@ -3776,7 +3778,7 @@ window.IntegrationsManager = {
     },
 
     // Helper to create an IP node enriched with VirusTotal info
-    createIPNodeWithInfo: async function(cy, ip, extraData = {}) {
+    createIPNodeWithInfo: async function(cy, ip, extraData = {}, options = {}) {
         const infoData = await this.fetchVirusTotalIPInfo(ip);
         const sanitized = ip.replace(/[^a-zA-Z0-9]/g, '_');
         const color = extraData.color || '#0080FF';
@@ -3794,14 +3796,14 @@ window.IntegrationsManager = {
             infoHtml: infoData.infoHtml,
             ...extraData
         };
-        const { id, created } = await this.getOrCreateNode(cy, nodeData.id, nodeData);
+        const { id, created } = await this.getOrCreateNode(cy, nodeData.id, nodeData, options);
         cy.getElementById(id).data('info', infoData.info);
         cy.getElementById(id).data('infoHtml', infoData.infoHtml);
         return { id, created };
     },
 
     // Helper to create a file node enriched with VirusTotal info
-    createFileNodeWithInfo: async function(cy, hash, extraData = {}) {
+    createFileNodeWithInfo: async function(cy, hash, extraData = {}, options = {}) {
         const infoData = await this.fetchVirusTotalFileInfo(hash);
         const label = hash;
         const color = extraData.color || (infoData.malicious > 0 ? '#FF4444' : '#80FF80');
@@ -3820,7 +3822,7 @@ window.IntegrationsManager = {
             infoHtml: infoData.infoHtml,
             ...extraData
         };
-        const { id, created } = await this.getOrCreateNode(cy, nodeData.id, nodeData);
+        const { id, created } = await this.getOrCreateNode(cy, nodeData.id, nodeData, options);
         cy.getElementById(id).data('info', infoData.info);
         cy.getElementById(id).data('infoHtml', infoData.infoHtml);
         return { id, created };
@@ -4263,6 +4265,7 @@ window.IntegrationsManager = {
 
         const cy = window.GraphRenderer.cy;
         const existingNodeIds = new Set(cy.nodes().map(n => n.id()));
+        const bulkOptions = { skipLayout: true };
         let nodesAdded = 0;
         let edgesAdded = 0;
         
@@ -4295,7 +4298,7 @@ window.IntegrationsManager = {
             info: fileInfoHtml,
             infoHtml: fileInfoHtml
         };
-        const { id: fileNodeId, created: fileCreated } = await this.getOrCreateNode(cy, fileNodeData.id, fileNodeData);
+        const { id: fileNodeId, created: fileCreated } = await this.getOrCreateNode(cy, fileNodeData.id, fileNodeData, bulkOptions);
         cy.getElementById(fileNodeId).data('info', fileInfoHtml);
         cy.getElementById(fileNodeId).data('infoHtml', fileInfoHtml);
         if (fileCreated) {
@@ -4325,7 +4328,7 @@ window.IntegrationsManager = {
         
         // Create nodes for all contacted domains
         for (const domain of allContactedDomains) {
-            const { id: domainNodeId, created } = await this.createDomainNodeWithInfo(cy, domain);
+            const { id: domainNodeId, created } = await this.createDomainNodeWithInfo(cy, domain, {}, bulkOptions);
             if (!domainNodeId) continue;
             if (created) {
                 nodesAdded++;
@@ -4337,7 +4340,7 @@ window.IntegrationsManager = {
                 target: domainNodeId,
                 label: 'connects to'
             };
-            if (this.addEdgeIfNotExists(cy, edgeData)) {
+            if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
                 edgesAdded++;
             }
         }
@@ -4362,7 +4365,7 @@ window.IntegrationsManager = {
         
         // Create nodes for all contacted IPs
         for (const ip of allContactedIps) {
-            const { id: ipNodeId, created } = await this.createIPNodeWithInfo(cy, ip);
+            const { id: ipNodeId, created } = await this.createIPNodeWithInfo(cy, ip, {}, bulkOptions);
             if (created) {
                 nodesAdded++;
             } else {
@@ -4374,7 +4377,7 @@ window.IntegrationsManager = {
                 target: ipNodeId,
                 label: 'connects to'
             };
-            if (this.addEdgeIfNotExists(cy, edgeData)) {
+            if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
                 edgesAdded++;
             } else {
             }
@@ -4383,7 +4386,7 @@ window.IntegrationsManager = {
         // Create reference relationships (domains/IPs mentioned in file)
         if (attributes.dns_lookups) {
             for (const domain of attributes.dns_lookups) {
-                const { id: domainNodeId, created } = await this.createDomainNodeWithInfo(cy, domain);
+                const { id: domainNodeId, created } = await this.createDomainNodeWithInfo(cy, domain, {}, bulkOptions);
                 if (!domainNodeId) continue;
                 if (created) {
                     nodesAdded++;
@@ -4395,7 +4398,7 @@ window.IntegrationsManager = {
                     target: domainNodeId,
                     label: 'refers to'
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
                     edgesAdded++;
                 }
             }
@@ -4407,9 +4410,9 @@ window.IntegrationsManager = {
                 let existingSourceId, created;
                 const ipPattern = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
                 if (ipPattern.test(source)) {
-                    ({ id: existingSourceId, created } = await this.createIPNodeWithInfo(cy, source));
+                    ({ id: existingSourceId, created } = await this.createIPNodeWithInfo(cy, source, {}, bulkOptions));
                 } else {
-                    ({ id: existingSourceId, created } = await this.createDomainNodeWithInfo(cy, source));
+                    ({ id: existingSourceId, created } = await this.createDomainNodeWithInfo(cy, source, {}, bulkOptions));
                 }
                 if (!existingSourceId) continue;
                 if (created) {
@@ -4422,7 +4425,7 @@ window.IntegrationsManager = {
                     target: fileNodeId,
                     label: 'downloaded from'
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
                     edgesAdded++;
                 }
             }
@@ -4439,7 +4442,7 @@ window.IntegrationsManager = {
                 size: 32,
                 submitterId: attributes.submitter.id
             };
-            const { id: submitterNodeId, created } = await this.getOrCreateNode(cy, submitterNodeData.id, submitterNodeData);
+            const { id: submitterNodeId, created } = await this.getOrCreateNode(cy, submitterNodeData.id, submitterNodeData, bulkOptions);
             if (created) {
                 nodesAdded++;
             }
@@ -4450,7 +4453,7 @@ window.IntegrationsManager = {
                 target: fileNodeId,
                 label: 'submitted'
             };
-            if (this.addEdgeIfNotExists(cy, edgeData)) {
+            if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
                 edgesAdded++;
             }
         }
@@ -4469,7 +4472,7 @@ window.IntegrationsManager = {
                     size: 42,
                     domain: domain,
                     category: 'itw_domain'
-                });
+                }, bulkOptions);
                 if (!domainNodeId) continue;
                 if (created) {
                     nodesAdded++;
@@ -4481,7 +4484,7 @@ window.IntegrationsManager = {
                     target: fileNodeId,
                     label: 'downloaded from (ITW)'
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
                     edgesAdded++;
                 }
             }
@@ -4500,7 +4503,7 @@ window.IntegrationsManager = {
                     size: 42,
                     ipAddress: ip,
                     category: 'itw_ip'
-                });
+                }, bulkOptions);
                 if (created) {
                     nodesAdded++;
                 }
@@ -4511,7 +4514,7 @@ window.IntegrationsManager = {
                     target: fileNodeId,
                     label: 'downloaded from (ITW)'
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
                     edgesAdded++;
                 }
             }
@@ -4529,7 +4532,7 @@ window.IntegrationsManager = {
                     size: 38,
                     domain: domain,
                     category: 'memory_domain'
-                });
+                }, bulkOptions);
                 if (!domainNodeId) continue;
                 if (created) {
                     nodesAdded++;
@@ -4541,7 +4544,7 @@ window.IntegrationsManager = {
                     target: domainNodeId,
                     label: 'memory pattern'
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
                     edgesAdded++;
                 }
             }
@@ -4560,7 +4563,7 @@ window.IntegrationsManager = {
                     size: 38,
                     ipAddress: ip,
                     category: 'memory_ip'
-                });
+                }, bulkOptions);
                 if (created) {
                     nodesAdded++;
                 }
@@ -4571,7 +4574,7 @@ window.IntegrationsManager = {
                     target: ipNodeId,
                     label: 'memory pattern'
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
                     edgesAdded++;
                 }
             }
@@ -4591,7 +4594,7 @@ window.IntegrationsManager = {
                 const hash = fileObj.sha256 || fileObj.id;
                 if (!hash) continue;
 
-                const { id: relatedNodeId, created } = await this.createFileNodeWithInfo(cy, hash, { category: rel.key });
+                const { id: relatedNodeId, created } = await this.createFileNodeWithInfo(cy, hash, { category: rel.key }, bulkOptions);
                 if (created) {
                     nodesAdded++;
                 }
@@ -4602,7 +4605,7 @@ window.IntegrationsManager = {
                     target: relatedNodeId,
                     label: rel.label
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
                     edgesAdded++;
                 }
             }
@@ -4621,7 +4624,7 @@ window.IntegrationsManager = {
                     size: 40,
                     fileHash: parentHash,
                     category: 'execution_parent'
-                });
+                }, bulkOptions);
                 if (created) {
                     nodesAdded++;
                 }
@@ -4632,7 +4635,7 @@ window.IntegrationsManager = {
                     target: fileNodeId,
                     label: 'executed'
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
                     edgesAdded++;
                 }
             }
@@ -4660,7 +4663,7 @@ window.IntegrationsManager = {
                     city: submissionObj.attributes?.city,
                     fileName: submissionObj.attributes?.name
                 };
-                const { id: submitterNodeId, created } = await this.getOrCreateNode(cy, submitterNodeData.id, submitterNodeData);
+                const { id: submitterNodeId, created } = await this.getOrCreateNode(cy, submitterNodeData.id, submitterNodeData, bulkOptions);
                 if (created) {
                     nodesAdded++;
                 }
@@ -4671,7 +4674,7 @@ window.IntegrationsManager = {
                     target: fileNodeId,
                     label: 'submitted (enhanced)'
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
                     edgesAdded++;
                 }
             }
@@ -4689,7 +4692,7 @@ window.IntegrationsManager = {
                         size: 25,
                         detectedBy: engine
                     };
-                    const { id: threatNodeId, created } = await this.getOrCreateNode(cy, threatNodeData.id, threatNodeData);
+                    const { id: threatNodeId, created } = await this.getOrCreateNode(cy, threatNodeData.id, threatNodeData, bulkOptions);
                     if (created) {
                         nodesAdded++;
                     }
@@ -4700,7 +4703,7 @@ window.IntegrationsManager = {
                         target: threatNodeId,
                         label: `detected by ${engine}`
                     };
-                    if (this.addEdgeIfNotExists(cy, edgeData)) {
+                    if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
                         edgesAdded++;
                     }
                 }
@@ -4709,6 +4712,11 @@ window.IntegrationsManager = {
         
         const newNodeIds = cy.nodes().map(n => n.id()).filter(id => !existingNodeIds.has(id) && id !== fileNodeId);
         this.positionNodesNearSource(cy, fileNodeId, newNodeIds, 'VirusTotal');
+
+        if (window.LayoutManager && typeof window.LayoutManager.calculateOptimalSizing === 'function' && typeof window.LayoutManager.updateNodeStyles === 'function') {
+            const sizing = window.LayoutManager.calculateOptimalSizing(cy);
+            window.LayoutManager.updateNodeStyles(cy, sizing);
+        }
 
         if (window.TableManager && window.TableManager.updateTables) {
             window.TableManager.updateTables();
@@ -4778,6 +4786,7 @@ window.IntegrationsManager = {
 
         const cy = window.GraphRenderer.cy;
         const existingNodeIds = new Set(cy.nodes().map(n => n.id()));
+        const bulkOptions = { skipLayout: true };
         let nodesAdded = 0;
         let edgesAdded = 0;
         const createdNodes = [];
@@ -4817,7 +4826,8 @@ window.IntegrationsManager = {
         const { id: domainNodeId, created: domainCreated } = await this.getOrCreateNode(
             cy,
             domainNodeData.id,
-            domainNodeData
+            domainNodeData,
+            bulkOptions
         );
         cy.getElementById(domainNodeId).data('info', domainInfoHtml);
         cy.getElementById(domainNodeId).data('infoHtml', domainInfoHtml);
@@ -4844,7 +4854,7 @@ window.IntegrationsManager = {
 
         // Create IP nodes and edges from domain
         for (const ip of ipSet) {
-            const { id: ipNodeId, created } = await this.createIPNodeWithInfo(cy, ip);
+            const { id: ipNodeId, created } = await this.createIPNodeWithInfo(cy, ip, {}, bulkOptions);
             if (created) {
                 nodesAdded++;
                 createdNodes.push(ipNodeId);
@@ -4856,7 +4866,7 @@ window.IntegrationsManager = {
                 target: ipNodeId,
                 label: 'resolves to'
             };
-            if (this.addEdgeIfNotExists(cy, edgeData)) {
+            if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
                 edgesAdded++;
                 createdEdges.push(edgeData.id);
             }
@@ -4877,7 +4887,7 @@ window.IntegrationsManager = {
                 const hash = fileObj.sha256 || fileObj.id || fileObj;
                 if (!hash) continue;
 
-                const { id: fileNodeId, created } = await this.createFileNodeWithInfo(cy, hash);
+                const { id: fileNodeId, created } = await this.createFileNodeWithInfo(cy, hash, {}, bulkOptions);
                 if (created) {
                     nodesAdded++;
                     createdNodes.push(fileNodeId);
@@ -4891,7 +4901,7 @@ window.IntegrationsManager = {
                     target: targetId,
                     label: rel.label
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
                     edgesAdded++;
                     createdEdges.push(edgeData.id);
                 }
@@ -4900,6 +4910,11 @@ window.IntegrationsManager = {
 
         // Position any newly created nodes near the domain node
         this.positionNodesNearSource(cy, domainNodeId, createdNodes.filter(id => id !== domainNodeId), 'VirusTotal');
+
+        if (window.LayoutManager && typeof window.LayoutManager.calculateOptimalSizing === 'function' && typeof window.LayoutManager.updateNodeStyles === 'function') {
+            const sizing = window.LayoutManager.calculateOptimalSizing(cy);
+            window.LayoutManager.updateNodeStyles(cy, sizing);
+        }
 
         // Sync GraphManager/DataManager so renderGraph uses the updated data
         if (window.GraphManager?.rebuildCurrentGraphFromCy) {
@@ -4952,6 +4967,7 @@ window.IntegrationsManager = {
 
         const cy = window.GraphRenderer.cy;
         const existingNodeIds = new Set(cy.nodes().map(n => n.id()));
+        const bulkOptions = { skipLayout: true };
         let nodesAdded = 0;
         let edgesAdded = 0;
 
@@ -4981,7 +4997,7 @@ window.IntegrationsManager = {
             info: ipInfoHtml,
             infoHtml: ipInfoHtml
         };
-        const { id: ipNodeId, created: ipCreated } = await this.getOrCreateNode(cy, ipNodeData.id, ipNodeData);
+        const { id: ipNodeId, created: ipCreated } = await this.getOrCreateNode(cy, ipNodeData.id, ipNodeData, bulkOptions);
         cy.getElementById(ipNodeId).data('info', ipInfoHtml);
         cy.getElementById(ipNodeId).data('infoHtml', ipInfoHtml);
         if (ipCreated) {
@@ -4993,7 +5009,7 @@ window.IntegrationsManager = {
             const domain = res.attributes?.host_name || res.attributes?.hostname || res.id || res;
             if (!domain) continue;
 
-            const { id: domainNodeId, created } = await this.createDomainNodeWithInfo(cy, domain);
+            const { id: domainNodeId, created } = await this.createDomainNodeWithInfo(cy, domain, {}, bulkOptions);
             if (!domainNodeId) continue;
             if (created) {
                 nodesAdded++;
@@ -5005,7 +5021,7 @@ window.IntegrationsManager = {
                 target: ipNodeId,
                 label: 'resolves to'
             };
-            if (this.addEdgeIfNotExists(cy, edgeData)) {
+            if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
                 edgesAdded++;
             }
         }
@@ -5025,7 +5041,7 @@ window.IntegrationsManager = {
                 const hash = fileObj.sha256 || fileObj.id || fileObj;
                 if (!hash) continue;
 
-                const { id: fileNodeId, created } = await this.createFileNodeWithInfo(cy, hash);
+                const { id: fileNodeId, created } = await this.createFileNodeWithInfo(cy, hash, {}, bulkOptions);
                 if (created) {
                     nodesAdded++;
                 }
@@ -5038,7 +5054,7 @@ window.IntegrationsManager = {
                     target: targetId,
                     label: rel.label
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
                     edgesAdded++;
                 }
             }
@@ -5046,6 +5062,11 @@ window.IntegrationsManager = {
 
         const newNodeIds = cy.nodes().map(n => n.id()).filter(id => !existingNodeIds.has(id) && id !== ipNodeId);
         this.positionNodesNearSource(cy, ipNodeId, newNodeIds, 'VirusTotal');
+
+        if (window.LayoutManager && typeof window.LayoutManager.calculateOptimalSizing === 'function' && typeof window.LayoutManager.updateNodeStyles === 'function') {
+            const sizing = window.LayoutManager.calculateOptimalSizing(cy);
+            window.LayoutManager.updateNodeStyles(cy, sizing);
+        }
 
         if (window.TableManager && window.TableManager.updateTables) {
             window.TableManager.updateTables();
@@ -5088,6 +5109,7 @@ window.IntegrationsManager = {
 
         const cy = window.GraphRenderer.cy;
         const existingNodeIds = new Set(cy.nodes().map(n => n.id()));
+        const bulkOptions = { skipLayout: true };
         let nodesAdded = 0;
         let edgesAdded = 0;
 
@@ -5108,7 +5130,7 @@ window.IntegrationsManager = {
             info: urlInfoHtml,
             infoHtml: urlInfoHtml
         };
-        const { id: urlNodeId, created: urlCreated } = await this.getOrCreateNode(cy, urlNodeData.id, urlNodeData);
+        const { id: urlNodeId, created: urlCreated } = await this.getOrCreateNode(cy, urlNodeData.id, urlNodeData, bulkOptions);
         cy.getElementById(urlNodeId).data('info', urlInfoHtml);
         cy.getElementById(urlNodeId).data('infoHtml', urlInfoHtml);
         if (urlCreated) {
@@ -5123,7 +5145,7 @@ window.IntegrationsManager = {
         }
 
         if (domain) {
-            const { id: domainNodeId, created } = await this.createDomainNodeWithInfo(cy, domain);
+            const { id: domainNodeId, created } = await this.createDomainNodeWithInfo(cy, domain, {}, bulkOptions);
             if (domainNodeId) {
                 if (created) {
                     nodesAdded++;
@@ -5135,7 +5157,7 @@ window.IntegrationsManager = {
                     target: domainNodeId,
                     label: 'links to'
                 };
-                if (this.addEdgeIfNotExists(cy, edgeData)) {
+                if (this.addEdgeIfNotExists(cy, edgeData, bulkOptions)) {
                     edgesAdded++;
                 }
             }
@@ -5143,6 +5165,11 @@ window.IntegrationsManager = {
 
         const newNodeIds = cy.nodes().map(n => n.id()).filter(id => !existingNodeIds.has(id) && id !== urlNodeId);
         this.positionNodesNearSource(cy, urlNodeId, newNodeIds, 'VirusTotal');
+
+        if (window.LayoutManager && typeof window.LayoutManager.calculateOptimalSizing === 'function' && typeof window.LayoutManager.updateNodeStyles === 'function') {
+            const sizing = window.LayoutManager.calculateOptimalSizing(cy);
+            window.LayoutManager.updateNodeStyles(cy, sizing);
+        }
 
         if (window.TableManager && window.TableManager.updateTables) {
             window.TableManager.updateTables();
