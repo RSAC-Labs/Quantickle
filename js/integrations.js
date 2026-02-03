@@ -3214,10 +3214,19 @@ window.IntegrationsManager = {
         const desiredContainerPosition = { x: origin.x + radius + 40, y: origin.y };
         let dataUpdated = false;
         let graphData;
+        let nodeRecordById = null;
         if (window.DataManager &&
             typeof window.DataManager.getGraphData === 'function' &&
             typeof window.DataManager.setGraphData === 'function') {
             graphData = window.DataManager.getGraphData();
+            if (graphData && Array.isArray(graphData.nodes)) {
+                nodeRecordById = new Map();
+                graphData.nodes.forEach(nodeRecord => {
+                    if (nodeRecord && nodeRecord.data && nodeRecord.data.id) {
+                        nodeRecordById.set(nodeRecord.data.id, nodeRecord);
+                    }
+                });
+            }
         }
 
         // Optional service container
@@ -3292,8 +3301,21 @@ window.IntegrationsManager = {
             }
         }
 
+        const elementCache = new Map();
+        const getElementById = (id) => {
+            if (!id) {
+                return null;
+            }
+            if (elementCache.has(id)) {
+                return elementCache.get(id);
+            }
+            const element = cy.getElementById(id);
+            elementCache.set(id, element);
+            return element;
+        };
+
         newNodeIds.forEach((id, index) => {
-            const node = cy.getElementById(id);
+            const node = getElementById(id);
             if (!node || node.empty()) return;
 
             const currentParent = node.parent();
@@ -3305,7 +3327,7 @@ window.IntegrationsManager = {
                         node.move({ parent: container.id() });
                     }
                     if (graphData) {
-                        const nodeRecord = graphData.nodes.find(n => n.data && n.data.id === id);
+                        const nodeRecord = nodeRecordById ? nodeRecordById.get(id) : null;
                         if (nodeRecord && nodeRecord.data && !nodeRecord.data.parent) {
                             nodeRecord.data.parent = container.id();
                             dataUpdated = true;
@@ -3317,7 +3339,7 @@ window.IntegrationsManager = {
                     }
 
                     if (graphData) {
-                        const nodeRecord = graphData.nodes.find(n => n.data && n.data.id === id);
+                        const nodeRecord = nodeRecordById ? nodeRecordById.get(id) : null;
                         if (nodeRecord && nodeRecord.data && !nodeRecord.data.parent) {
                             nodeRecord.data.parent = sourceParent.id();
                             dataUpdated = true;
