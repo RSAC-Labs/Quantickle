@@ -719,7 +719,8 @@ window.globalFunctions = {
             const layoutInfo = {
                 currentLayout: window.LayoutManager ? window.LayoutManager.currentLayout : 'grid',
                 layoutOptions: window.LayoutManager ? window.LayoutManager.getCurrentLayoutOptions() : {},
-                layoutRunning: window.LayoutManager ? window.LayoutManager.isLayoutRunning() : false
+                layoutRunning: window.LayoutManager ? window.LayoutManager.isLayoutRunning() : false,
+                layoutSpacingScale: window.LayoutManager ? window.LayoutManager.getLayoutSpacingScale() : 1
             };
             
             // Get node type configurations
@@ -937,6 +938,9 @@ window.globalFunctions = {
                 window.LayoutManager.currentLayout = graphData.layoutInfo.currentLayout;
                 if (graphData.layoutInfo.layoutOptions) {
                     window.LayoutManager.setLayoutOptions(graphData.layoutInfo.layoutOptions);
+                }
+                if (graphData.layoutInfo.layoutSpacingScale !== undefined) {
+                    window.LayoutManager.setLayoutSpacingScale(graphData.layoutInfo.layoutSpacingScale);
                 }
             }
             

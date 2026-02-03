@@ -17,6 +17,7 @@ class GraphControlsModule {
         this.minZoom = this.config.minZoom ?? 0.1;
         this.maxZoom = this.config.maxZoom ?? 10;
         this.zoomStep = this.config.defaultZoomStep ?? 1.2;
+        this.layoutSpacingStep = this.config.layoutSpacingStep ?? 1.1;
         this.animationDuration = this.config.animationDuration ?? 400;
         
         // Event handlers storage
@@ -281,6 +282,16 @@ class GraphControlsModule {
             const delta = event.deltaY;
             const zoomIn = delta < 0;
             const mousePos = this.getMousePosition(event, container);
+            const shouldAdjustSpacing = (event.ctrlKey || event.metaKey) && !event.shiftKey;
+
+            if (shouldAdjustSpacing && window.LayoutManager) {
+                const step = this.layoutSpacingStep;
+                const factor = zoomIn ? step : 1 / step;
+                const newScale = window.LayoutManager.adjustLayoutSpacingScale(factor);
+                this.showZoomIndicator(`Spacing: ${(newScale * 100).toFixed(0)}%`);
+                window.LayoutManager.applyLayout();
+                return;
+            }
             
             if (zoomIn) {
                 this.zoomIn({ center: mousePos });
