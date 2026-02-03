@@ -8,10 +8,38 @@ window.LayoutManager = {
     dragUpdateTimeout: null,
     _timelineForceRebuildNextApply: false,
     _timelinePreservedBarStyle: null,
+    layoutSpacingScale: 1,
+    minLayoutSpacingScale: 0.5,
+    maxLayoutSpacingScale: 3.0,
 
     // Initialize layout manager
     init: function() {
         this.updateLayoutDropdown();
+    },
+
+    clampLayoutSpacingScale: function(value) {
+        const numericValue = Number(value);
+        if (!Number.isFinite(numericValue)) {
+            return this.layoutSpacingScale;
+        }
+        return Math.min(this.maxLayoutSpacingScale, Math.max(this.minLayoutSpacingScale, numericValue));
+    },
+
+    getLayoutSpacingScale: function() {
+        return this.layoutSpacingScale;
+    },
+
+    setLayoutSpacingScale: function(value) {
+        this.layoutSpacingScale = this.clampLayoutSpacingScale(value);
+        return this.layoutSpacingScale;
+    },
+
+    adjustLayoutSpacingScale: function(scaleFactor) {
+        const factor = Number(scaleFactor);
+        if (!Number.isFinite(factor) || factor === 0) {
+            return this.layoutSpacingScale;
+        }
+        return this.setLayoutSpacingScale(this.layoutSpacingScale * factor);
     },
 
     isDebugModeEnabled: function() {
@@ -1534,6 +1562,9 @@ window.LayoutManager = {
             
             // Calculate optimal sizing for this graph
             sizing = this.calculateOptimalSizing(cy);
+            const spacingScale = this.getLayoutSpacingScale();
+            const scaledSpacing = sizing.spacing * spacingScale;
+            const scaledPadding = sizing.padding * spacingScale;
             
             // Check if extensions are ready for extension-based layouts
             const isExtensionLayout = ['cola', 'dagre', 'klay', 'euler', 'cose-bilkent'].includes(this.currentLayout);
@@ -1980,30 +2011,30 @@ window.LayoutManager = {
                 fit: selectedLayout.fit !== undefined ? selectedLayout.fit : true,
                 animate: !disableAnimations, // Disable animations for large datasets
                 animationDuration: disableAnimations ? 0 : 500, // No animation duration if disabled
-                padding: sizing.padding, // Use calculated padding
+                padding: scaledPadding, // Use calculated padding
                 nodeDimensionsIncludeLabels: selectedLayout.nodeDimensionsIncludeLabels !== undefined ? selectedLayout.nodeDimensionsIncludeLabels : true
             };
             
             // Add layout-specific properties based on the layout type
             if (selectedLayout.name === 'circle') {
-                optimizedLayout.radius = Math.max(selectedLayout.radius || 200, sizing.spacing * 2);
+                optimizedLayout.radius = Math.max(selectedLayout.radius || 200, scaledSpacing * 2);
                 optimizedLayout.startAngle = selectedLayout.startAngle || 0;
                 optimizedLayout.sweep = selectedLayout.sweep || 360;
                 optimizedLayout.clockwise = selectedLayout.clockwise !== undefined ? selectedLayout.clockwise : true;
             } else if (selectedLayout.name === 'breadthfirst') {
                 optimizedLayout.directed = selectedLayout.directed !== undefined ? selectedLayout.directed : false;
-                optimizedLayout.spacingFactor = Math.max(selectedLayout.spacingFactor || 1.5, sizing.spacing / 50);
+                optimizedLayout.spacingFactor = Math.max(selectedLayout.spacingFactor || 1.5, scaledSpacing / 50);
             } else if (selectedLayout.name === 'cose') {
                 optimizedLayout.randomize = selectedLayout.randomize !== undefined ? selectedLayout.randomize : false;
                 optimizedLayout.refresh = selectedLayout.refresh || 20;
-                optimizedLayout.tilingPaddingVertical = sizing.spacing * 0.4; // Moderate padding
-                optimizedLayout.tilingPaddingHorizontal = sizing.spacing * 0.4; // Moderate padding
+                optimizedLayout.tilingPaddingVertical = scaledSpacing * 0.4; // Moderate padding
+                optimizedLayout.tilingPaddingHorizontal = scaledSpacing * 0.4; // Moderate padding
                 optimizedLayout.initialTemp = selectedLayout.initialTemp || 100;
                 optimizedLayout.coolingFactor = selectedLayout.coolingFactor || 0.98;
                 optimizedLayout.minTemp = selectedLayout.minTemp || 1.0;
-                optimizedLayout.nodeRepulsion = Math.max(selectedLayout.nodeRepulsion || 6000, sizing.spacing * 8); // Moderate repulsion
+                optimizedLayout.nodeRepulsion = Math.max(selectedLayout.nodeRepulsion || 6000, scaledSpacing * 8); // Moderate repulsion
                 optimizedLayout.nodeOverlap = sizing.nodeSize * 0.1; // Moderate overlap prevention
-                optimizedLayout.idealEdgeLength = sizing.spacing * 0.8; // Moderate edge length
+                optimizedLayout.idealEdgeLength = scaledSpacing * 0.8; // Moderate edge length
                 optimizedLayout.edgeElasticity = selectedLayout.edgeElasticity || 0.45;
                 // Only include nestingRoot when explicitly provided to avoid
                 // Cytoscape warnings about null/undefined properties
@@ -2017,20 +2048,20 @@ window.LayoutManager = {
                 optimizedLayout.initialEnergyOnIncremental = selectedLayout.initialEnergyOnIncremental || 0.3;
             } else if (selectedLayout.name === 'cola') {
                 // Cola-specific properties with moderate dynamic sizing
-                optimizedLayout.nodeSpacing = sizing.spacing * 0.8; // Moderate node spacing
-                optimizedLayout.edgeLength = sizing.spacing * 0.8; // Moderate edge length
+                optimizedLayout.nodeSpacing = scaledSpacing * 0.8; // Moderate node spacing
+                optimizedLayout.edgeLength = scaledSpacing * 0.8; // Moderate edge length
                 optimizedLayout.edgeSymDiffLength = 0.2; // Moderate symmetric difference length
                 optimizedLayout.edgeJaccardLength = 0.2; // Moderate Jaccard length
                 optimizedLayout.gravity = 20; // Moderate gravity
                 optimizedLayout.scaling = 1.1; // Moderate scaling
-                optimizedLayout.padding = sizing.padding * 0.8; // Moderate padding
+                optimizedLayout.padding = scaledPadding * 0.8; // Moderate padding
                 optimizedLayout.avoidOverlap = true;
                 optimizedLayout.handleDisconnected = true;
                 optimizedLayout.animate = !disableAnimations;
                 optimizedLayout.animationDuration = disableAnimations ? 0 : 500;
             } else if (selectedLayout.name === 'euler') {
                 // Euler-specific properties with more aggressive dynamic sizing
-                optimizedLayout.springLength = sizing.spacing * 1.2; // More aggressive spring length
+                optimizedLayout.springLength = scaledSpacing * 1.2; // More aggressive spring length
                 optimizedLayout.springCoeff = 0.0012; // More aggressive spring coefficient
                 optimizedLayout.drag = 0.15; // Less drag for better movement
                 optimizedLayout.mass = 6; // Larger mass for better spacing
@@ -2038,9 +2069,9 @@ window.LayoutManager = {
                 optimizedLayout.animationDuration = disableAnimations ? 0 : 500;
             } else if (selectedLayout.name === 'dagre') {
                 // Dagre-specific properties with dynamic sizing
-                optimizedLayout.nodeSep = sizing.spacing * 0.8; // More conservative node separation
-                optimizedLayout.edgeSep = sizing.spacing * 0.5; // More conservative edge separation
-                optimizedLayout.rankSep = sizing.spacing * 1.5; // More conservative rank separation
+                optimizedLayout.nodeSep = scaledSpacing * 0.8; // More conservative node separation
+                optimizedLayout.edgeSep = scaledSpacing * 0.5; // More conservative edge separation
+                optimizedLayout.rankSep = scaledSpacing * 1.5; // More conservative rank separation
                 optimizedLayout.rankDir = selectedLayout.rankDir || 'TB';
                 optimizedLayout.ranker = selectedLayout.ranker || 'network-simplex';
                 optimizedLayout.animate = !disableAnimations;
@@ -2048,7 +2079,7 @@ window.LayoutManager = {
                 
                 // Force Dagre to respect our node sizes
                 optimizedLayout.nodeDimensionsIncludeLabels = false; // Let us control node dimensions
-                optimizedLayout.padding = sizing.padding * 2; // Extra padding for Dagre
+                optimizedLayout.padding = scaledPadding * 2; // Extra padding for Dagre
             } else if (selectedLayout.name === 'klay') {
                 // Simplified Klay configuration
                 optimizedLayout.klay = {
@@ -2056,29 +2087,29 @@ window.LayoutManager = {
                     nodePlacement: 'BRANDES_KOEPF',
                     edgeRouting: 'ORTHOGONAL',
                     direction: 'DOWN',
-                    spacing: 20
+                    spacing: 20 * spacingScale
                 };
             } else if (selectedLayout.name === 'breadthfirst') {
                 // Breadthfirst-specific properties
                 optimizedLayout.directed = selectedLayout.directed !== undefined ? selectedLayout.directed : false;
-                optimizedLayout.spacingFactor = Math.max(selectedLayout.spacingFactor || 1.5, sizing.spacing / 50);
+                optimizedLayout.spacingFactor = Math.max(selectedLayout.spacingFactor || 1.5, scaledSpacing / 50);
                 
                 // Force Breadthfirst to respect our node sizes
                 optimizedLayout.nodeDimensionsIncludeLabels = false; // Let us control node dimensions
-                optimizedLayout.padding = sizing.padding * 1.5; // Extra padding for Breadthfirst
+                optimizedLayout.padding = scaledPadding * 1.5; // Extra padding for Breadthfirst
             } else if (selectedLayout.name === 'concentric') {
                 // Concentric-specific properties
                 optimizedLayout.nodeDimensionsIncludeLabels = false; // Let us control node dimensions
-                optimizedLayout.padding = sizing.padding * 1.5; // Extra padding for Concentric
+                optimizedLayout.padding = scaledPadding * 1.5; // Extra padding for Concentric
             } else if (selectedLayout.name === 'cola') {
                 // Cola-specific properties with dynamic sizing
-                optimizedLayout.nodeSpacing = sizing.spacing * 0.8; // Moderate node spacing
-                optimizedLayout.edgeLength = sizing.spacing * 0.8; // Moderate edge length
+                optimizedLayout.nodeSpacing = scaledSpacing * 0.8; // Moderate node spacing
+                optimizedLayout.edgeLength = scaledSpacing * 0.8; // Moderate edge length
                 optimizedLayout.edgeSymDiffLength = 0.2; // Moderate symmetric difference length
                 optimizedLayout.edgeJaccardLength = 0.2; // Moderate Jaccard length
                 optimizedLayout.gravity = 20; // Moderate gravity
                 optimizedLayout.scaling = 1.1; // Moderate scaling
-                optimizedLayout.padding = sizing.padding * 0.8; // Moderate padding
+                optimizedLayout.padding = scaledPadding * 0.8; // Moderate padding
                 optimizedLayout.avoidOverlap = true;
                 optimizedLayout.handleDisconnected = true;
                 optimizedLayout.animate = !disableAnimations;
