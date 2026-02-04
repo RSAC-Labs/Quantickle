@@ -430,6 +430,16 @@ class ContextMenuModule {
             group2.push({ label, action: () => this.quickVirusTotalInfo(quickVTTargets) });
         }
 
+        const vtSelectionTargets = workingNodes
+            .filter(n => this.isIntegrationEligibleNode(n))
+            .filter(n => this.getVirusTotalQueryType(n?.data?.('type')));
+        if (vtSelectionTargets.length > 1 && window.IntegrationsManager?.importVirusTotalData) {
+            group2.push({
+                label: 'Query VirusTotal (selection)',
+                action: () => this.queryVirusTotalForSelection(vtSelectionTargets)
+            });
+        }
+
         const group3 = [];
 
         if (preSelectedContainer && nodeCount > 0) {
@@ -1608,26 +1618,7 @@ class ContextMenuModule {
         }
 
         const identifier = node.data('label') || node.id();
-        let queryType;
-        switch (nodeType) {
-            case 'domain':
-                queryType = 'domain';
-                break;
-            case 'ipaddress':
-                queryType = 'ip';
-                break;
-            case 'filename':
-                queryType = 'file';
-                break;
-            case 'malware':
-                queryType = 'file';
-                break;
-            case 'url':
-                queryType = 'url';
-                break;
-            default:
-                queryType = null;
-        }
+        const queryType = this.getVirusTotalQueryType(nodeType);
 
         if (!queryType) {
             this.notifications.show('Unsupported node type for VirusTotal query', 'warning');
@@ -1647,6 +1638,88 @@ class ContextMenuModule {
                     this.notifications.show('VirusTotal query failed', 'error');
                 }
             });
+    }
+
+    /**
+     * Query VirusTotal for multiple nodes (full import).
+     * @param {Object[]} nodes - Cytoscape node collection
+     */
+    async queryVirusTotalForSelection(nodes) {
+        if (!window.IntegrationsManager ||
+            typeof window.IntegrationsManager.importVirusTotalData !== 'function') {
+            this.notifications.show('VirusTotal integration not available', 'error');
+            return;
+        }
+
+        const targets = (nodes || [])
+            .filter(node => this.isIntegrationEligibleNode(node))
+            .map(node => {
+                const nodeType = node?.data?.('type');
+                const queryType = this.getVirusTotalQueryType(nodeType);
+                if (!queryType) {
+                    return null;
+                }
+                const identifier = node.data('label') || node.id();
+                return { node, identifier, queryType };
+            })
+            .filter(Boolean);
+
+        if (targets.length === 0) {
+            this.notifications.show('No eligible nodes for VirusTotal query', 'info');
+            return;
+        }
+
+        this.notifications.show(`Querying VirusTotal for ${targets.length} node(s)`, 'info');
+
+        let success = 0;
+        let notFound = 0;
+        let errors = 0;
+
+        for (const target of targets) {
+            try {
+                await window.IntegrationsManager.importVirusTotalData(target.identifier, target.queryType);
+                success += 1;
+            } catch (error) {
+                const message = error?.message?.toLowerCase?.() || '';
+                if (message.includes('not found in virustotal')) {
+                    notFound += 1;
+                } else {
+                    errors += 1;
+                }
+                console.error('VirusTotal selection query failed:', target.identifier, error);
+            }
+        }
+
+        if (success > 0) {
+            this.notifications.show(`VirusTotal query completed for ${success} node(s)`, 'success');
+        }
+        if (notFound > 0) {
+            this.notifications.show(`${notFound} node(s) not found in VirusTotal`, 'warning');
+        }
+        if (errors > 0) {
+            this.notifications.show('Some VirusTotal queries failed', 'error');
+        }
+    }
+
+    /**
+     * Map node types to VirusTotal query types.
+     * @param {string} nodeType
+     * @returns {string|null}
+     */
+    getVirusTotalQueryType(nodeType) {
+        switch (nodeType) {
+            case 'domain':
+                return 'domain';
+            case 'ipaddress':
+                return 'ip';
+            case 'filename':
+            case 'malware':
+                return 'file';
+            case 'url':
+                return 'url';
+            default:
+                return null;
+        }
     }
 
     /**
