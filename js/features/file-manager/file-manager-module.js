@@ -1883,41 +1883,91 @@ class FileManagerModule {
                 };
             };
 
+            const abortErrorCode = typeof DOMException !== 'undefined' ? DOMException.ABORT_ERR : 20;
+            const isUserCancellation = (error) =>
+                error?.name === 'AbortError' ||
+                error?.code === abortErrorCode;
+
+            const isStaleHandleError = (error) => {
+                if (!error) {
+                    return false;
+                }
+                const name = typeof error.name === 'string' ? error.name : '';
+                const message = typeof error.message === 'string' ? error.message : '';
+                const code = typeof error.code === 'number' ? error.code : null;
+                const normalizedMessage = message.toLowerCase();
+
+                return (
+                    name === 'InvalidStateError' ||
+                    name === 'NotFoundError' ||
+                    code === 11 ||
+                    normalizedMessage.includes('stale') ||
+                    normalizedMessage.includes('file handle') ||
+                    normalizedMessage.includes('no longer usable') ||
+                    normalizedMessage.includes('not found')
+                );
+            };
+
+            const saveWithHandle = async (handle) => {
+                const chosenName = handle?.name || suggestedFilename;
+                pendingPayload = preparePayload(chosenName);
+                const writable = await handle.createWritable();
+                await writable.write(new Blob([pendingPayload.payload], { type: this.config.mimeType }));
+                await writable.close();
+                return pendingPayload;
+            };
+
+            const saveWithPicker = async () => {
+                let startIn;
+                if (window.WorkspaceManager && WorkspaceManager.handle) {
+                    startIn = await WorkspaceManager.getSubDirHandle('graphs');
+                }
+                const handle = await window.showSaveFilePicker({
+                    suggestedName: suggestedFilename,
+                    types: [{
+                        description: 'Quantickle Graph',
+                        accept: { 'application/quantickle-graph': [this.config.fileExtension] }
+                    }],
+                    startIn
+                });
+                return saveWithHandle(handle);
+            };
+
             let savedPayload = null;
             let pendingPayload = null;
 
             if (window.showSaveFilePicker) {
                 try {
-                    let startIn;
-                    if (window.WorkspaceManager && WorkspaceManager.handle) {
-                        startIn = await WorkspaceManager.getSubDirHandle('graphs');
-                    }
-                    const handle = await window.showSaveFilePicker({
-                        suggestedName: suggestedFilename,
-                        types: [{
-                            description: 'Quantickle Graph',
-                            accept: { 'application/quantickle-graph': [this.config.fileExtension] }
-                        }],
-                        startIn
-                    });
-                    const chosenName = handle?.name || suggestedFilename;
-                    pendingPayload = preparePayload(chosenName);
-                    const writable = await handle.createWritable();
-                    await writable.write(new Blob([pendingPayload.payload], { type: this.config.mimeType }));
-                    await writable.close();
-                    savedPayload = pendingPayload;
+                    savedPayload = await saveWithPicker();
                 } catch (pickerError) {
-                    const abortErrorCode = typeof DOMException !== 'undefined' ? DOMException.ABORT_ERR : 20;
-                    const isUserCancellation =
-                        pickerError?.name === 'AbortError' ||
-                        pickerError?.code === abortErrorCode;
-
-                    if (isUserCancellation) {
+                    if (isUserCancellation(pickerError)) {
                         this.notifications?.show?.('Graph save cancelled', 'info');
                         return;
                     }
 
-                    console.warn('showSaveFilePicker failed, falling back to alternate save mechanisms.', pickerError);
+                    if (isStaleHandleError(pickerError)) {
+                        try {
+                            savedPayload = await saveWithPicker();
+                        } catch (retryError) {
+                            if (isUserCancellation(retryError)) {
+                                this.notifications?.show?.('Graph save cancelled', 'info');
+                                return;
+                            }
+
+                            if (isStaleHandleError(retryError)) {
+                                this.notifications?.show?.(
+                                    'The selected file handle appears to be stale. Please reselect the file location and try saving again.',
+                                    'error'
+                                );
+                                return;
+                            }
+
+                            console.warn('showSaveFilePicker failed after retrying a stale handle.', retryError);
+                        }
+                    } else {
+                        console.warn('showSaveFilePicker failed, falling back to alternate save mechanisms.', pickerError);
+                    }
+
                 }
             }
 
