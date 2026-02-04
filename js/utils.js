@@ -342,6 +342,63 @@ window.QuantickleUtils.calloutHasContent = function calloutHasContent(payload) {
     return Boolean(title || body);
 };
 
+window.QuantickleUtils.normalizeNodeHtmlFields = function normalizeNodeHtmlFields(node) {
+    if (!node || typeof node !== 'object') {
+        return node;
+    }
+
+    const target = node.data && typeof node.data === 'object' ? node.data : node;
+
+    const trimToString = (value) => {
+        if (value == null) return '';
+        return String(value).trim();
+    };
+
+    const normalizeWhitespace = (value) => {
+        if (typeof value !== 'string') return '';
+        return value.replace(/\s+/g, ' ').trim();
+    };
+
+    const stripHtmlToText = (value) => normalizeWhitespace(String(value || '').replace(/<[^>]*>/g, ' '));
+
+    const containsHtml = (value) => /<[^>]+>/.test(String(value || ''));
+
+    const info = trimToString(target.info);
+    const infoHtml = trimToString(target.infoHtml);
+    const graphReference = trimToString(target.graphReference);
+    const key = trimToString(target.key);
+
+    let canonicalHtml = infoHtml;
+    if (!canonicalHtml && containsHtml(info)) {
+        canonicalHtml = info;
+    }
+    if (!canonicalHtml && containsHtml(graphReference)) {
+        canonicalHtml = graphReference;
+    }
+    if (!canonicalHtml && containsHtml(key)) {
+        canonicalHtml = key;
+    }
+
+    if (canonicalHtml) {
+        target.infoHtml = canonicalHtml;
+        const infoText = stripHtmlToText(canonicalHtml);
+        const existingInfoText = normalizeWhitespace(info);
+        if (!existingInfoText || containsHtml(info) || existingInfoText === infoText) {
+            target.info = infoText;
+        }
+    }
+
+    if (containsHtml(graphReference)) {
+        delete target.graphReference;
+    }
+
+    if (containsHtml(key)) {
+        delete target.key;
+    }
+
+    return node;
+};
+
 window.QuantickleUtils.buildBasicCalloutHtml = function buildBasicCalloutHtml(title, body) {
     const safeTitle = title == null ? '' : String(title);
     const safeBody = body == null ? '' : String(body);

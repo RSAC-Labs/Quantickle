@@ -1079,6 +1079,10 @@ class DataManagerModule {
      * Normalize node format (handle Cytoscape vs internal format)
      */
     normalizeNodeFormat(node) {
+        if (window.QuantickleUtils && typeof window.QuantickleUtils.normalizeNodeHtmlFields === 'function') {
+            window.QuantickleUtils.normalizeNodeHtmlFields(node);
+        }
+
         const ensureClassString = (normalized, classSources) => {
             const tokens = [];
             const addToken = token => {
