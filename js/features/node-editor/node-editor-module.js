@@ -2951,6 +2951,28 @@ class NodeEditorModule {
         }
     }
 
+    isHtmlLikeString(value) {
+        if (typeof value !== 'string') {
+            return false;
+        }
+        const trimmed = value.trim();
+        if (!trimmed || !/[<>]/.test(trimmed)) {
+            return false;
+        }
+        if (/<\s*\/?\s*[a-z][\s>]/i.test(trimmed) || /<\/\s*[a-z]/i.test(trimmed)) {
+            return true;
+        }
+        if (typeof DOMParser !== 'undefined') {
+            try {
+                const parsed = new DOMParser().parseFromString(trimmed, 'text/html');
+                return !!(parsed && parsed.body && parsed.body.children && parsed.body.children.length);
+            } catch (error) {
+                return false;
+            }
+        }
+        return false;
+    }
+
     /**
      * Normalize graph link payloads into a consistent object shape.
      *
@@ -3037,6 +3059,9 @@ class NodeEditorModule {
             }
 
             if (resolver && typeof resolver.normalize === 'function') {
+                if (typeof candidate === 'string' && this.isHtmlLikeString(candidate)) {
+                    return null;
+                }
                 const normalized = resolver.normalize(candidate);
                 if (normalized && normalized.key) {
                     const resolvedSource = normalized.source
@@ -3056,6 +3081,9 @@ class NodeEditorModule {
             if (typeof candidate === 'string' || typeof candidate === 'number') {
                 const value = coerceString(candidate);
                 if (!value) {
+                    return null;
+                }
+                if (this.isHtmlLikeString(value)) {
                     return null;
                 }
                 const source = inferSourceFromKey(value);
@@ -3103,7 +3131,7 @@ class NodeEditorModule {
                 coerceString(candidate.url)
             ];
 
-            const resolvedKey = keyCandidates.find(entry => entry);
+            const resolvedKey = keyCandidates.find(entry => entry && !this.isHtmlLikeString(entry));
             if (!resolvedKey) {
                 return null;
             }
@@ -3229,11 +3257,14 @@ class NodeEditorModule {
 
         const currentData = this.selectedNode ? this.selectedNode.data() : {};
         const resolver = window.GraphReferenceResolver;
+        const currentInfoHtml = currentData ? currentData.infoHtml : null;
+        const currentInfo = currentData ? currentData.info : null;
+        const safeInfo = (currentInfoHtml && this.isHtmlLikeString(currentInfo)) ? null : currentInfo;
         const existingGraphLink = this.normalizeGraphLinkPayload(
             currentData ? currentData.graphLink : null,
             currentData ? currentData.graphReference : null,
             currentData ? currentData.reference : null,
-            currentData ? currentData.info : null
+            safeInfo
         );
 
         const baseUpdates = {
@@ -3411,7 +3442,10 @@ class NodeEditorModule {
 
             if (baseUpdates.graphReference === undefined) {
                 const infoString = typeof baseUpdates.info === 'string' ? baseUpdates.info.trim() : '';
-                baseUpdates.graphReference = infoString;
+                const hasInfoHtml = baseUpdates.infoHtml || currentInfoHtml;
+                if (!hasInfoHtml || !this.isHtmlLikeString(infoString)) {
+                    baseUpdates.graphReference = infoString;
+                }
             }
         }
 

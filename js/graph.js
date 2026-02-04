@@ -2916,6 +2916,28 @@ window.GraphRenderer = {
         return fetchOptions;
     },
 
+    _isHtmlLikeString(value) {
+        if (typeof value !== 'string') {
+            return false;
+        }
+        const trimmed = value.trim();
+        if (!trimmed || !/[<>]/.test(trimmed)) {
+            return false;
+        }
+        if (/<\s*\/?\s*[a-z][\s>]/i.test(trimmed) || /<\/\s*[a-z]/i.test(trimmed)) {
+            return true;
+        }
+        if (typeof DOMParser !== 'undefined') {
+            try {
+                const parsed = new DOMParser().parseFromString(trimmed, 'text/html');
+                return !!(parsed && parsed.body && parsed.body.children && parsed.body.children.length);
+            } catch (error) {
+                return false;
+            }
+        }
+        return false;
+    },
+
     extractGraphReferenceFromNode(node) {
         if (!node) {
             return null;
@@ -2938,6 +2960,7 @@ window.GraphRenderer = {
         const graphLinkData = getDataValue('graphLink');
         const rawReferenceValue = getDataValue('graphReference');
         const rawInfoValue = getDataValue('info');
+        const rawInfoHtml = getDataValue('infoHtml');
         const resolver = window.GraphReferenceResolver;
 
         const normalizeCandidate = (candidate) => {
@@ -2959,6 +2982,9 @@ window.GraphRenderer = {
                 if (typeof candidate === 'string') {
                     const trimmed = candidate.trim();
                     if (!trimmed) {
+                        return null;
+                    }
+                    if (this._isHtmlLikeString(trimmed)) {
                         return null;
                     }
 
@@ -3002,6 +3028,9 @@ window.GraphRenderer = {
                 if (!trimmed) {
                     return;
                 }
+                if (this._isHtmlLikeString(trimmed)) {
+                    return;
+                }
                 referenceString = trimmed;
                 candidateDescriptors.push({ value: trimmed, priority, kind, referenceString: trimmed });
                 return;
@@ -3022,7 +3051,9 @@ window.GraphRenderer = {
 
         pushCandidate(graphLinkData, 2, 'graphLink');
         pushCandidate(rawReferenceValue, 3, 'graphReference');
-        pushCandidate(rawInfoValue, 1, 'info');
+        if (!(rawInfoHtml && this._isHtmlLikeString(rawInfoValue))) {
+            pushCandidate(rawInfoValue, 1, 'info');
+        }
 
         const normalizedEntry = candidateDescriptors
             .map(descriptor => {
@@ -14246,9 +14277,14 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
 
         const resolver = window.GraphReferenceResolver;
         const nodeData = typeof node.data === 'function' ? node.data() : node.data || {};
+        const infoHtml = nodeData.infoHtml;
+        let safeInfo = nodeData.info;
+        if (infoHtml && this._isHtmlLikeString(safeInfo)) {
+            safeInfo = '';
+        }
         const rawReference = reference !== undefined && reference !== null
             ? reference
-            : (options.graphLink !== undefined ? options.graphLink : (nodeData.graphLink || nodeData.graphReference || nodeData.info));
+            : (options.graphLink !== undefined ? options.graphLink : (nodeData.graphLink || nodeData.graphReference || safeInfo));
 
         let normalizedLink = resolver && typeof resolver.normalize === 'function'
             ? resolver.normalize(rawReference)

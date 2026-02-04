@@ -195,6 +195,28 @@ window.GraphManager = {
         }
     },
 
+    _isHtmlLikeString: function(value) {
+        if (typeof value !== 'string') {
+            return false;
+        }
+        const trimmed = value.trim();
+        if (!trimmed || !/[<>]/.test(trimmed)) {
+            return false;
+        }
+        if (/<\s*\/?\s*[a-z][\s>]/i.test(trimmed) || /<\/\s*[a-z]/i.test(trimmed)) {
+            return true;
+        }
+        if (typeof DOMParser !== 'undefined') {
+            try {
+                const parsed = new DOMParser().parseFromString(trimmed, 'text/html');
+                return !!(parsed && parsed.body && parsed.body.children && parsed.body.children.length);
+            } catch (error) {
+                return false;
+            }
+        }
+        return false;
+    },
+
     _normalizeGraphLinkPayload: function(...candidates) {
         const resolver = (typeof window !== 'undefined' ? window.GraphReferenceResolver : null)
             || (typeof globalThis !== 'undefined' ? globalThis.GraphReferenceResolver : null);
@@ -237,6 +259,9 @@ window.GraphManager = {
             if (!resolver || typeof resolver.normalize !== 'function') {
                 return null;
             }
+            if (typeof candidate === 'string' && this._isHtmlLikeString(candidate)) {
+                return null;
+            }
             try {
                 const normalized = resolver.normalize(candidate);
                 if (normalized && normalized.key) {
@@ -263,6 +288,9 @@ window.GraphManager = {
             if (typeof candidate === 'string') {
                 const trimmed = candidate.trim();
                 if (trimmed) {
+                    if (this._isHtmlLikeString(trimmed)) {
+                        continue;
+                    }
                     return { source: inferSourceFromKey(trimmed), key: trimmed };
                 }
                 continue;
@@ -276,8 +304,12 @@ window.GraphManager = {
             let resolvedKey = '';
             for (const keyField of potentialKeyFields) {
                 const value = candidate[keyField];
-                if (typeof value === 'string' && value.trim()) {
-                    resolvedKey = value.trim();
+                if (typeof value === 'string') {
+                    const trimmed = value.trim();
+                    if (!trimmed || this._isHtmlLikeString(trimmed)) {
+                        continue;
+                    }
+                    resolvedKey = trimmed;
                     break;
                 }
             }
@@ -299,11 +331,16 @@ window.GraphManager = {
             return;
         }
 
+        let infoCandidate = data.info;
+        if (typeof infoCandidate === 'string' && data.infoHtml && this._isHtmlLikeString(infoCandidate)) {
+            infoCandidate = null;
+        }
+
         const normalized = this._normalizeGraphLinkPayload(
             data.graphLink,
             data.graphReference,
             data.reference,
-            data.info
+            infoCandidate
         );
 
         if (normalized) {
