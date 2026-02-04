@@ -743,6 +743,10 @@ window.GraphManager = {
                     // Support both Cytoscape-style ({ data: {...} }) and flattened node objects
                     const data = node.data || node;
 
+                    if (window.QuantickleUtils && typeof window.QuantickleUtils.normalizeNodeHtmlFields === 'function') {
+                        window.QuantickleUtils.normalizeNodeHtmlFields(data);
+                    }
+
                     if (data.info === undefined) data.info = '';
                     this._upgradeNodeGraphLink(data);
                     const isContainer = data.type === 'container' || data.isContainer;
