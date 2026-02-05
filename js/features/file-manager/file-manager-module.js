@@ -674,6 +674,12 @@ class FileManagerModule {
             if (data.graphLink !== undefined) {
                 delete data.graphLink;
             }
+            if (data.graphReference !== undefined) {
+                delete data.graphReference;
+            }
+            if (data.reference !== undefined) {
+                delete data.reference;
+            }
             return null;
         }
 
