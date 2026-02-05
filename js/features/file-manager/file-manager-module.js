@@ -668,8 +668,7 @@ class FileManagerModule {
         }
 
         const nodeType = data.type;
-        const isContainer = nodeType === 'container' || data.isContainer;
-        const allowsGraphLink = nodeType === 'graph' || isContainer;
+        const allowsGraphLink = nodeType === 'graph';
         if (!allowsGraphLink) {
             if (data.graphLink !== undefined) {
                 delete data.graphLink;
@@ -8013,6 +8012,15 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
                         flattened.type === 'container' ||
                         flattened.isContainer === true
                     ) {
+                        if (flattened.graphLink !== undefined) {
+                            delete flattened.graphLink;
+                        }
+                        if (flattened.graphReference !== undefined) {
+                            delete flattened.graphReference;
+                        }
+                        if (flattened.reference !== undefined) {
+                            delete flattened.reference;
+                        }
                         if (flattened.classes) {
                             const classList = flattened.classes
                                 .split(/\s+/)
@@ -8036,6 +8044,20 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
                 }
                 if (n && typeof n === 'object') {
                     const normalized = { ...n };
+                    if (
+                        normalized.type === 'container' ||
+                        normalized.isContainer === true
+                    ) {
+                        if (normalized.graphLink !== undefined) {
+                            delete normalized.graphLink;
+                        }
+                        if (normalized.graphReference !== undefined) {
+                            delete normalized.graphReference;
+                        }
+                        if (normalized.reference !== undefined) {
+                            delete normalized.reference;
+                        }
+                    }
                     if (normalized.type === 'text' && window.QuantickleUtils && typeof window.QuantickleUtils.ensureNodeCallout === 'function') {
                         window.QuantickleUtils.ensureNodeCallout(normalized, { defaultFormat: 'text', syncLegacy: false });
                     }

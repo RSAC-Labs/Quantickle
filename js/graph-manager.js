@@ -332,8 +332,7 @@ window.GraphManager = {
         }
 
         const nodeType = data.type;
-        const isContainer = nodeType === 'container' || data.isContainer;
-        const allowsGraphLink = nodeType === 'graph' || isContainer;
+        const allowsGraphLink = nodeType === 'graph';
         if (!allowsGraphLink) {
             if (data.graphLink !== undefined) {
                 delete data.graphLink;
@@ -804,6 +803,15 @@ window.GraphManager = {
                     this._upgradeNodeGraphLink(data);
                     const isContainer = data.type === 'container' || data.isContainer;
                     if (isContainer) {
+                        if (data.graphLink !== undefined) {
+                            delete data.graphLink;
+                        }
+                        if (data.graphReference !== undefined) {
+                            delete data.graphReference;
+                        }
+                        if (data.reference !== undefined) {
+                            delete data.reference;
+                        }
                         const classes = node.classes ? node.classes.split(/\s+/) : [];
                         if (!classes.includes('container')) {
                             classes.push('container');
