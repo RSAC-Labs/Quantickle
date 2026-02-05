@@ -331,6 +331,16 @@ window.GraphManager = {
             return;
         }
 
+        const nodeType = data.type;
+        const isContainer = nodeType === 'container' || data.isContainer;
+        const allowsGraphLink = nodeType === 'graph' || isContainer;
+        if (!allowsGraphLink) {
+            if (data.graphLink !== undefined) {
+                delete data.graphLink;
+            }
+            return;
+        }
+
         let infoCandidate = data.info;
         if (typeof infoCandidate === 'string' && data.infoHtml && this._isHtmlLikeString(infoCandidate)) {
             infoCandidate = null;
