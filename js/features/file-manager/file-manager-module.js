@@ -687,12 +687,16 @@ class FileManagerModule {
             infoCandidate = null;
         }
 
-        const normalized = this.normalizeGraphLinkPayload(
+        let normalized = this.normalizeGraphLinkPayload(
             data.graphLink,
             data.graphReference,
             data.reference,
             infoCandidate
         );
+
+        if (normalized && this._isHtmlLikeString(normalized.key)) {
+            normalized = null;
+        }
 
         if (normalized) {
             data.graphLink = normalized;
@@ -700,8 +704,16 @@ class FileManagerModule {
             if (typeof data.info !== 'string' || !data.info.trim()) {
                 data.info = normalized.key;
             }
-        } else if (data.graphLink !== undefined) {
-            delete data.graphLink;
+        } else {
+            if (data.graphLink !== undefined) {
+                delete data.graphLink;
+            }
+            if (data.graphReference !== undefined) {
+                delete data.graphReference;
+            }
+            if (data.reference !== undefined) {
+                delete data.reference;
+            }
         }
 
         return normalized;
