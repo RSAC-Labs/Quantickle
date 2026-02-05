@@ -3697,12 +3697,33 @@ window.GraphRenderer = {
             return false;
         }
 
+        const clearGraphLinkMetadata = (target) => {
+            if (!target || typeof target !== 'object') {
+                return;
+            }
+            if (target.graphLink !== undefined) {
+                delete target.graphLink;
+            }
+            if (target.graphReference !== undefined) {
+                delete target.graphReference;
+            }
+            if (target.reference !== undefined) {
+                delete target.reference;
+            }
+        };
+
         const applyTo = (target) => {
             if (!target || typeof target !== 'object') {
                 return false;
             }
 
             if (!this._sanitizeNodeGraphLinkMetadata(target)) {
+                clearGraphLinkMetadata(target);
+                return false;
+            }
+
+            if (target.type !== 'graph') {
+                clearGraphLinkMetadata(target);
                 return false;
             }
 
