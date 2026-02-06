@@ -47,6 +47,7 @@ const PASSTHROUGH_HEADERS = [
     'accept-language',
     'cache-control',
     'pragma',
+    'x-apikey',
     'sec-ch-ua',
     'sec-ch-ua-mobile',
     'sec-ch-ua-platform',

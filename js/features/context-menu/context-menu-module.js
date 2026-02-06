@@ -423,7 +423,7 @@ class ContextMenuModule {
         }
 
         const quickVTTargets = workingNodes.filter(n => this.isVirusTotalQuickQueryType(n?.data?.('type')));
-        const vtQuickAction = window.IntegrationsManager?.getModule?.('virustotal')?.actions?.quickUpdate;
+        const vtQuickAction = window.IntegrationsManager?.getModule?.('virustotal')?.actions?.quickAction;
         if (quickVTTargets.length > 0 && typeof vtQuickAction === 'function') {
             const label = quickVTTargets.length > 1
                 ? 'Quick VirusTotal info (selection)'
@@ -1636,7 +1636,7 @@ class ContextMenuModule {
         }
 
         this.notifications.show(`Querying VirusTotal for ${identifier}`, 'info');
-        Promise.resolve(window.IntegrationsManager.runAction('virustotal', 'importData', { source: 'context-menu', node }, {
+        Promise.resolve(window.IntegrationsManager.runAction('virustotal', 'enrichFromGraph', { source: 'context-menu', node }, {
             identifier,
             queryType
         }))
@@ -1675,7 +1675,7 @@ class ContextMenuModule {
         this.notifications.show(`Updating VirusTotal info for ${validNodes.length} node(s)`, 'info');
 
         try {
-            const result = await window.IntegrationsManager.runAction('virustotal', 'quickUpdate', {
+            const result = await window.IntegrationsManager.runAction('virustotal', 'quickAction', {
                 source: 'context-menu',
                 nodes: validNodes
             }, { nodes: validNodes });
