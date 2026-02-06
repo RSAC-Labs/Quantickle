@@ -640,14 +640,34 @@
                     }
 
                     if (updated) {
-                        const { detectionRatio } = calculateDetectionStats(infoData.data?.attributes?.last_analysis_stats || {});
+                        const attributes = infoData.data?.attributes || {};
+                        const { detectionRatio } = calculateDetectionStats(attributes.last_analysis_stats || {});
                         node.data('detectionRatio', detectionRatio);
                         const infoFields = {
                             'Detection Ratio': detectionRatio,
-                            'Last Analysis': infoData.data?.attributes?.last_analysis_date
-                                ? new Date(infoData.data.attributes.last_analysis_date * 1000).toISOString()
+                            'Last Analysis': attributes.last_analysis_date
+                                ? new Date(attributes.last_analysis_date * 1000).toISOString()
                                 : null
                         };
+
+                        if (nodeType === 'ipaddress') {
+                            if (attributes.country) {
+                                node.data('country', attributes.country);
+                                infoFields['Country'] = attributes.country;
+                            }
+                            if (attributes.asn) {
+                                node.data('asn', attributes.asn);
+                                infoFields['ASN'] = attributes.asn;
+                            }
+                            if (attributes.network) {
+                                node.data('network', attributes.network);
+                                infoFields['Network'] = attributes.network;
+                            }
+                            if (attributes.reputation !== undefined) {
+                                node.data('reputation', attributes.reputation);
+                                infoFields['Reputation'] = attributes.reputation;
+                            }
+                        }
                         const infoHtml = formatInfoHTML(infoFields);
                         const infoText = formatInfoText(infoFields);
                         node.data('info', infoText);
