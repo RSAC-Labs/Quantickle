@@ -879,13 +879,15 @@ window.IntegrationsManager = {
             .map(([key, list]) => `${key}: ${list.length}`)
             .join(', ');
 
-        const infoHtml = this.formatInfoHTML({
+        const infoFields = {
             Title: graphTitle,
             Source: feedTitle || meta.source || 'OPML RSS',
             URL: meta.url || '',
             Retrieved: meta.retrieved_at || new Date().toISOString(),
             IOCs: iocSummary || 'Detected via regex'
-        });
+        };
+        const infoHtml = this.formatInfoHTML(infoFields);
+        const infoText = this.formatInfoText(infoFields);
 
         const graphData = {
             title: graphTitle,
@@ -905,7 +907,7 @@ window.IntegrationsManager = {
                         label: graphTitle,
                         type: 'report',
                         url: meta.url || '',
-                        info: infoHtml,
+                        info: infoText,
                         infoHtml,
                         domain: 'cybersecurity'
                     }
@@ -3422,6 +3424,15 @@ window.IntegrationsManager = {
         return this.sanitizeHTML(tableHTML);
     },
 
+    // Format key-value pairs into a plain-text summary for node info
+    formatInfoText: function(infoObj) {
+        const stripTags = value => String(value).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+        const lines = Object.entries(infoObj)
+            .filter(([_, value]) => value !== undefined && value !== null && value !== '')
+            .map(([key, value]) => `${stripTags(key)}: ${stripTags(value)}`);
+        return lines.join('\n');
+    },
+
     // Get API key for VirusTotal from runtime storage
     getVirusTotalApiKey: function() {
         return this.runtime.virustotalApiKey;
@@ -3645,27 +3656,31 @@ window.IntegrationsManager = {
             const { malicious, detectionRatio } = this.calculateDetectionStats(attributes.last_analysis_stats);
             const creationDate = attributes.creation_date ? new Date(attributes.creation_date * 1000).toISOString() : null;
 
-            const infoHtml = this.formatInfoHTML({
+            const infoFields = {
                 'Detection Ratio': detectionRatio,
                 'Subdomains': subdomainList,
                 'Sibling Domains': siblingList,
                 'Creation Date': creationDate
-            });
+            };
+            const infoHtml = this.formatInfoHTML(infoFields);
+            const infoText = this.formatInfoText(infoFields);
             return {
                 detectionRatio,
                 malicious,
                 creationDate,
-                info: infoHtml,
+                info: infoText,
                 infoHtml
             };
         } catch (e) {
             console.error('Failed to fetch domain info:', e);
-            const infoHtml = this.formatInfoHTML({ 'Detection Ratio': '0/0' });
+            const infoFields = { 'Detection Ratio': '0/0' };
+            const infoHtml = this.formatInfoHTML(infoFields);
+            const infoText = this.formatInfoText(infoFields);
             return {
                 detectionRatio: '0/0',
                 malicious: 0,
                 creationDate: null,
-                info: infoHtml,
+                info: infoText,
                 infoHtml
             };
         }
@@ -3681,31 +3696,35 @@ window.IntegrationsManager = {
             const fileType = attributes.type_description || attributes.type_tag || '';
             const firstSubmissionDate = attributes.first_submission_date ? new Date(attributes.first_submission_date * 1000).toISOString() : null;
 
-            const infoHtml = this.formatInfoHTML({
+            const infoFields = {
                 'Detection Ratio': detectionRatio,
                 'File Name': fileName,
                 'File Type': fileType,
                 'First Seen': firstSubmissionDate
-            });
+            };
+            const infoHtml = this.formatInfoHTML(infoFields);
+            const infoText = this.formatInfoText(infoFields);
             return {
                 detectionRatio,
                 malicious,
                 fileName,
                 fileType,
                 firstSubmissionDate,
-                info: infoHtml,
+                info: infoText,
                 infoHtml
             };
         } catch (e) {
             console.error('Failed to fetch file info:', e);
-            const infoHtml = this.formatInfoHTML({ 'Detection Ratio': '0/0' });
+            const infoFields = { 'Detection Ratio': '0/0' };
+            const infoHtml = this.formatInfoHTML(infoFields);
+            const infoText = this.formatInfoText(infoFields);
             return {
                 detectionRatio: '0/0',
                 malicious: 0,
                 fileName: hash,
                 fileType: '',
                 firstSubmissionDate: null,
-                info: infoHtml,
+                info: infoText,
                 infoHtml
             };
         }
@@ -3720,28 +3739,32 @@ window.IntegrationsManager = {
             const country = attributes.country || null;
             const lastModDate = attributes.last_modification_date ? new Date(attributes.last_modification_date * 1000).toISOString() : null;
 
-            const infoHtml = this.formatInfoHTML({
+            const infoFields = {
                 'Detection Ratio': detectionRatio,
                 'Country': country,
                 'Last Seen': lastModDate
-            });
+            };
+            const infoHtml = this.formatInfoHTML(infoFields);
+            const infoText = this.formatInfoText(infoFields);
             return {
                 detectionRatio,
                 malicious,
                 country,
                 lastModDate,
-                info: infoHtml,
+                info: infoText,
                 infoHtml
             };
         } catch (e) {
             console.error('Failed to fetch IP info:', e);
-            const infoHtml = this.formatInfoHTML({ 'Detection Ratio': '0/0' });
+            const infoFields = { 'Detection Ratio': '0/0' };
+            const infoHtml = this.formatInfoHTML(infoFields);
+            const infoText = this.formatInfoText(infoFields);
             return {
                 detectionRatio: '0/0',
                 malicious: 0,
                 country: null,
                 lastModDate: null,
-                info: infoHtml,
+                info: infoText,
                 infoHtml
             };
         }
@@ -3757,23 +3780,27 @@ window.IntegrationsManager = {
                 ? new Date(attributes.last_analysis_date * 1000).toISOString()
                 : null;
 
-            const infoHtml = this.formatInfoHTML({
+            const infoFields = {
                 'Detection Ratio': detectionRatio,
                 'Last Analysis': lastAnalysisDate
-            });
+            };
+            const infoHtml = this.formatInfoHTML(infoFields);
+            const infoText = this.formatInfoText(infoFields);
             return {
                 detectionRatio,
                 lastAnalysisDate,
-                info: infoHtml,
+                info: infoText,
                 infoHtml
             };
         } catch (e) {
             console.error('Failed to fetch URL info:', e);
-            const infoHtml = this.formatInfoHTML({ 'Detection Ratio': '0/0' });
+            const infoFields = { 'Detection Ratio': '0/0' };
+            const infoHtml = this.formatInfoHTML(infoFields);
+            const infoText = this.formatInfoText(infoFields);
             return {
                 detectionRatio: '0/0',
                 lastAnalysisDate: null,
-                info: infoHtml,
+                info: infoText,
                 infoHtml
             };
         }
@@ -4306,14 +4333,16 @@ window.IntegrationsManager = {
         // Always label the node with the file hash to prevent label changes
         const fileLabel = fileHash;
         const { malicious: fileMalicious, detectionRatio: fileDetectionRatio } = this.calculateDetectionStats(attributes.last_analysis_stats);
-        const fileInfoHtml = this.formatInfoHTML({
+        const fileInfoFields = {
             'Detection Ratio': fileDetectionRatio,
             'File Name': attributes.meaningful_name || (attributes.names && attributes.names[0]) || fileHash,
             'File Type': attributes.type_description || attributes.type_tag || '',
             'File Size': attributes.size ? `${attributes.size} bytes` : null,
             'First Seen': attributes.first_submission_date ? new Date(attributes.first_submission_date * 1000).toISOString() : null,
             'Last Seen': attributes.last_submission_date ? new Date(attributes.last_submission_date * 1000).toISOString() : null
-        });
+        };
+        const fileInfoHtml = this.formatInfoHTML(fileInfoFields);
+        const fileInfoText = this.formatInfoText(fileInfoFields);
         const fileNodeData = {
             id: `file_${fileHash}`,
             label: fileLabel,
@@ -4328,11 +4357,11 @@ window.IntegrationsManager = {
             firstSeen: attributes.first_submission_date ? new Date(attributes.first_submission_date * 1000).toISOString() : null,
             lastSeen: attributes.last_submission_date ? new Date(attributes.last_submission_date * 1000).toISOString() : null,
             timestamp: attributes.first_submission_date ? new Date(attributes.first_submission_date * 1000).toISOString() : null,
-            info: fileInfoHtml,
+            info: fileInfoText,
             infoHtml: fileInfoHtml
         };
         const { id: fileNodeId, created: fileCreated } = await this.getOrCreateNode(cy, fileNodeData.id, fileNodeData, bulkOptions);
-        cy.getElementById(fileNodeId).data('info', fileInfoHtml);
+        cy.getElementById(fileNodeId).data('info', fileInfoText);
         cy.getElementById(fileNodeId).data('infoHtml', fileInfoHtml);
         if (fileCreated) {
             nodesAdded++;
@@ -4832,14 +4861,16 @@ window.IntegrationsManager = {
         const domainLabel = cleanDomain;
         const subdomainsList = (relationships.subdomains || []).map(s => s.id || s).join(', ');
         const siblingsList = (relationships.siblings || []).map(s => s.id || s).join(', ');
-        const domainInfoHtml = this.formatInfoHTML({
+        const domainInfoFields = {
             'Detection Ratio': domainDetectionRatio,
             'Reputation': attributes.reputation || 0,
             'Subdomains': subdomainsList,
             'Sibling Domains': siblingsList,
             'Creation Date': attributes.creation_date ? new Date(attributes.creation_date * 1000).toISOString() : null,
             'Last Seen': attributes.last_modification_date ? new Date(attributes.last_modification_date * 1000).toISOString() : null
-        });
+        };
+        const domainInfoHtml = this.formatInfoHTML(domainInfoFields);
+        const domainInfoText = this.formatInfoText(domainInfoFields);
 
         // Build the main domain node data
         const domainNodeData = {
@@ -4853,7 +4884,7 @@ window.IntegrationsManager = {
             detectionRatio: domainDetectionRatio,
             lastSeen: attributes.last_modification_date ? new Date(attributes.last_modification_date * 1000).toISOString() : null,
             timestamp: attributes.creation_date ? new Date(attributes.creation_date * 1000).toISOString() : null,
-            info: domainInfoHtml,
+            info: domainInfoText,
             infoHtml: domainInfoHtml
         };
 
@@ -4864,7 +4895,7 @@ window.IntegrationsManager = {
             domainNodeData,
             bulkOptions
         );
-        cy.getElementById(domainNodeId).data('info', domainInfoHtml);
+        cy.getElementById(domainNodeId).data('info', domainInfoText);
         cy.getElementById(domainNodeId).data('infoHtml', domainInfoHtml);
         if (domainCreated) {
             nodesAdded++;
@@ -5012,12 +5043,14 @@ window.IntegrationsManager = {
         const asnNumber = attributes.asn || attributes.as_number || null;
         const asnDisplay = asnNumber ? `AS${asnNumber}` : null;
         const asOwner = attributes.as_owner || attributes.asn_owner || null;
-        const ipInfoHtml = this.formatInfoHTML({
+        const ipInfoFields = {
             'Detection Ratio': ipDetectionRatio,
             'Country': attributes.country || null,
             'ASN': asnDisplay && asOwner ? `${asnDisplay} (${asOwner})` : asnDisplay || asOwner || null,
             'Last Seen': attributes.last_modification_date ? new Date(attributes.last_modification_date * 1000).toISOString() : null
-        });
+        };
+        const ipInfoHtml = this.formatInfoHTML(ipInfoFields);
+        const ipInfoText = this.formatInfoText(ipInfoFields);
         const ipNodeData = {
             id: `ip_${ipAddress.replace(/[^a-zA-Z0-9]/g, '_')}`,
             label: ipAddress,
@@ -5031,11 +5064,11 @@ window.IntegrationsManager = {
             asOwner: asOwner || null,
             lastSeen: attributes.last_modification_date ? new Date(attributes.last_modification_date * 1000).toISOString() : null,
             timestamp: attributes.last_modification_date ? new Date(attributes.last_modification_date * 1000).toISOString() : null,
-            info: ipInfoHtml,
+            info: ipInfoText,
             infoHtml: ipInfoHtml
         };
         const { id: ipNodeId, created: ipCreated } = await this.getOrCreateNode(cy, ipNodeData.id, ipNodeData, bulkOptions);
-        cy.getElementById(ipNodeId).data('info', ipInfoHtml);
+        cy.getElementById(ipNodeId).data('info', ipInfoText);
         cy.getElementById(ipNodeId).data('infoHtml', ipInfoHtml);
         if (ipCreated) {
             nodesAdded++;
@@ -5154,10 +5187,12 @@ window.IntegrationsManager = {
 
         const urlLabel = url;
         const { detectionRatio: urlDetectionRatio } = this.calculateDetectionStats(attributes.last_analysis_stats);
-        const urlInfoHtml = this.formatInfoHTML({
+        const urlInfoFields = {
             'Detection Ratio': urlDetectionRatio,
             'Last Analysis': attributes.last_analysis_date ? new Date(attributes.last_analysis_date * 1000).toISOString() : null
-        });
+        };
+        const urlInfoHtml = this.formatInfoHTML(urlInfoFields);
+        const urlInfoText = this.formatInfoText(urlInfoFields);
         const urlNodeData = {
             id: `url_${url.replace(/[^a-zA-Z0-9]/g, '_')}`,
             label: urlLabel,
@@ -5166,11 +5201,11 @@ window.IntegrationsManager = {
             size: 40,
             url: url,
             detectionRatio: urlDetectionRatio,
-            info: urlInfoHtml,
+            info: urlInfoText,
             infoHtml: urlInfoHtml
         };
         const { id: urlNodeId, created: urlCreated } = await this.getOrCreateNode(cy, urlNodeData.id, urlNodeData, bulkOptions);
-        cy.getElementById(urlNodeId).data('info', urlInfoHtml);
+        cy.getElementById(urlNodeId).data('info', urlInfoText);
         cy.getElementById(urlNodeId).data('infoHtml', urlInfoHtml);
         if (urlCreated) {
             nodesAdded++;

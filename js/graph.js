@@ -2916,6 +2916,28 @@ window.GraphRenderer = {
         return fetchOptions;
     },
 
+    _isHtmlLikeString(value) {
+        if (typeof value !== 'string') {
+            return false;
+        }
+        const trimmed = value.trim();
+        if (!trimmed || !/[<>]/.test(trimmed)) {
+            return false;
+        }
+        if (/<\s*\/?\s*[a-z][\s>]/i.test(trimmed) || /<\/\s*[a-z]/i.test(trimmed)) {
+            return true;
+        }
+        if (typeof DOMParser !== 'undefined') {
+            try {
+                const parsed = new DOMParser().parseFromString(trimmed, 'text/html');
+                return !!(parsed && parsed.body && parsed.body.children && parsed.body.children.length);
+            } catch (error) {
+                return false;
+            }
+        }
+        return false;
+    },
+
     extractGraphReferenceFromNode(node) {
         if (!node) {
             return null;
@@ -2938,6 +2960,7 @@ window.GraphRenderer = {
         const graphLinkData = getDataValue('graphLink');
         const rawReferenceValue = getDataValue('graphReference');
         const rawInfoValue = getDataValue('info');
+        const rawInfoHtml = getDataValue('infoHtml');
         const resolver = window.GraphReferenceResolver;
 
         const normalizeCandidate = (candidate) => {
@@ -2959,6 +2982,9 @@ window.GraphRenderer = {
                 if (typeof candidate === 'string') {
                     const trimmed = candidate.trim();
                     if (!trimmed) {
+                        return null;
+                    }
+                    if (this._isHtmlLikeString(trimmed)) {
                         return null;
                     }
 
@@ -3002,6 +3028,9 @@ window.GraphRenderer = {
                 if (!trimmed) {
                     return;
                 }
+                if (this._isHtmlLikeString(trimmed)) {
+                    return;
+                }
                 referenceString = trimmed;
                 candidateDescriptors.push({ value: trimmed, priority, kind, referenceString: trimmed });
                 return;
@@ -3022,7 +3051,9 @@ window.GraphRenderer = {
 
         pushCandidate(graphLinkData, 2, 'graphLink');
         pushCandidate(rawReferenceValue, 3, 'graphReference');
-        pushCandidate(rawInfoValue, 1, 'info');
+        if (!(rawInfoHtml && this._isHtmlLikeString(rawInfoValue))) {
+            pushCandidate(rawInfoValue, 1, 'info');
+        }
 
         const normalizedEntry = candidateDescriptors
             .map(descriptor => {
@@ -3657,13 +3688,42 @@ window.GraphRenderer = {
         }
 
         const data = this._getElementDataObject(node);
+        if (!this._sanitizeNodeGraphLinkMetadata(data)) {
+            return false;
+        }
+
         const currentId = typeof data.id === 'string' ? data.id : (typeof node.id === 'string' ? node.id : null);
         if (!currentId || currentId !== nodeId) {
             return false;
         }
 
+        const clearGraphLinkMetadata = (target) => {
+            if (!target || typeof target !== 'object') {
+                return;
+            }
+            if (target.graphLink !== undefined) {
+                delete target.graphLink;
+            }
+            if (target.graphReference !== undefined) {
+                delete target.graphReference;
+            }
+            if (target.reference !== undefined) {
+                delete target.reference;
+            }
+        };
+
         const applyTo = (target) => {
             if (!target || typeof target !== 'object') {
+                return false;
+            }
+
+            if (!this._sanitizeNodeGraphLinkMetadata(target)) {
+                clearGraphLinkMetadata(target);
+                return false;
+            }
+
+            if (target.type !== 'graph') {
+                clearGraphLinkMetadata(target);
                 return false;
             }
 
@@ -3680,14 +3740,7 @@ window.GraphRenderer = {
             return true;
         };
 
-        if (node && typeof node === 'object') {
-            if (node.data && typeof node.data === 'object') {
-                return applyTo(node.data);
-            }
-            return applyTo(node);
-        }
-
-        return false;
+        return applyTo(data);
     },
 
     _applySavedGraphLinkToSnapshot(nodeId, payload) {
@@ -3711,6 +3764,10 @@ window.GraphRenderer = {
 
             let changed = false;
             graph.nodes.forEach(node => {
+                const data = (node && node.data && typeof node.data === 'object') ? node.data : node;
+                if (!this._sanitizeNodeGraphLinkMetadata(data)) {
+                    changed = true;
+                }
                 if (this._applySavedGraphLinkToNode(node, nodeId, payload)) {
                     changed = true;
                 }
@@ -3737,6 +3794,13 @@ window.GraphRenderer = {
             if (!collection || !Array.isArray(collection.nodes)) {
                 return;
             }
+
+            collection.nodes.forEach(node => {
+                const data = (node && node.data && typeof node.data === 'object') ? node.data : node;
+                if (!this._sanitizeNodeGraphLinkMetadata(data)) {
+                    updated = true;
+                }
+            });
 
             if (collection.nodes.some(node => this._applySavedGraphLinkToNode(node, nodeId, payload))) {
                 updated = true;
@@ -3848,6 +3912,8 @@ window.GraphRenderer = {
             return false;
         }
 
+        this._sanitizeGraphLinkMetadataInGraph(clonedGraph);
+
         this.resetViewportBeforeGraphReload();
 
         const hasAbsolutePositions = this.graphDataHasAbsolutePositions(clonedGraph);
@@ -3903,6 +3969,7 @@ window.GraphRenderer = {
 
             if (window.GraphManager) {
                 const managerGraph = this.cloneGraphData(graphData) || this.cloneGraphData(clonedGraph);
+                this._sanitizeGraphLinkMetadataInGraph(managerGraph);
                 window.GraphManager.currentGraph = managerGraph;
                 if (typeof window.GraphManager.updateGraphUI === 'function') {
                     window.GraphManager.updateGraphUI();
@@ -4016,6 +4083,8 @@ window.GraphRenderer = {
             return false;
         }
 
+        this._sanitizeGraphLinkMetadataInGraph(clonedGraph);
+
         this.resetViewportBeforeGraphReload();
 
         const fallbackElements = snapshot.graphElementsFallback
@@ -4023,6 +4092,7 @@ window.GraphRenderer = {
             || snapshot.cyFallback;
 
         if (fallbackElements) {
+            this._sanitizeGraphLinkMetadataInGraph(fallbackElements);
             this.hydrateGraphWithFallback(clonedGraph, fallbackElements);
         }
 
@@ -4094,6 +4164,7 @@ window.GraphRenderer = {
                     : (window.DataManager && typeof window.DataManager.getGraphData === 'function'
                         ? window.DataManager.getGraphData()
                         : this.cloneGraphData(clonedGraph));
+                this._sanitizeGraphLinkMetadataInGraph(managerGraph);
                 if (fallbackElements) {
                     this.hydrateGraphWithFallback(managerGraph, fallbackElements);
                 }
@@ -4154,6 +4225,46 @@ window.GraphRenderer = {
         } finally {
             ensureLayoutRelease();
         }
+    },
+
+    _sanitizeNodeGraphLinkMetadata(nodeData) {
+        if (!nodeData || typeof nodeData !== 'object') {
+            return false;
+        }
+
+        const nodeType = nodeData.type;
+        const isContainer = nodeType === 'container' || nodeData.isContainer;
+        const allowsGraphLink = nodeType === 'graph' || isContainer;
+
+        if (!allowsGraphLink) {
+            if (nodeData.graphLink !== undefined) {
+                delete nodeData.graphLink;
+            }
+            if (nodeData.graphReference !== undefined) {
+                delete nodeData.graphReference;
+            }
+            if (nodeData.reference !== undefined) {
+                delete nodeData.reference;
+            }
+        }
+
+        return allowsGraphLink;
+    },
+
+    _sanitizeGraphLinkMetadataInGraph(graph) {
+        if (!graph || !Array.isArray(graph.nodes)) {
+            return false;
+        }
+
+        let changed = false;
+        graph.nodes.forEach(node => {
+            const data = (node && node.data && typeof node.data === 'object') ? node.data : node;
+            if (!this._sanitizeNodeGraphLinkMetadata(data)) {
+                changed = true;
+            }
+        });
+
+        return changed;
     },
     // Graph search state
     searchOverlay: null,
@@ -14246,9 +14357,14 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
 
         const resolver = window.GraphReferenceResolver;
         const nodeData = typeof node.data === 'function' ? node.data() : node.data || {};
+        const infoHtml = nodeData.infoHtml;
+        let safeInfo = nodeData.info;
+        if (infoHtml && this._isHtmlLikeString(safeInfo)) {
+            safeInfo = '';
+        }
         const rawReference = reference !== undefined && reference !== null
             ? reference
-            : (options.graphLink !== undefined ? options.graphLink : (nodeData.graphLink || nodeData.graphReference || nodeData.info));
+            : (options.graphLink !== undefined ? options.graphLink : (nodeData.graphLink || nodeData.graphReference || safeInfo));
 
         let normalizedLink = resolver && typeof resolver.normalize === 'function'
             ? resolver.normalize(rawReference)

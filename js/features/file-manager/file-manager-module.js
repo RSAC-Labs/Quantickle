@@ -528,6 +528,28 @@ class FileManagerModule {
         return value;
     }
 
+    _isHtmlLikeString(value) {
+        if (typeof value !== 'string') {
+            return false;
+        }
+        const trimmed = value.trim();
+        if (!trimmed || !/[<>]/.test(trimmed)) {
+            return false;
+        }
+        if (/<\s*\/?\s*[a-z][\s>]/i.test(trimmed) || /<\/\s*[a-z]/i.test(trimmed)) {
+            return true;
+        }
+        if (typeof DOMParser !== 'undefined') {
+            try {
+                const parsed = new DOMParser().parseFromString(trimmed, 'text/html');
+                return !!(parsed && parsed.body && parsed.body.children && parsed.body.children.length);
+            } catch (error) {
+                return false;
+            }
+        }
+        return false;
+    }
+
     normalizeGraphLinkPayload(...candidates) {
         const resolver = (typeof window !== 'undefined' ? window.GraphReferenceResolver : null)
             || (typeof globalThis !== 'undefined' ? globalThis.GraphReferenceResolver : null);
@@ -570,9 +592,15 @@ class FileManagerModule {
             if (!resolver || typeof resolver.normalize !== 'function') {
                 return null;
             }
+            if (typeof candidate === 'string' && this._isHtmlLikeString(candidate)) {
+                return null;
+            }
             try {
                 const normalized = resolver.normalize(candidate);
                 if (normalized && normalized.key) {
+                    if (this._isHtmlLikeString(normalized.key)) {
+                        return null;
+                    }
                     const resolvedSource = normalizeSourceValue(normalized.source)
                         || inferSourceFromKey(normalized.key);
                     return { source: resolvedSource, key: normalized.key };
@@ -596,6 +624,9 @@ class FileManagerModule {
             if (typeof candidate === 'string') {
                 const trimmed = candidate.trim();
                 if (trimmed) {
+                    if (this._isHtmlLikeString(trimmed)) {
+                        continue;
+                    }
                     return { source: inferSourceFromKey(trimmed), key: trimmed };
                 }
                 continue;
@@ -609,8 +640,12 @@ class FileManagerModule {
             let resolvedKey = '';
             for (const keyField of possibleKeyFields) {
                 const value = candidate[keyField];
-                if (typeof value === 'string' && value.trim()) {
-                    resolvedKey = value.trim();
+                if (typeof value === 'string') {
+                    const trimmed = value.trim();
+                    if (!trimmed || this._isHtmlLikeString(trimmed)) {
+                        continue;
+                    }
+                    resolvedKey = trimmed;
                     break;
                 }
             }
@@ -632,12 +667,36 @@ class FileManagerModule {
             return null;
         }
 
-        const normalized = this.normalizeGraphLinkPayload(
+        const nodeType = data.type;
+        const allowsGraphLink = nodeType === 'graph';
+        if (!allowsGraphLink) {
+            if (data.graphLink !== undefined) {
+                delete data.graphLink;
+            }
+            if (data.graphReference !== undefined) {
+                delete data.graphReference;
+            }
+            if (data.reference !== undefined) {
+                delete data.reference;
+            }
+            return null;
+        }
+
+        let infoCandidate = data.info;
+        if (typeof infoCandidate === 'string' && data.infoHtml && this._isHtmlLikeString(infoCandidate)) {
+            infoCandidate = null;
+        }
+
+        let normalized = this.normalizeGraphLinkPayload(
             data.graphLink,
             data.graphReference,
             data.reference,
-            data.info
+            infoCandidate
         );
+
+        if (normalized && this._isHtmlLikeString(normalized.key)) {
+            normalized = null;
+        }
 
         if (normalized) {
             data.graphLink = normalized;
@@ -645,8 +704,16 @@ class FileManagerModule {
             if (typeof data.info !== 'string' || !data.info.trim()) {
                 data.info = normalized.key;
             }
-        } else if (data.graphLink !== undefined) {
-            delete data.graphLink;
+        } else {
+            if (data.graphLink !== undefined) {
+                delete data.graphLink;
+            }
+            if (data.graphReference !== undefined) {
+                delete data.graphReference;
+            }
+            if (data.reference !== undefined) {
+                delete data.reference;
+            }
         }
 
         return normalized;
@@ -1883,41 +1950,91 @@ class FileManagerModule {
                 };
             };
 
+            const abortErrorCode = typeof DOMException !== 'undefined' ? DOMException.ABORT_ERR : 20;
+            const isUserCancellation = (error) =>
+                error?.name === 'AbortError' ||
+                error?.code === abortErrorCode;
+
+            const isStaleHandleError = (error) => {
+                if (!error) {
+                    return false;
+                }
+                const name = typeof error.name === 'string' ? error.name : '';
+                const message = typeof error.message === 'string' ? error.message : '';
+                const code = typeof error.code === 'number' ? error.code : null;
+                const normalizedMessage = message.toLowerCase();
+
+                return (
+                    name === 'InvalidStateError' ||
+                    name === 'NotFoundError' ||
+                    code === 11 ||
+                    normalizedMessage.includes('stale') ||
+                    normalizedMessage.includes('file handle') ||
+                    normalizedMessage.includes('no longer usable') ||
+                    normalizedMessage.includes('not found')
+                );
+            };
+
+            const saveWithHandle = async (handle) => {
+                const chosenName = handle?.name || suggestedFilename;
+                pendingPayload = preparePayload(chosenName);
+                const writable = await handle.createWritable();
+                await writable.write(new Blob([pendingPayload.payload], { type: this.config.mimeType }));
+                await writable.close();
+                return pendingPayload;
+            };
+
+            const saveWithPicker = async () => {
+                let startIn;
+                if (window.WorkspaceManager && WorkspaceManager.handle) {
+                    startIn = await WorkspaceManager.getSubDirHandle('graphs');
+                }
+                const handle = await window.showSaveFilePicker({
+                    suggestedName: suggestedFilename,
+                    types: [{
+                        description: 'Quantickle Graph',
+                        accept: { 'application/quantickle-graph': [this.config.fileExtension] }
+                    }],
+                    startIn
+                });
+                return saveWithHandle(handle);
+            };
+
             let savedPayload = null;
             let pendingPayload = null;
 
             if (window.showSaveFilePicker) {
                 try {
-                    let startIn;
-                    if (window.WorkspaceManager && WorkspaceManager.handle) {
-                        startIn = await WorkspaceManager.getSubDirHandle('graphs');
-                    }
-                    const handle = await window.showSaveFilePicker({
-                        suggestedName: suggestedFilename,
-                        types: [{
-                            description: 'Quantickle Graph',
-                            accept: { 'application/quantickle-graph': [this.config.fileExtension] }
-                        }],
-                        startIn
-                    });
-                    const chosenName = handle?.name || suggestedFilename;
-                    pendingPayload = preparePayload(chosenName);
-                    const writable = await handle.createWritable();
-                    await writable.write(new Blob([pendingPayload.payload], { type: this.config.mimeType }));
-                    await writable.close();
-                    savedPayload = pendingPayload;
+                    savedPayload = await saveWithPicker();
                 } catch (pickerError) {
-                    const abortErrorCode = typeof DOMException !== 'undefined' ? DOMException.ABORT_ERR : 20;
-                    const isUserCancellation =
-                        pickerError?.name === 'AbortError' ||
-                        pickerError?.code === abortErrorCode;
-
-                    if (isUserCancellation) {
+                    if (isUserCancellation(pickerError)) {
                         this.notifications?.show?.('Graph save cancelled', 'info');
                         return;
                     }
 
-                    console.warn('showSaveFilePicker failed, falling back to alternate save mechanisms.', pickerError);
+                    if (isStaleHandleError(pickerError)) {
+                        try {
+                            savedPayload = await saveWithPicker();
+                        } catch (retryError) {
+                            if (isUserCancellation(retryError)) {
+                                this.notifications?.show?.('Graph save cancelled', 'info');
+                                return;
+                            }
+
+                            if (isStaleHandleError(retryError)) {
+                                this.notifications?.show?.(
+                                    'The selected file handle appears to be stale. Please reselect the file location and try saving again.',
+                                    'error'
+                                );
+                                return;
+                            }
+
+                            console.warn('showSaveFilePicker failed after retrying a stale handle.', retryError);
+                        }
+                    } else {
+                        console.warn('showSaveFilePicker failed, falling back to alternate save mechanisms.', pickerError);
+                    }
+
                 }
             }
 
@@ -7925,15 +8042,33 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
                     }
 
                     this.mergeLegacyTextNodeStyles(flattened);
+                    this.ensureNodeGraphLink(flattened);
 
                     return flattened;
                 }
                 if (n && typeof n === 'object') {
                     const normalized = { ...n };
+                    if (
+                        normalized.type === 'container' ||
+                        normalized.isContainer === true
+                    ) {
+                        if (normalized.classes) {
+                            const classList = normalized.classes
+                                .split(/\s+/)
+                                .filter(Boolean);
+                            if (!classList.includes('container')) {
+                                classList.push('container');
+                                normalized.classes = classList.join(' ');
+                            }
+                        } else {
+                            normalized.classes = 'container';
+                        }
+                    }
                     if (normalized.type === 'text' && window.QuantickleUtils && typeof window.QuantickleUtils.ensureNodeCallout === 'function') {
                         window.QuantickleUtils.ensureNodeCallout(normalized, { defaultFormat: 'text', syncLegacy: false });
                     }
                     this.mergeLegacyTextNodeStyles(normalized);
+                    this.ensureNodeGraphLink(normalized);
                     return normalized;
                 }
                 return n;

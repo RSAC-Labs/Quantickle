@@ -195,6 +195,28 @@ window.GraphManager = {
         }
     },
 
+    _isHtmlLikeString: function(value) {
+        if (typeof value !== 'string') {
+            return false;
+        }
+        const trimmed = value.trim();
+        if (!trimmed || !/[<>]/.test(trimmed)) {
+            return false;
+        }
+        if (/<\s*\/?\s*[a-z][\s>]/i.test(trimmed) || /<\/\s*[a-z]/i.test(trimmed)) {
+            return true;
+        }
+        if (typeof DOMParser !== 'undefined') {
+            try {
+                const parsed = new DOMParser().parseFromString(trimmed, 'text/html');
+                return !!(parsed && parsed.body && parsed.body.children && parsed.body.children.length);
+            } catch (error) {
+                return false;
+            }
+        }
+        return false;
+    },
+
     _normalizeGraphLinkPayload: function(...candidates) {
         const resolver = (typeof window !== 'undefined' ? window.GraphReferenceResolver : null)
             || (typeof globalThis !== 'undefined' ? globalThis.GraphReferenceResolver : null);
@@ -237,9 +259,15 @@ window.GraphManager = {
             if (!resolver || typeof resolver.normalize !== 'function') {
                 return null;
             }
+            if (typeof candidate === 'string' && this._isHtmlLikeString(candidate)) {
+                return null;
+            }
             try {
                 const normalized = resolver.normalize(candidate);
                 if (normalized && normalized.key) {
+                    if (this._isHtmlLikeString(normalized.key)) {
+                        return null;
+                    }
                     const resolvedSource = normalizeSourceValue(normalized.source)
                         || inferSourceFromKey(normalized.key);
                     return { source: resolvedSource, key: normalized.key };
@@ -263,6 +291,9 @@ window.GraphManager = {
             if (typeof candidate === 'string') {
                 const trimmed = candidate.trim();
                 if (trimmed) {
+                    if (this._isHtmlLikeString(trimmed)) {
+                        continue;
+                    }
                     return { source: inferSourceFromKey(trimmed), key: trimmed };
                 }
                 continue;
@@ -276,8 +307,12 @@ window.GraphManager = {
             let resolvedKey = '';
             for (const keyField of potentialKeyFields) {
                 const value = candidate[keyField];
-                if (typeof value === 'string' && value.trim()) {
-                    resolvedKey = value.trim();
+                if (typeof value === 'string') {
+                    const trimmed = value.trim();
+                    if (!trimmed || this._isHtmlLikeString(trimmed)) {
+                        continue;
+                    }
+                    resolvedKey = trimmed;
                     break;
                 }
             }
@@ -299,12 +334,36 @@ window.GraphManager = {
             return;
         }
 
-        const normalized = this._normalizeGraphLinkPayload(
+        const nodeType = data.type;
+        const allowsGraphLink = nodeType === 'graph';
+        if (!allowsGraphLink) {
+            if (data.graphLink !== undefined) {
+                delete data.graphLink;
+            }
+            if (data.graphReference !== undefined) {
+                delete data.graphReference;
+            }
+            if (data.reference !== undefined) {
+                delete data.reference;
+            }
+            return;
+        }
+
+        let infoCandidate = data.info;
+        if (typeof infoCandidate === 'string' && data.infoHtml && this._isHtmlLikeString(infoCandidate)) {
+            infoCandidate = null;
+        }
+
+        let normalized = this._normalizeGraphLinkPayload(
             data.graphLink,
             data.graphReference,
             data.reference,
-            data.info
+            infoCandidate
         );
+
+        if (normalized && this._isHtmlLikeString(normalized.key)) {
+            normalized = null;
+        }
 
         if (normalized) {
             data.graphLink = normalized;
@@ -312,8 +371,16 @@ window.GraphManager = {
             if (typeof data.info !== 'string' || !data.info.trim()) {
                 data.info = normalized.key;
             }
-        } else if (data.graphLink !== undefined) {
-            delete data.graphLink;
+        } else {
+            if (data.graphLink !== undefined) {
+                delete data.graphLink;
+            }
+            if (data.graphReference !== undefined) {
+                delete data.graphReference;
+            }
+            if (data.reference !== undefined) {
+                delete data.reference;
+            }
         }
     },
 
@@ -743,10 +810,23 @@ window.GraphManager = {
                     // Support both Cytoscape-style ({ data: {...} }) and flattened node objects
                     const data = node.data || node;
 
+                    if (window.QuantickleUtils && typeof window.QuantickleUtils.normalizeNodeHtmlFields === 'function') {
+                        window.QuantickleUtils.normalizeNodeHtmlFields(data);
+                    }
+
                     if (data.info === undefined) data.info = '';
                     this._upgradeNodeGraphLink(data);
                     const isContainer = data.type === 'container' || data.isContainer;
                     if (isContainer) {
+                        if (data.graphLink !== undefined) {
+                            delete data.graphLink;
+                        }
+                        if (data.graphReference !== undefined) {
+                            delete data.graphReference;
+                        }
+                        if (data.reference !== undefined) {
+                            delete data.reference;
+                        }
                         const classes = node.classes ? node.classes.split(/\s+/) : [];
                         if (!classes.includes('container')) {
                             classes.push('container');
