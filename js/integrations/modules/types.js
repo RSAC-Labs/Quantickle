@@ -29,7 +29,7 @@
 
 /**
  * @typedef {Object} IntegrationStatusService
- * @property {(message: string, level?: 'info'|'success'|'warning'|'error') => void} notify
+ * @property {(message: string|{message: string, level?: 'info'|'success'|'warning'|'error', statusId?: string, toast?: boolean}, level?: 'info'|'success'|'warning'|'error') => void} notify
  */
 
 /**
