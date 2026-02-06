@@ -3378,6 +3378,10 @@ window.testVirusTotalConnection = async function() {
         console.error('VirusTotal connection test failed:', error);
         if (error.message.includes('Invalid VirusTotal API key')) {
             window.IntegrationsManager.updateStatus('virustotalStatus', 'Invalid API key', 'error');
+        } else if (error.message.includes('VirusTotal proxy blocked')) {
+            window.IntegrationsManager.updateStatus('virustotalStatus', 'VirusTotal proxy blocked (check proxy allowlist)', 'error');
+        } else if (error.message.includes('VirusTotal access forbidden')) {
+            window.IntegrationsManager.updateStatus('virustotalStatus', 'VirusTotal access forbidden (check account permissions)', 'error');
         } else if (error.message.includes('VirusTotal API quota exceeded')) {
             window.IntegrationsManager.updateStatus('virustotalStatus', 'API quota exceeded', 'error');
         } else {
