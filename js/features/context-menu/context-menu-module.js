@@ -423,7 +423,8 @@ class ContextMenuModule {
         }
 
         const quickVTTargets = workingNodes.filter(n => this.isVirusTotalQuickQueryType(n?.data?.('type')));
-        if (quickVTTargets.length > 0 && window.IntegrationsManager?.updateVirusTotalInfoForNodes) {
+        const vtQuickAction = window.IntegrationsManager?.getModule?.('virustotal')?.actions?.quickUpdate;
+        if (quickVTTargets.length > 0 && typeof vtQuickAction === 'function') {
             const label = quickVTTargets.length > 1
                 ? 'Quick VirusTotal info (selection)'
                 : 'Quick VirusTotal info';
@@ -1602,7 +1603,7 @@ class ContextMenuModule {
      */
     queryVirusTotal(node, nodeType) {
         if (!window.IntegrationsManager ||
-            typeof window.IntegrationsManager.importVirusTotalData !== 'function') {
+            typeof window.IntegrationsManager.runAction !== 'function') {
             this.notifications.show('VirusTotal integration not available', 'error');
             return;
         }
@@ -1635,7 +1636,10 @@ class ContextMenuModule {
         }
 
         this.notifications.show(`Querying VirusTotal for ${identifier}`, 'info');
-        window.IntegrationsManager.importVirusTotalData(identifier, queryType)
+        Promise.resolve(window.IntegrationsManager.runAction('virustotal', 'importData', { source: 'context-menu', node }, {
+            identifier,
+            queryType
+        }))
             .then(() => this.notifications.show('VirusTotal query completed', 'success'))
             .catch(err => {
                 const isNotFound = err && err.message && err.message.toLowerCase().includes('not found in virustotal');
@@ -1655,7 +1659,7 @@ class ContextMenuModule {
      */
     async quickVirusTotalInfo(nodes) {
         if (!window.IntegrationsManager ||
-            typeof window.IntegrationsManager.updateVirusTotalInfoForNodes !== 'function') {
+            typeof window.IntegrationsManager.runAction !== 'function') {
             this.notifications.show('VirusTotal integration not available', 'error');
             return;
         }
@@ -1671,7 +1675,10 @@ class ContextMenuModule {
         this.notifications.show(`Updating VirusTotal info for ${validNodes.length} node(s)`, 'info');
 
         try {
-            const result = await window.IntegrationsManager.updateVirusTotalInfoForNodes(validNodes);
+            const result = await window.IntegrationsManager.runAction('virustotal', 'quickUpdate', {
+                source: 'context-menu',
+                nodes: validNodes
+            }, { nodes: validNodes });
             const updated = result?.updated || 0;
             const skipped = (result?.skippedUnsupported || 0) + (result?.skippedWithData || 0);
             if (updated > 0) {
@@ -1693,16 +1700,24 @@ class ContextMenuModule {
 
     addDomainToVTBlocklist(node) {
         if (!window.IntegrationsManager ||
-            typeof window.IntegrationsManager.addToVTBlocklist !== 'function') {
+            typeof window.IntegrationsManager.runAction !== 'function') {
             this.notifications.show('VirusTotal integration not available', 'error');
             return;
         }
         const identifier = node.data('label') || node.id();
-        const result = window.IntegrationsManager.addToVTBlocklist(identifier);
-        if (result.added) {
-            this.notifications.show(`Added ${result.domain} to VirusTotal blocklist`, 'success');
-        } else {
-            this.notifications.show(`${result.domain} already in VirusTotal blocklist`, 'info');
+        try {
+            const result = window.IntegrationsManager.runAction('virustotal', 'addToBlocklist', {
+                source: 'context-menu',
+                node
+            }, { identifier });
+            if (result.added) {
+                this.notifications.show(`Added ${result.domain} to VirusTotal blocklist`, 'success');
+            } else {
+                this.notifications.show(`${result.domain} already in VirusTotal blocklist`, 'info');
+            }
+        } catch (error) {
+            console.error('VirusTotal blocklist update failed:', error);
+            this.notifications.show('Unable to update VirusTotal blocklist', 'error');
         }
     }
 
