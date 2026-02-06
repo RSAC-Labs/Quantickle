@@ -606,7 +606,11 @@
         };
 
         const updateVirusTotalInfoForNodes = async (nodes = []) => {
-            if (!Array.isArray(nodes) || nodes.length === 0) {
+            const nodeList = Array.isArray(nodes)
+                ? nodes
+                : (nodes && typeof nodes.forEach === 'function' ? Array.from(nodes) : []);
+
+            if (nodeList.length === 0) {
                 return { updated: 0, skipped: 0, failed: 0 };
             }
 
@@ -627,7 +631,7 @@
                 return Boolean(data?.detectionRatio || data?.vtData || data?.vtLastAnalysisStats || data?.vtPermalink);
             };
 
-            for (const node of nodes) {
+            for (const node of nodeList) {
                 if (!node || typeof node.data !== 'function') {
                     results.skipped++;
                     continue;
