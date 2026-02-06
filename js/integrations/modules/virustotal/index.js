@@ -619,7 +619,7 @@
                         const newData = infoData.domainInfo?.attributes?.last_analysis_stats || {};
                         node.data('vtLastAnalysisStats', newData);
                         updated = true;
-                    } else if (nodeType === 'ip') {
+                    } else if (nodeType === 'ipaddress') {
                         infoData = await fetchVirusTotalIPInfo(identifier);
                         const newData = infoData.data?.attributes?.last_analysis_stats || {};
                         node.data('vtLastAnalysisStats', newData);
@@ -1116,7 +1116,7 @@
                     const ipNodeData = {
                         id: `ip_${ip}`,
                         label: ip,
-                        type: 'ip',
+                        type: 'ipaddress',
                         color: '#50E3C2',
                         size: 30,
                         ipAddress: ip,
@@ -1379,7 +1379,7 @@
                     const ipNodeData = {
                         id: `ip_${ip}`,
                         label: ip,
-                        type: 'ip',
+                        type: 'ipaddress',
                         color: '#50E3C2',
                         size: 30,
                         ipAddress: ip,
@@ -1641,7 +1641,7 @@
             const ipNodeData = {
                 id: `ip_${ipAddress}`,
                 label: ipAddress,
-                type: 'ip',
+                type: 'ipaddress',
                 color: '#50E3C2',
                 size: 35,
                 ipAddress,
