@@ -73,7 +73,8 @@ window.IntegrationsManager = {
         opmlUpdatingListDisplay: false,
         opmlExistingGraphNames: new Set(),
         opmlExistingGraphCacheReady: false,
-        vtRelationshipForbiddenEndpoints: new Set()
+        vtRelationshipForbiddenEndpoints: new Set(),
+        integrationHosts: []
     },
 
     moduleRegistry: null,
@@ -217,6 +218,7 @@ window.IntegrationsManager = {
         await this.loadNeo4jServerConfig();
         await this.loadCirclMispServerConfig();
         await this.loadProxyAllowlist();
+        await this.loadIntegrationAllowlist();
         await this.loadOpmlSources();
         await this.initializeModuleRegistry();
         this.bindEvents();
@@ -325,6 +327,36 @@ window.IntegrationsManager = {
             this.runtime.proxyAllowlist = [];
             setTextareaState({ value: '', placeholder: 'Unable to load proxy allowlist.', error: true });
             setHelp('Unable to load proxy allowlist from the server. Check that config/proxy-allowlist.json is accessible.');
+        }
+    },
+
+    loadIntegrationAllowlist: async function() {
+        const fetchFn = (typeof window !== 'undefined' && typeof window.fetch === 'function')
+            ? window.fetch.bind(window)
+            : (typeof fetch === 'function' ? fetch : null);
+
+        if (!fetchFn) {
+            return;
+        }
+
+        try {
+            const response = await fetchFn('config/integration-allowlist.json', { cache: 'no-store' });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            const entries = Array.isArray(data?.allowlist) ? data.allowlist.map(entry => entry.toString()) : [];
+            const normalized = entries.map(entry => entry.trim().toLowerCase()).filter(Boolean);
+            const current = new Set((this.runtime.integrationHosts || []).map(host => host.toLowerCase()));
+            normalized.forEach(host => current.add(host));
+            this.runtime.integrationHosts = Array.from(current);
+
+            if (this.runtime.integrationHosts.length) {
+                console.info('Integration allowlist hosts loaded:', this.runtime.integrationHosts);
+            }
+        } catch (error) {
+            console.warn('Failed to load integration allowlist', error);
         }
     },
 
