@@ -525,9 +525,38 @@
                 const response = await services.network.fetch(fetchUrl, requestOptions);
 
                 if (!response.ok) {
-                    if (response.status === 401 || response.status === 403) {
+                    let responseBodyText = '';
+                    let responseBodyJson = null;
+                    try {
+                        const contentType = response.headers?.get?.('content-type') || '';
+                        if (contentType.includes('application/json')) {
+                            responseBodyJson = await response.json();
+                            responseBodyText = JSON.stringify(responseBodyJson);
+                        } else {
+                            responseBodyText = await response.text();
+                            try {
+                                responseBodyJson = JSON.parse(responseBodyText);
+                            } catch (_) {
+                                responseBodyJson = null;
+                            }
+                        }
+                    } catch (_) {
+                        responseBodyText = '';
+                        responseBodyJson = null;
+                    }
+
+                    if (response.status === 401) {
                         const error = new Error('Invalid VirusTotal API key');
                         error.status = response.status;
+                        throw error;
+                    } else if (response.status === 403) {
+                        const proxyBlocked = /host not allowed/i.test(responseBodyText) || /proxy|allowlist/i.test(responseBodyText);
+                        const errorMessage = proxyBlocked
+                            ? 'VirusTotal proxy blocked (check proxy allowlist)'
+                            : 'VirusTotal access forbidden (check account permissions)';
+                        const error = new Error(errorMessage);
+                        error.status = response.status;
+                        error.body = responseBodyJson || responseBodyText;
                         throw error;
                     } else if (response.status === 429) {
                         const error = new Error('VirusTotal API quota exceeded');
@@ -540,6 +569,7 @@
                     } else {
                         const error = new Error(`VirusTotal API request failed: ${response.status} ${response.statusText}`);
                         error.status = response.status;
+                        error.body = responseBodyJson || responseBodyText;
                         throw error;
                     }
                 }
