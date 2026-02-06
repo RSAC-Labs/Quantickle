@@ -76,6 +76,116 @@ window.IntegrationsManager = {
         vtRelationshipForbiddenEndpoints: new Set()
     },
 
+    moduleRegistry: null,
+    moduleServices: null,
+
+    createModuleServices: function() {
+        const fetchFn = (typeof window !== 'undefined' && typeof window.fetch === 'function')
+            ? window.fetch.bind(window)
+            : (typeof fetch === 'function' ? fetch : null);
+
+        return {
+            config: {
+                getRuntime: (key) => this.runtime?.[key],
+                setRuntime: (key, value) => {
+                    if (!this.runtime) {
+                        this.runtime = {};
+                    }
+                    this.runtime[key] = value;
+                },
+                getStorageKey: (key) => this.STORAGE_KEYS?.[key] || null
+            },
+            storage: {
+                getItem: (key) => {
+                    try {
+                        return localStorage.getItem(key);
+                    } catch (error) {
+                        console.warn('Storage getItem failed:', error);
+                        return null;
+                    }
+                },
+                setItem: (key, value) => {
+                    try {
+                        localStorage.setItem(key, value);
+                    } catch (error) {
+                        console.warn('Storage setItem failed:', error);
+                    }
+                },
+                removeItem: (key) => {
+                    try {
+                        localStorage.removeItem(key);
+                    } catch (error) {
+                        console.warn('Storage removeItem failed:', error);
+                    }
+                }
+            },
+            status: {
+                notify: (message, level = 'info') => {
+                    if (window.UI?.notifications?.show) {
+                        window.UI.notifications.show(message, level);
+                    }
+                }
+            },
+            graph: window.GraphServiceAdapter?.create?.() || null,
+            network: {
+                fetch: (...args) => {
+                    if (!fetchFn) {
+                        return Promise.reject(new Error('Fetch is not available'));
+                    }
+                    return fetchFn(...args);
+                }
+            }
+        };
+    },
+
+    initializeModuleRegistry: async function() {
+        if (!window.IntegrationModuleRegistry?.create) {
+            console.warn('Integration module registry not available');
+            return;
+        }
+
+        if (!this.moduleRegistry) {
+            this.moduleRegistry = window.IntegrationModuleRegistry.create();
+        }
+
+        this.moduleServices = this.createModuleServices();
+        this.registerDefaultModules();
+
+        if (this.moduleRegistry?.initAll) {
+            await this.moduleRegistry.initAll(this.moduleServices);
+        }
+    },
+
+    registerDefaultModules: function() {
+        if (!this.moduleRegistry?.register) {
+            return;
+        }
+
+        const manager = this;
+        const virusTotalModule = {
+            id: 'virustotal',
+            init: () => {},
+            actions: {
+                importData: (ctx, params) => manager.importVirusTotalData(params?.identifier, params?.queryType),
+                quickUpdate: (ctx, params) => manager.updateVirusTotalInfoForNodes(params?.nodes || []),
+                addToBlocklist: (ctx, params) => manager.addToVTBlocklist(params?.identifier)
+            }
+        };
+
+        this.moduleRegistry.register(virusTotalModule);
+    },
+
+    getModule: function(id) {
+        return this.moduleRegistry?.get?.(id) || null;
+    },
+
+    runAction: function(id, actionName, ctx, params) {
+        if (!this.moduleRegistry?.runAction) {
+            throw new Error('Integration module registry not initialized');
+        }
+        return this.moduleRegistry.runAction(id, actionName, ctx, params);
+    },
+
     createVirusTotalRelationshipTracker: function() {
         if (!this.runtime.vtRelationshipForbiddenEndpoints) {
             this.runtime.vtRelationshipForbiddenEndpoints = new Set();
@@ -146,6 +256,7 @@ window.IntegrationsManager = {
         await this.loadCirclMispServerConfig();
         await this.loadProxyAllowlist();
         await this.loadOpmlSources();
+        await this.initializeModuleRegistry();
         this.bindEvents();
     },
 
