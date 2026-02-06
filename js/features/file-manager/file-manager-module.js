@@ -8024,15 +8024,6 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
                         flattened.type === 'container' ||
                         flattened.isContainer === true
                     ) {
-                        if (flattened.graphLink !== undefined) {
-                            delete flattened.graphLink;
-                        }
-                        if (flattened.graphReference !== undefined) {
-                            delete flattened.graphReference;
-                        }
-                        if (flattened.reference !== undefined) {
-                            delete flattened.reference;
-                        }
                         if (flattened.classes) {
                             const classList = flattened.classes
                                 .split(/\s+/)
@@ -8051,6 +8042,7 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
                     }
 
                     this.mergeLegacyTextNodeStyles(flattened);
+                    this.ensureNodeGraphLink(flattened);
 
                     return flattened;
                 }
@@ -8060,20 +8052,23 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
                         normalized.type === 'container' ||
                         normalized.isContainer === true
                     ) {
-                        if (normalized.graphLink !== undefined) {
-                            delete normalized.graphLink;
-                        }
-                        if (normalized.graphReference !== undefined) {
-                            delete normalized.graphReference;
-                        }
-                        if (normalized.reference !== undefined) {
-                            delete normalized.reference;
+                        if (normalized.classes) {
+                            const classList = normalized.classes
+                                .split(/\s+/)
+                                .filter(Boolean);
+                            if (!classList.includes('container')) {
+                                classList.push('container');
+                                normalized.classes = classList.join(' ');
+                            }
+                        } else {
+                            normalized.classes = 'container';
                         }
                     }
                     if (normalized.type === 'text' && window.QuantickleUtils && typeof window.QuantickleUtils.ensureNodeCallout === 'function') {
                         window.QuantickleUtils.ensureNodeCallout(normalized, { defaultFormat: 'text', syncLegacy: false });
                     }
                     this.mergeLegacyTextNodeStyles(normalized);
+                    this.ensureNodeGraphLink(normalized);
                     return normalized;
                 }
                 return n;
