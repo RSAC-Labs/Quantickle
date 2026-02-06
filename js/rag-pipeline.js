@@ -34,7 +34,7 @@ export const extractIocs = text => {
     md5_hashes: /\b[a-fA-F0-9]{32}\b/g,
     sha1_hashes: /\b[a-fA-F0-9]{40}\b/g,
     sha256_hashes: /\b[a-fA-F0-9]{64}\b/g,
-    ip_addresses: /\b(?:\d{1,3}\.){3}\d{1,3}\b/g,
+    ip_addresses: /\b(?:\d{1,3}(?:\.|\[\.\])){3}\d{1,3}\b/g,
     urls: /\bhttps?:\/\/[^\s"'<>]+/gi,
     registry_paths: /\b(?:HKEY_LOCAL_MACHINE|HKEY_CURRENT_USER|HKEY_CLASSES_ROOT|HKEY_USERS|HKEY_CURRENT_CONFIG)(?:\\[^\s\\/:*?"<>|]+)+/gi
   };
@@ -78,7 +78,8 @@ export const extractIocs = text => {
     .filter(token => /\[\.\]/.test(token) || /^hxxp/i.test(token))
     .map(token => {
       const clean = defang(token);
-      const candidate = normalizeHostname(clean.split(/[\/?#]/)[0]);
+      const urlHost = extractHostname(clean);
+      const candidate = normalizeHostname(urlHost || clean.split(/[\/?#]/)[0]);
       return candidate;
     })
     .filter(Boolean)
@@ -101,7 +102,9 @@ export const extractIocs = text => {
       continue;
     }
 
-    const filtered = key === 'ip_addresses' ? matches.filter(isValidIpv4) : matches;
+    const filtered = key === 'ip_addresses'
+      ? matches.map(defang).filter(isValidIpv4)
+      : matches;
     if (filtered.length) {
       results[key] = uniqLower(filtered);
     }
