@@ -520,7 +520,6 @@
                 if (isCrossOrigin) {
                     fetchUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
                     headers['x-proxy-x-apikey'] = apiKey;
-                    delete headers['x-apikey'];
                 }
 
                 const response = await services.network.fetch(fetchUrl, requestOptions);

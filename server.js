@@ -468,6 +468,8 @@ app.get('/api/proxy', async (req, res) => {
             } else if (override) {
                 upstreamHeaders[headerName] = override;
             }
+        } else if (headerName === 'x-apikey' && req.headers[headerName]) {
+            upstreamHeaders[headerName] = req.headers[headerName];
         }
     }
 
