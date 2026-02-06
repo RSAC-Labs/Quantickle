@@ -77,6 +77,10 @@
             return raw;
         };
 
+        const getAsName = (attributes = {}) => {
+            return attributes.as_name || attributes.asn_owner || attributes.as_owner || attributes.asn_name || '';
+        };
+
         const getVTBlocklist = () => {
             const runtimeList = getRuntime('vtBlocklist');
             if (Array.isArray(runtimeList)) {
@@ -685,9 +689,14 @@
                                 node.data('country', attributes.country);
                                 infoFields['Country'] = attributes.country;
                             }
+                            const asName = getAsName(attributes);
                             if (attributes.asn) {
                                 node.data('asn', attributes.asn);
                                 infoFields['ASN'] = attributes.asn;
+                            }
+                            if (asName) {
+                                node.data('asName', asName);
+                                infoFields['AS Name'] = asName;
                             }
                             if (attributes.network) {
                                 node.data('network', attributes.network);
@@ -1162,6 +1171,7 @@
                             : null,
                         'Country': relation.attributes?.country || null,
                         'ASN': relation.attributes?.asn || null,
+                        'AS Name': getAsName(relation.attributes) || null,
                         'Network': relation.attributes?.network || null
                     };
                     const infoHtml = formatInfoHTML(infoFields);
@@ -1175,6 +1185,7 @@
                         ipAddress: ip,
                         country: relation.attributes?.country,
                         asn: relation.attributes?.asn,
+                        asName: getAsName(relation.attributes),
                         network: relation.attributes?.network,
                         info: infoText,
                         infoHtml
@@ -1431,6 +1442,7 @@
                             : null,
                         'Country': relation.attributes?.country || null,
                         'ASN': relation.attributes?.asn || null,
+                        'AS Name': getAsName(relation.attributes) || null,
                         'Network': relation.attributes?.network || null
                     };
                     const infoHtml = formatInfoHTML(infoFields);
@@ -1444,6 +1456,7 @@
                         ipAddress: ip,
                         country: relation.attributes?.country,
                         asn: relation.attributes?.asn,
+                        asName: getAsName(relation.attributes),
                         network: relation.attributes?.network,
                         info: infoText,
                         infoHtml
@@ -1694,6 +1707,7 @@
                 'Detection Ratio': ipDetectionRatio,
                 'Country': attributes.country || '',
                 'ASN': attributes.asn || '',
+                'AS Name': getAsName(attributes) || '',
                 'Network': attributes.network || '',
                 'Last Analysis': attributes.last_analysis_date ? new Date(attributes.last_analysis_date * 1000).toISOString() : null,
                 'Reputation': attributes.reputation || 0
@@ -1710,6 +1724,7 @@
                 detectionRatio: ipDetectionRatio,
                 country: attributes.country,
                 asn: attributes.asn,
+                asName: getAsName(attributes),
                 network: attributes.network,
                 lastAnalysisDate: attributes.last_analysis_date ? new Date(attributes.last_analysis_date * 1000).toISOString() : null,
                 reputation: attributes.reputation,
