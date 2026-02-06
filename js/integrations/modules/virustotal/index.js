@@ -2119,6 +2119,7 @@
 
         return {
             id: 'virustotal',
+            allowedHosts: ['virustotal.com', 'www.virustotal.com'],
             init: (moduleServices) => {
                 services = moduleServices;
             },

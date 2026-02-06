@@ -10,6 +10,20 @@
                 throw new Error(`Integration module "${module.id}" must define actions`);
             }
             modules.set(module.id, module);
+
+            const allowedHosts = Array.isArray(module.allowedHosts) ? module.allowedHosts : [];
+            const runtime = window.IntegrationsManager?.runtime;
+            if (allowedHosts.length && runtime) {
+                if (!Array.isArray(runtime.integrationHosts)) {
+                    runtime.integrationHosts = [];
+                }
+                const normalized = allowedHosts
+                    .map(host => (host == null ? '' : String(host)).trim().toLowerCase())
+                    .filter(Boolean);
+                const current = new Set(runtime.integrationHosts.map(host => host.toLowerCase()));
+                normalized.forEach(host => current.add(host));
+                runtime.integrationHosts = Array.from(current);
+            }
             return module;
         };
 
