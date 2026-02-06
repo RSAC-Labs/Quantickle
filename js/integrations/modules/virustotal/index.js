@@ -51,6 +51,32 @@
             return clean.toLowerCase().replace(/\.$/, '');
         };
 
+        const isIpAddress = (value) => {
+            if (!value || typeof value !== 'string') {
+                return false;
+            }
+            const trimmed = value.trim();
+            const ipv4 = /^(?:\d{1,3}\.){3}\d{1,3}$/;
+            const ipv6 = /^[0-9a-f:]+$/i;
+            return ipv4.test(trimmed) || (trimmed.includes(':') && ipv6.test(trimmed));
+        };
+
+        const extractDomainFromResolution = (relation) => {
+            const hostname = relation?.attributes?.hostname || relation?.attributes?.host_name;
+            if (hostname) {
+                return hostname;
+            }
+            const raw = relation?.id || '';
+            if (typeof raw === 'string' && raw.includes(' ')) {
+                const parts = raw.split(/\s+/).filter(Boolean);
+                const nonIp = parts.filter(part => !isIpAddress(part));
+                if (nonIp.length > 0) {
+                    return nonIp[nonIp.length - 1];
+                }
+            }
+            return raw;
+        };
+
         const getVTBlocklist = () => {
             const runtimeList = getRuntime('vtBlocklist');
             if (Array.isArray(runtimeList)) {
@@ -1129,7 +1155,10 @@
                         'IP Address': ip,
                         'Last Analysis': relation.attributes?.last_analysis_date
                             ? new Date(relation.attributes.last_analysis_date * 1000).toISOString()
-                            : null
+                            : null,
+                        'Country': relation.attributes?.country || null,
+                        'ASN': relation.attributes?.asn || null,
+                        'Network': relation.attributes?.network || null
                     };
                     const infoHtml = formatInfoHTML(infoFields);
                     const infoText = formatInfoText(infoFields);
@@ -1140,6 +1169,9 @@
                         color: '#50E3C2',
                         size: 30,
                         ipAddress: ip,
+                        country: relation.attributes?.country,
+                        asn: relation.attributes?.asn,
+                        network: relation.attributes?.network,
                         info: infoText,
                         infoHtml
                     };
@@ -1392,7 +1424,10 @@
                         'IP Address': ip,
                         'Last Resolved': relation.attributes?.date
                             ? new Date(relation.attributes.date * 1000).toISOString()
-                            : null
+                            : null,
+                        'Country': relation.attributes?.country || null,
+                        'ASN': relation.attributes?.asn || null,
+                        'Network': relation.attributes?.network || null
                     };
                     const infoHtml = formatInfoHTML(infoFields);
                     const infoText = formatInfoText(infoFields);
@@ -1403,6 +1438,9 @@
                         color: '#50E3C2',
                         size: 30,
                         ipAddress: ip,
+                        country: relation.attributes?.country,
+                        asn: relation.attributes?.asn,
+                        network: relation.attributes?.network,
                         info: infoText,
                         infoHtml
                     };
@@ -1686,7 +1724,7 @@
 
             if (relationships.resolutions && Array.isArray(relationships.resolutions)) {
                 for (const relation of relationships.resolutions) {
-                    const domain = relation.attributes?.hostname || relation.id;
+                    const domain = extractDomainFromResolution(relation);
                     if (!domain || isDomainBlocked(domain)) continue;
 
                     const infoFields = {
