@@ -47,6 +47,7 @@ const PASSTHROUGH_HEADERS = [
     'accept-language',
     'cache-control',
     'pragma',
+    'x-apikey',
     'sec-ch-ua',
     'sec-ch-ua-mobile',
     'sec-ch-ua-platform',
@@ -467,6 +468,8 @@ app.get('/api/proxy', async (req, res) => {
             } else if (override) {
                 upstreamHeaders[headerName] = override;
             }
+        } else if (headerName === 'x-apikey' && req.headers[headerName]) {
+            upstreamHeaders[headerName] = req.headers[headerName];
         }
     }
 
