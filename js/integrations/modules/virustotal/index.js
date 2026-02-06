@@ -508,7 +508,22 @@
             }
 
             try {
-                const response = await services.network.fetch(url, requestOptions);
+                let fetchUrl = url;
+                let requestUrl;
+                try {
+                    requestUrl = new URL(url);
+                } catch (_) {
+                    requestUrl = new URL(url, window.location.origin);
+                }
+
+                const isCrossOrigin = requestUrl.origin !== window.location.origin;
+                if (isCrossOrigin) {
+                    fetchUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
+                    headers['x-proxy-x-apikey'] = apiKey;
+                    delete headers['x-apikey'];
+                }
+
+                const response = await services.network.fetch(fetchUrl, requestOptions);
 
                 if (!response.ok) {
                     if (response.status === 401 || response.status === 403) {
