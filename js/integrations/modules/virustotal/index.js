@@ -488,11 +488,14 @@
                 throw new Error('VirusTotal API key not configured');
             }
 
+            const { allowForbidden = false, headers: extraHeaders = {} } = options;
+
             const url = `https://www.virustotal.com/api/v3${endpoint}`;
 
             const headers = {
                 'x-apikey': apiKey,
-                ...options.headers
+                'Content-Type': 'application/json',
+                ...extraHeaders
             };
 
             const requestOptions = {
@@ -500,10 +503,10 @@
                 headers
             };
 
-            if (body) {
-                requestOptions.body = body;
-                if (!(body instanceof FormData)) {
-                    headers['Content-Type'] = 'application/json';
+            if (body && method !== 'GET') {
+                requestOptions.body = body instanceof FormData ? body : JSON.stringify(body);
+                if (body instanceof FormData) {
+                    delete headers['Content-Type'];
                 }
             }
 
@@ -525,58 +528,34 @@
                 const response = await services.network.fetch(fetchUrl, requestOptions);
 
                 if (!response.ok) {
-                    let responseBodyText = '';
-                    let responseBodyJson = null;
-                    try {
-                        const contentType = response.headers?.get?.('content-type') || '';
-                        if (contentType.includes('application/json')) {
-                            responseBodyJson = await response.json();
-                            responseBodyText = JSON.stringify(responseBodyJson);
-                        } else {
-                            responseBodyText = await response.text();
-                            try {
-                                responseBodyJson = JSON.parse(responseBodyText);
-                            } catch (_) {
-                                responseBodyJson = null;
-                            }
-                        }
-                    } catch (_) {
-                        responseBodyText = '';
-                        responseBodyJson = null;
-                    }
-
                     if (response.status === 401) {
                         const error = new Error('Invalid VirusTotal API key');
                         error.status = response.status;
-                        throw error;
-                    } else if (response.status === 403) {
-                        const proxyBlocked = /host not allowed/i.test(responseBodyText) || /proxy|allowlist/i.test(responseBodyText);
-                        const errorMessage = proxyBlocked
-                            ? 'VirusTotal proxy blocked (check proxy allowlist)'
-                            : 'VirusTotal access forbidden (check account permissions)';
-                        const error = new Error(errorMessage);
-                        error.status = response.status;
-                        error.body = responseBodyJson || responseBodyText;
                         throw error;
                     } else if (response.status === 429) {
                         const error = new Error('VirusTotal API quota exceeded');
                         error.status = response.status;
                         throw error;
+                    } else if (response.status === 403 && allowForbidden) {
+                        const fallbackData = await response.json().catch(() => ({ data: [] }));
+                        return fallbackData || { data: [] };
                     } else if (response.status === 404) {
                         const error = new Error('Not found in VirusTotal');
+                        error.code = 'VT_NOT_FOUND';
                         error.status = response.status;
                         throw error;
                     } else {
                         const error = new Error(`VirusTotal API request failed: ${response.status} ${response.statusText}`);
                         error.status = response.status;
-                        error.body = responseBodyJson || responseBodyText;
                         throw error;
                     }
                 }
 
-                return await response.json();
+                const data = await response.json();
+
+                return data;
             } catch (error) {
-                if (error.message === 'Not found in VirusTotal') {
+                if (error?.code === 'VT_NOT_FOUND') {
                     console.info('VirusTotal resource not found:', endpoint);
                 } else {
                     console.error('VirusTotal API error:', error);
@@ -588,42 +567,142 @@
         const fetchVirusTotalDomainInfo = async (domain) => {
             const cleanDomain = sanitizeDomain(domain);
             const encoded = encodeURIComponent(cleanDomain);
-
             try {
-                const [domainInfo, subdomains, siblings] = await Promise.all([
+                const [domainData, subdomains, siblings] = await Promise.all([
                     makeVirusTotalRequest(`/domains/${encoded}`),
                     makeVirusTotalRequest(`/domains/${encoded}/subdomains`).catch(() => ({ data: [] })),
                     makeVirusTotalRequest(`/domains/${encoded}/siblings`).catch(() => ({ data: [] }))
                 ]);
 
+                const attributes = domainData.data?.attributes || {};
+                const subdomainList = (subdomains.data || []).map(d => d.id || d).join(', ');
+                const siblingList = (siblings.data || []).map(d => d.id || d).join(', ');
+                const { malicious, detectionRatio } = calculateDetectionStats(attributes.last_analysis_stats);
+                const creationDate = attributes.creation_date ? new Date(attributes.creation_date * 1000).toISOString() : null;
+
+                const infoFields = {
+                    'Detection Ratio': detectionRatio,
+                    'Subdomains': subdomainList,
+                    'Sibling Domains': siblingList,
+                    'Creation Date': creationDate
+                };
+                const infoHtml = formatInfoHTML(infoFields);
+                const infoText = formatInfoText(infoFields);
                 return {
-                    domainInfo: domainInfo.data,
+                    detectionRatio,
+                    malicious,
+                    creationDate,
+                    info: infoText,
+                    infoHtml,
+                    data: domainData.data,
                     subdomains: subdomains.data || [],
                     siblings: siblings.data || []
                 };
-            } catch (error) {
-                console.error('Failed to fetch domain info:', error);
-                throw error;
+            } catch (e) {
+                console.error('Failed to fetch domain info:', e);
+                const infoFields = { 'Detection Ratio': '0/0' };
+                const infoHtml = formatInfoHTML(infoFields);
+                const infoText = formatInfoText(infoFields);
+                return {
+                    detectionRatio: '0/0',
+                    malicious: 0,
+                    creationDate: null,
+                    info: infoText,
+                    infoHtml,
+                    data: null,
+                    subdomains: [],
+                    siblings: []
+                };
             }
         };
 
         const fetchVirusTotalFileInfo = async (hash) => {
             try {
                 const data = await makeVirusTotalRequest(`/files/${hash}`);
-                return { data: data.data };
-            } catch (error) {
-                console.error('Failed to fetch file info:', error);
-                throw error;
+                const attributes = data.data?.attributes || {};
+                const { malicious, detectionRatio } = calculateDetectionStats(attributes.last_analysis_stats);
+                const fileName = attributes.meaningful_name || (attributes.names && attributes.names[0]) || hash;
+                const fileType = attributes.type_description || attributes.type_tag || '';
+                const firstSubmissionDate = attributes.first_submission_date
+                    ? new Date(attributes.first_submission_date * 1000).toISOString()
+                    : null;
+
+                const infoFields = {
+                    'Detection Ratio': detectionRatio,
+                    'File Name': fileName,
+                    'File Type': fileType,
+                    'First Seen': firstSubmissionDate
+                };
+                const infoHtml = formatInfoHTML(infoFields);
+                const infoText = formatInfoText(infoFields);
+                return {
+                    detectionRatio,
+                    malicious,
+                    fileName,
+                    fileType,
+                    firstSubmissionDate,
+                    info: infoText,
+                    infoHtml,
+                    data: data.data
+                };
+            } catch (e) {
+                console.error('Failed to fetch file info:', e);
+                const infoFields = { 'Detection Ratio': '0/0' };
+                const infoHtml = formatInfoHTML(infoFields);
+                const infoText = formatInfoText(infoFields);
+                return {
+                    detectionRatio: '0/0',
+                    malicious: 0,
+                    fileName: hash,
+                    fileType: '',
+                    firstSubmissionDate: null,
+                    info: infoText,
+                    infoHtml,
+                    data: null
+                };
             }
         };
 
         const fetchVirusTotalIPInfo = async (ip) => {
             try {
                 const data = await makeVirusTotalRequest(`/ip_addresses/${ip}`);
-                return { data: data.data };
-            } catch (error) {
-                console.error('Failed to fetch IP info:', error);
-                throw error;
+                const attributes = data.data?.attributes || {};
+                const { malicious, detectionRatio } = calculateDetectionStats(attributes.last_analysis_stats);
+                const country = attributes.country || null;
+                const lastModDate = attributes.last_modification_date
+                    ? new Date(attributes.last_modification_date * 1000).toISOString()
+                    : null;
+
+                const infoFields = {
+                    'Detection Ratio': detectionRatio,
+                    'Country': country,
+                    'Last Seen': lastModDate
+                };
+                const infoHtml = formatInfoHTML(infoFields);
+                const infoText = formatInfoText(infoFields);
+                return {
+                    detectionRatio,
+                    malicious,
+                    country,
+                    lastModDate,
+                    info: infoText,
+                    infoHtml,
+                    data: data.data
+                };
+            } catch (e) {
+                console.error('Failed to fetch IP info:', e);
+                const infoFields = { 'Detection Ratio': '0/0' };
+                const infoHtml = formatInfoHTML(infoFields);
+                const infoText = formatInfoText(infoFields);
+                return {
+                    detectionRatio: '0/0',
+                    malicious: 0,
+                    country: null,
+                    lastModDate: null,
+                    info: infoText,
+                    infoHtml,
+                    data: null
+                };
             }
         };
 
@@ -646,10 +725,37 @@
         const fetchVirusTotalURLInfo = async (url) => {
             try {
                 const data = await queryVirusTotalURL(url);
-                return { data: data.data };
-            } catch (error) {
-                console.error('Failed to fetch URL info:', error);
-                throw error;
+                const attributes = data.data?.attributes || {};
+                const { detectionRatio } = calculateDetectionStats(attributes.last_analysis_stats);
+                const lastAnalysisDate = attributes.last_analysis_date
+                    ? new Date(attributes.last_analysis_date * 1000).toISOString()
+                    : null;
+
+                const infoFields = {
+                    'Detection Ratio': detectionRatio,
+                    'Last Analysis': lastAnalysisDate
+                };
+                const infoHtml = formatInfoHTML(infoFields);
+                const infoText = formatInfoText(infoFields);
+                return {
+                    detectionRatio,
+                    lastAnalysisDate,
+                    info: infoText,
+                    infoHtml,
+                    data: data.data
+                };
+            } catch (e) {
+                console.error('Failed to fetch URL info:', e);
+                const infoFields = { 'Detection Ratio': '0/0' };
+                const infoHtml = formatInfoHTML(infoFields);
+                const infoText = formatInfoText(infoFields);
+                return {
+                    detectionRatio: '0/0',
+                    lastAnalysisDate: null,
+                    info: infoText,
+                    infoHtml,
+                    data: null
+                };
             }
         };
 
@@ -694,7 +800,7 @@
 
                     if (nodeType === 'domain') {
                         infoData = await fetchVirusTotalDomainInfo(identifier);
-                        const newData = infoData.domainInfo?.attributes?.last_analysis_stats || {};
+                        const newData = infoData.data?.attributes?.last_analysis_stats || {};
                         node.data('vtLastAnalysisStats', newData);
                         updated = true;
                     } else if (nodeType === 'ipaddress') {
@@ -720,39 +826,85 @@
                     if (updated) {
                         const attributes = infoData.data?.attributes || {};
                         const { detectionRatio } = calculateDetectionStats(attributes.last_analysis_stats || {});
-                        node.data('detectionRatio', detectionRatio);
+                        const resolvedDetectionRatio = infoData.detectionRatio || detectionRatio;
+                        node.data('detectionRatio', resolvedDetectionRatio);
+
+                        if (nodeType === 'domain' && infoData.creationDate) {
+                            node.data('creationDate', infoData.creationDate);
+                        }
+
+                        if (nodeType === 'malware') {
+                            if (infoData.fileName) {
+                                node.data('fileName', infoData.fileName);
+                            }
+                            if (infoData.fileType) {
+                                node.data('fileType', infoData.fileType);
+                            }
+                            if (infoData.firstSubmissionDate) {
+                                node.data('firstSubmissionDate', infoData.firstSubmissionDate);
+                            }
+                        }
+
+                        if (nodeType === 'ipaddress') {
+                            if (infoData.country) {
+                                node.data('country', infoData.country);
+                            }
+                            if (infoData.lastModDate) {
+                                node.data('lastModDate', infoData.lastModDate);
+                            }
+                            if (attributes.country && !infoData.country) {
+                                node.data('country', attributes.country);
+                            }
+                            const asName = getAsName(attributes);
+                            if (attributes.asn) {
+                                node.data('asn', attributes.asn);
+                            }
+                            if (asName) {
+                                node.data('asName', asName);
+                            }
+                            if (attributes.network) {
+                                node.data('network', attributes.network);
+                            }
+                            if (attributes.reputation !== undefined) {
+                                node.data('reputation', attributes.reputation);
+                            }
+                        }
+
+                        if (nodeType === 'url' && infoData.lastAnalysisDate) {
+                            node.data('lastAnalysisDate', infoData.lastAnalysisDate);
+                        }
+
                         const infoFields = {
-                            'Detection Ratio': detectionRatio,
+                            'Detection Ratio': resolvedDetectionRatio,
                             'Last Analysis': attributes.last_analysis_date
                                 ? new Date(attributes.last_analysis_date * 1000).toISOString()
                                 : null
                         };
 
                         if (nodeType === 'ipaddress') {
-                            if (attributes.country) {
-                                node.data('country', attributes.country);
-                                infoFields['Country'] = attributes.country;
+                            if (infoData.country || attributes.country) {
+                                infoFields['Country'] = infoData.country || attributes.country;
                             }
-                            const asName = getAsName(attributes);
+                            if (infoData.lastModDate) {
+                                infoFields['Last Seen'] = infoData.lastModDate;
+                            }
                             if (attributes.asn) {
-                                node.data('asn', attributes.asn);
                                 infoFields['ASN'] = attributes.asn;
                             }
+                            const asName = getAsName(attributes);
                             if (asName) {
-                                node.data('asName', asName);
                                 infoFields['AS Name'] = asName;
                             }
                             if (attributes.network) {
-                                node.data('network', attributes.network);
                                 infoFields['Network'] = attributes.network;
                             }
                             if (attributes.reputation !== undefined) {
-                                node.data('reputation', attributes.reputation);
                                 infoFields['Reputation'] = attributes.reputation;
                             }
                         }
-                        const infoHtml = formatInfoHTML(infoFields);
-                        const infoText = formatInfoText(infoFields);
+
+                        const infoHtml = infoData.infoHtml || formatInfoHTML(infoFields);
+                        const infoText = infoData.info || formatInfoText(infoFields);
                         node.data('info', infoText);
                         node.data('infoHtml', infoHtml);
                         results.updated++;
