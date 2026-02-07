@@ -1883,11 +1883,18 @@
             }
 
             const ipData = data.data;
-            const attributes = ipData.attributes;
+            const attributes = ipData.attributes || {};
             const relationships = data.relationships || {};
 
             if (!window.GraphRenderer || !window.GraphRenderer.cy) {
                 throw new Error('Graph not initialized');
+            }
+
+            if (window.DomainLoader && typeof window.DomainLoader.loadAndActivateDomains === 'function') {
+                try {
+                    await window.DomainLoader.loadAndActivateDomains(['cybersecurity']);
+                } catch (e) {
+                }
             }
 
             const cy = window.GraphRenderer.cy;
@@ -1899,31 +1906,35 @@
             let edgesAdded = 0;
 
             const { detectionRatio: ipDetectionRatio } = calculateDetectionStats(attributes.last_analysis_stats);
+            const asnNumber = attributes.asn || attributes.as_number || null;
+            const asnDisplay = asnNumber ? `AS${asnNumber}` : null;
+            const asOwner = attributes.as_owner || attributes.asn_owner || getAsName(attributes) || null;
+            const lastSeen = attributes.last_modification_date || attributes.last_analysis_date || null;
             const ipInfoFields = {
                 'Detection Ratio': ipDetectionRatio,
-                'Country': attributes.country || '',
-                'ASN': attributes.asn || '',
-                'AS Name': getAsName(attributes) || '',
-                'Network': attributes.network || '',
-                'Last Analysis': attributes.last_analysis_date ? new Date(attributes.last_analysis_date * 1000).toISOString() : null,
+                'Country': attributes.country || null,
+                'ASN': asnDisplay && asOwner ? `${asnDisplay} (${asOwner})` : asnDisplay || asOwner || null,
+                'Network': attributes.network || null,
+                'Last Seen': lastSeen ? new Date(lastSeen * 1000).toISOString() : null,
                 'Reputation': attributes.reputation || 0
             };
             const ipInfoHtml = formatInfoHTML(ipInfoFields);
             const ipInfoText = formatInfoText(ipInfoFields);
             const ipNodeData = {
-                id: `ip_${ipAddress}`,
+                id: `ip_${ipAddress.replace(/[^a-zA-Z0-9]/g, '_')}`,
                 label: ipAddress,
                 type: 'ipaddress',
-                color: '#50E3C2',
-                size: 35,
+                color: '#0080FF',
+                size: 40,
                 ipAddress,
                 detectionRatio: ipDetectionRatio,
-                country: attributes.country,
-                asn: attributes.asn,
-                asName: getAsName(attributes),
-                network: attributes.network,
-                lastAnalysisDate: attributes.last_analysis_date ? new Date(attributes.last_analysis_date * 1000).toISOString() : null,
-                reputation: attributes.reputation,
+                country: attributes.country || null,
+                asn: asnNumber || null,
+                asOwner: asOwner || null,
+                network: attributes.network || null,
+                lastSeen: lastSeen ? new Date(lastSeen * 1000).toISOString() : null,
+                timestamp: lastSeen ? new Date(lastSeen * 1000).toISOString() : null,
+                reputation: attributes.reputation || 0,
                 info: ipInfoText,
                 infoHtml: ipInfoHtml
             };
@@ -1935,7 +1946,7 @@
                 nodesAdded++;
             }
 
-            const newNodeIds = [ipNodeId];
+            const newNodeIds = ipCreated ? [ipNodeId] : [];
 
             if (relationships.resolutions && Array.isArray(relationships.resolutions)) {
                 for (const relation of relationships.resolutions) {
@@ -1970,9 +1981,9 @@
                     }
 
                     const edgeData = {
-                        id: `${ipNodeId}_resolves_${domainNodeId}`,
-                        source: ipNodeId,
-                        target: domainNodeId,
+                        id: `${domainNodeId}_resolves_${ipNodeId}`,
+                        source: domainNodeId,
+                        target: ipNodeId,
                         label: 'Resolves To'
                     };
                     if (addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
@@ -1981,27 +1992,41 @@
                 }
             }
 
-            if (relationships.communicating_files && Array.isArray(relationships.communicating_files)) {
-                for (const relation of relationships.communicating_files) {
-                    const fileHash = relation.attributes?.sha256 || relation.attributes?.sha1 || relation.attributes?.md5 || relation.id;
-                    if (!fileHash) continue;
+            const malwareRelationships = [
+                { key: 'communicating_files', label: 'Communicates With', direction: 'from_file' },
+                { key: 'referrer_files', label: 'Refers', direction: 'from_file' },
+                { key: 'downloaded_files', label: 'Downloads', direction: 'to_file' }
+            ];
 
-                    if (existingNodeIds.has(`file_${fileHash}`)) {
+            for (const rel of malwareRelationships) {
+                const files = relationships[rel.key];
+                if (!files || !Array.isArray(files)) {
+                    continue;
+                }
+
+                for (const fileObj of files) {
+                    const fileHash = fileObj?.sha256 || fileObj?.id || fileObj;
+                    if (!fileHash) {
                         continue;
                     }
 
-                    const { detectionRatio } = calculateDetectionStats(relation.attributes?.last_analysis_stats || {});
+                    const fileNodeId = `file_${fileHash}`;
+                    if (existingNodeIds.has(fileNodeId)) {
+                        continue;
+                    }
+
+                    const { detectionRatio } = calculateDetectionStats(fileObj?.attributes?.last_analysis_stats || {});
                     const infoFields = {
                         'Detection Ratio': detectionRatio,
-                        'File Type': relation.attributes?.type_description || relation.attributes?.type_tag || '',
-                        'First Seen': relation.attributes?.first_submission_date
-                            ? new Date(relation.attributes.first_submission_date * 1000).toISOString()
+                        'File Type': fileObj?.attributes?.type_description || fileObj?.attributes?.type_tag || '',
+                        'First Seen': fileObj?.attributes?.first_submission_date
+                            ? new Date(fileObj.attributes.first_submission_date * 1000).toISOString()
                             : null
                     };
                     const infoHtml = formatInfoHTML(infoFields);
                     const infoText = formatInfoText(infoFields);
                     const fileNodeData = {
-                        id: `file_${fileHash}`,
+                        id: fileNodeId,
                         label: fileHash,
                         type: 'malware',
                         color: detectionRatio && detectionRatio.startsWith('0/') ? '#80FF80' : '#FF4444',
@@ -2012,19 +2037,21 @@
                         infoHtml
                     };
 
-                    const { id: fileNodeId, created } = await getOrCreateNode(cy, fileNodeData.id, fileNodeData, bulkOptions);
-                    cy.getElementById(fileNodeId).data('info', infoText);
-                    cy.getElementById(fileNodeId).data('infoHtml', infoHtml);
+                    const { id: createdFileNodeId, created } = await getOrCreateNode(cy, fileNodeData.id, fileNodeData, bulkOptions);
+                    cy.getElementById(createdFileNodeId).data('info', infoText);
+                    cy.getElementById(createdFileNodeId).data('infoHtml', infoHtml);
                     if (created) {
                         nodesAdded++;
-                        newNodeIds.push(fileNodeId);
+                        newNodeIds.push(createdFileNodeId);
                     }
 
+                    const sourceId = rel.direction === 'from_file' ? createdFileNodeId : ipNodeId;
+                    const targetId = rel.direction === 'from_file' ? ipNodeId : createdFileNodeId;
                     const edgeData = {
-                        id: `${ipNodeId}_communicates_${fileNodeId}`,
-                        source: ipNodeId,
-                        target: fileNodeId,
-                        label: 'Communicates With'
+                        id: `${sourceId}_${rel.key}_${targetId}`,
+                        source: sourceId,
+                        target: targetId,
+                        label: rel.label
                     };
                     if (addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
                         edgesAdded++;
@@ -2077,7 +2104,7 @@
             }
 
             if (newNodeIds.length > 0) {
-                positionNodesNearSource(cy, ipNodeId, newNodeIds, 'VirusTotal');
+                positionNodesNearSource(cy, ipNodeId, newNodeIds.filter(id => id !== ipNodeId), 'VirusTotal');
             }
 
             if (window.TableManager && window.TableManager.updateTables) {
@@ -2093,7 +2120,7 @@
             return {
                 nodesAdded,
                 edgesAdded,
-                ipAddress,
+                ip: ipAddress,
                 detectionRatio: ipDetectionRatio
             };
         };
