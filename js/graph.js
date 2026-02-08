@@ -13715,6 +13715,17 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
                     node.data('backgroundPositionY'),
                     '50%'
                 );
+                const resolveBackgroundDimension = (value) => {
+                    if (value === null || value === undefined) {
+                        return null;
+                    }
+                    if (typeof value === 'string' && !value.trim()) {
+                        return null;
+                    }
+                    return value;
+                };
+                const backgroundWidth = resolveBackgroundDimension(node.data('backgroundWidth'));
+                const backgroundHeight = resolveBackgroundDimension(node.data('backgroundHeight'));
                 node.style({
                     'background-color': lighterColor,  // Lighter background for icon visibility
                     'background-image': backgroundImage,
@@ -13722,8 +13733,8 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
                     'background-repeat': 'no-repeat',
                     'background-position-x': backgroundPositionX,
                     'background-position-y': backgroundPositionY,
-                    'background-width': '100%',
-                    'background-height': '100%',
+                    'background-width': backgroundWidth || 'auto',
+                    'background-height': backgroundHeight || 'auto',
                 });
             } else {
                 node.style('background-image', 'none');
