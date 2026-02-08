@@ -1050,6 +1050,13 @@ class NodeEditorModule {
                             </div>
                         </div>
                         <div class="attribute-group">
+                            <label>Icon Fit:</label>
+                            <select id="node-background-fit">
+                                <option value="contain">Contain</option>
+                                <option value="cover">Cover</option>
+                            </select>
+                        </div>
+                        <div class="attribute-group">
                             <label>Icon Opacity:</label>
                             <input type="range" id="icon-opacity" min="0" max="1" step="0.1" value="1">
                             <span id="icon-opacity-value">1.0</span>
@@ -1177,6 +1184,13 @@ class NodeEditorModule {
                                 <input type="text" id="bulk-node-icon" placeholder="icon name or URL">
                                 <button type="button" class="file-input-button" data-file-target="bulk-node-icon">Browse…</button>
                             </div>
+                        </div>
+                        <div class="attribute-group">
+                            <label>Icon Fit:</label>
+                            <select id="bulk-node-background-fit">
+                                <option value="contain">Contain</option>
+                                <option value="cover">Cover</option>
+                            </select>
                         </div>
                         <div class="attribute-group">
                             <label>Icon Opacity:</label>
@@ -1415,6 +1429,7 @@ class NodeEditorModule {
                 'node-color',
                 'node-weight',
                 'node-icon',
+                'node-background-fit',
                 'node-border-color',
                 'node-shape',
                 'node-timestamp',
@@ -1432,6 +1447,7 @@ class NodeEditorModule {
                 'node-color',
                 'node-weight',
                 'node-icon',
+                'node-background-fit',
                 'node-border-color',
                 'node-shape',
                 'node-timestamp',
@@ -1548,6 +1564,11 @@ class NodeEditorModule {
                             const iconId = `${prefix}node-icon`;
                             this.setFieldValue(iconId, defaults.icon);
                             markBulkChanged(iconId);
+                        }
+                        if (defaults.backgroundFit !== undefined) {
+                            const fitId = `${prefix}node-background-fit`;
+                            this.setFieldValue(fitId, defaults.backgroundFit);
+                            markBulkChanged(fitId);
                         }
                         if (defaults.borderColor !== undefined) {
                             const borderColorId = `${prefix}node-border-color`;
@@ -1716,6 +1737,7 @@ class NodeEditorModule {
         set('node-opacity', data.opacity || 1);
         set('node-weight', data.weight || 1);
         set('node-icon', data.icon || '');
+        set('node-background-fit', resolveBackgroundFitForData(data));
         set('icon-opacity', data.iconOpacity != null ? data.iconOpacity : 1);
         set('node-info', data.info || '');
         const nodeType = data.type || 'default';
@@ -1790,7 +1812,7 @@ class NodeEditorModule {
 
         const disableFields = [
             'node-opacity', 'node-border-color', 'node-shape',
-            'node-weight', 'node-icon', 'icon-opacity', 'node-info',
+            'node-weight', 'node-icon', 'node-background-fit', 'icon-opacity', 'node-info',
             'node-graph-link-source', 'node-graph-link-key',
             'node-timestamp', 'node-label', 'node-show-label', 'node-type', 'node-id'
         ];
@@ -3312,6 +3334,7 @@ class NodeEditorModule {
             shape: getFieldValue('node-shape', v => v),
             weight: getFieldValue('node-weight', v => parseFloat(v) || 1),
             icon: getFieldValue('node-icon', v => (v || '').trim()),
+            backgroundFit: getFieldValue('node-background-fit', v => resolveBackgroundFitValue(v, 'contain')),
             iconOpacity: getFieldValue('icon-opacity', v => parseFloat(v)),
             info: getFieldValue('node-info', raw => { return window.DOMPurify ? DOMPurify.sanitize(raw) : raw; }),
             fontFamily: getFieldValue('node-font-family', v => v),
