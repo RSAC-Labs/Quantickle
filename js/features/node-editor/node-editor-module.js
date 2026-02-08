@@ -3710,6 +3710,15 @@ class NodeEditorModule {
             const escaped = trimmed.replace(/"/g, '\\"');
             return `url("${escaped}")`;
         };
+        const resolveBackgroundDimension = (value) => {
+            if (value === null || value === undefined) {
+                return null;
+            }
+            if (typeof value === 'string' && !value.trim()) {
+                return null;
+            }
+            return value;
+        };
 
         if (data.type === 'timeline-bar') {
             baseStyles.width = data.barLength;
@@ -3811,13 +3820,15 @@ class NodeEditorModule {
             const backgroundFit = resolveBackgroundFitForData(data);
             const backgroundPositionX = resolveBackgroundPositionValue(data.backgroundPositionX, '50%');
             const backgroundPositionY = resolveBackgroundPositionValue(data.backgroundPositionY, '50%');
+            const backgroundWidth = resolveBackgroundDimension(data.backgroundWidth);
+            const backgroundHeight = resolveBackgroundDimension(data.backgroundHeight);
             baseStyles['background-image'] = backgroundImage;
             baseStyles['background-fit'] = backgroundFit;
             baseStyles['background-position-x'] = backgroundPositionX;
             baseStyles['background-position-y'] = backgroundPositionY;
             baseStyles['background-repeat'] = 'no-repeat';
-            baseStyles['background-width'] = '100%';
-            baseStyles['background-height'] = '100%';
+            baseStyles['background-width'] = backgroundWidth || 'auto';
+            baseStyles['background-height'] = backgroundHeight || 'auto';
         }
 
         if (data.type === 'text') {
@@ -3981,10 +3992,21 @@ class NodeEditorModule {
                 const lighterColor = window.GraphRenderer && window.GraphRenderer.lightenColor
                     ? window.GraphRenderer.lightenColor(baseColor, 0.4)
                     : baseColor;
-                const fitValue = resolveBackgroundFitForData(node.data());
+                const storedFit = typeof node.data === 'function' ? node.data('backgroundFit') : null;
+                const fitValue = resolveBackgroundFitValue(storedFit, resolveBackgroundFitForData(node.data()));
+                const resolveBackgroundDimension = (value) => {
+                    if (value === null || value === undefined) {
+                        return null;
+                    }
+                    if (typeof value === 'string' && !value.trim()) {
+                        return null;
+                    }
+                    return value;
+                };
+                const backgroundWidth = resolveBackgroundDimension(node.data('backgroundWidth'));
+                const backgroundHeight = resolveBackgroundDimension(node.data('backgroundHeight'));
                 const positionX = resolveBackgroundPositionValue(node.data('backgroundPositionX'), '50%');
                 const positionY = resolveBackgroundPositionValue(node.data('backgroundPositionY'), '50%');
-                node.data('backgroundFit', fitValue);
                 node.style({
                     'background-image': bg,
                     'background-color': lighterColor,
@@ -3992,8 +4014,8 @@ class NodeEditorModule {
                     'background-repeat': 'no-repeat',
                     'background-position-x': positionX,
                     'background-position-y': positionY,
-                    'background-width': '100%',
-                    'background-height': '100%'
+                    'background-width': backgroundWidth || 'auto',
+                    'background-height': backgroundHeight || 'auto'
                 });
             } else {
                 node.style('background-image', 'none');
