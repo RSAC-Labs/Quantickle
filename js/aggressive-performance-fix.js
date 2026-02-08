@@ -59,7 +59,7 @@ window.AggressivePerformanceFix = {
                 style: {
                     'background-color': defaultNodeColor, // Static color instead of function
                     'background-image': 'none',
-                    'background-fit': 'contain', 
+                    'background-fit': 'data(backgroundFit)', 
                     'background-repeat': 'no-repeat',
                     'background-position-x': '50%',
                     'background-position-y': '50%',
