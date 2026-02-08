@@ -24,20 +24,21 @@ window.TableManager = {
     },
 
     resolveTypeSettings: function(typeName) {
-        if (window.NodeTypes && window.NodeTypes[typeName]) {
-            return window.NodeTypes[typeName];
-        }
+        const defaultSettings = window.NodeTypes && window.NodeTypes.default
+            ? window.NodeTypes.default
+            : {
+                color: window.QuantickleConfig?.defaultNodeColor || '#ffffff',
+                size: 30,
+                shape: 'round-rectangle',
+                icon: '',
+                backgroundFit: 'contain'
+            };
 
-        if (window.NodeTypes && window.NodeTypes.default) {
-            return window.NodeTypes.default;
-        }
+        const typeSettings = window.NodeTypes && window.NodeTypes[typeName]
+            ? window.NodeTypes[typeName]
+            : null;
 
-        return {
-            color: window.QuantickleConfig?.defaultNodeColor || '#ffffff',
-            size: 30,
-            shape: 'round-rectangle',
-            icon: ''
-        };
+        return typeSettings ? { ...defaultSettings, ...typeSettings } : { ...defaultSettings };
     },
 
     lightenColor: function(color, amount = 0.4) {
@@ -114,6 +115,40 @@ window.TableManager = {
         return 'none';
     },
 
+    resolveBackgroundFitValue: function(value, fallback = 'contain') {
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (trimmed) {
+                return trimmed;
+            }
+        }
+        return fallback;
+    },
+
+    resolveBackgroundPositionValue: function(value, fallback = '50%') {
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (trimmed) {
+                return trimmed;
+            }
+        }
+        return fallback;
+    },
+
+    resolveBackgroundFitForNode: function(cyNode) {
+        if (!cyNode || typeof cyNode.data !== 'function') {
+            return 'contain';
+        }
+
+        const nodeData = cyNode.data() || {};
+        const direct = this.resolveBackgroundFitValue(nodeData.backgroundFit, '');
+        if (direct) {
+            return direct;
+        }
+        const typeSettings = this.resolveTypeSettings(nodeData.type);
+        return this.resolveBackgroundFitValue(typeSettings.backgroundFit, 'contain');
+    },
+
     applyNodeEditorStyles: function(cyNode) {
         if (!cyNode || typeof cyNode.style !== 'function') {
             return;
@@ -166,13 +201,22 @@ window.TableManager = {
         const backgroundImage = cyNode.data('backgroundImage');
         if (backgroundImage && backgroundImage !== 'none') {
             const lighterColor = color ? this.lightenColor(color, 0.4) : null;
+            const backgroundFit = this.resolveBackgroundFitForNode(cyNode);
+            const backgroundPositionX = this.resolveBackgroundPositionValue(
+                cyNode.data('backgroundPositionX'),
+                '50%'
+            );
+            const backgroundPositionY = this.resolveBackgroundPositionValue(
+                cyNode.data('backgroundPositionY'),
+                '50%'
+            );
             cyNode.style({
                 'background-color': lighterColor || color,
                 'background-image': backgroundImage,
-                'background-fit': 'contain',
+                'background-fit': backgroundFit,
                 'background-repeat': 'no-repeat',
-                'background-position-x': '50%',
-                'background-position-y': '50%'
+                'background-position-x': backgroundPositionX,
+                'background-position-y': backgroundPositionY
             });
         }
 
@@ -1064,6 +1108,10 @@ window.TableManager = {
                     }
                     node.data('backgroundImage', backgroundImageData);
                 }
+                if (property === 'backgroundFit') {
+                    const normalizedFit = this.resolveBackgroundFitValue(value, 'contain');
+                    node.data('backgroundFit', normalizedFit);
+                }
                 
                 // No direct styling needed - function-based styles will read from data automatically
             });
@@ -1089,17 +1137,44 @@ window.TableManager = {
                             // Lighten background color for icon visibility
                             const originalColor = node.data('color');
                             const lighterColor = window.GraphRenderer.lightenColor(originalColor, 0.4); // 40% lighter (more subtle)
+                            const backgroundFit = this.resolveBackgroundFitForNode(node);
+                            const backgroundPositionX = this.resolveBackgroundPositionValue(
+                                node.data('backgroundPositionX'),
+                                '50%'
+                            );
+                            const backgroundPositionY = this.resolveBackgroundPositionValue(
+                                node.data('backgroundPositionY'),
+                                '50%'
+                            );
                             
                             node.style({
                                 'background-color': lighterColor,  // Lighter background for icon visibility
                                 'background-image': backgroundImage,
-                                'background-fit': 'contain',  // Show full icon, don't crop
+                                'background-fit': backgroundFit,  // Show full icon, don't crop
                                 'background-repeat': 'no-repeat',
-                                'background-position-x': '50%',
-                                'background-position-y': '50%'
+                                'background-position-x': backgroundPositionX,
+                                'background-position-y': backgroundPositionY
                             });
                         } else {
                             node.style('background-image', 'none');
+                        }
+                    } else if (property === 'backgroundFit') {
+                        const backgroundImage = node.data('backgroundImage');
+                        if (backgroundImage) {
+                            const backgroundFit = this.resolveBackgroundFitForNode(node);
+                            const backgroundPositionX = this.resolveBackgroundPositionValue(
+                                node.data('backgroundPositionX'),
+                                '50%'
+                            );
+                            const backgroundPositionY = this.resolveBackgroundPositionValue(
+                                node.data('backgroundPositionY'),
+                                '50%'
+                            );
+                            node.style({
+                                'background-fit': backgroundFit,
+                                'background-position-x': backgroundPositionX,
+                                'background-position-y': backgroundPositionY
+                            });
                         }
                     }
                 });
@@ -1203,14 +1278,26 @@ window.TableManager = {
                     // Lighten background color for icon visibility
                     const originalColor = node.data('color');
                     const lighterColor = window.GraphRenderer.lightenColor(originalColor, 0.4); // 40% lighter (more subtle)
-                    
+                    const backgroundFit = this.resolveBackgroundFitValue(
+                        newTypeSettings.backgroundFit,
+                        this.resolveBackgroundFitForNode(node)
+                    );
+                    const backgroundPositionX = this.resolveBackgroundPositionValue(
+                        node.data('backgroundPositionX'),
+                        '50%'
+                    );
+                    const backgroundPositionY = this.resolveBackgroundPositionValue(
+                        node.data('backgroundPositionY'),
+                        '50%'
+                    );
+                    node.data('backgroundFit', backgroundFit);
                     node.style({
                         'background-color': lighterColor,  // Lighter background for icon visibility
                         'background-image': backgroundImage,
-                        'background-fit': 'contain',  // Show full icon, don't crop
+                        'background-fit': backgroundFit,  // Show full icon, don't crop
                         'background-repeat': 'no-repeat',
-                        'background-position-x': '50%',
-                        'background-position-y': '50%'
+                        'background-position-x': backgroundPositionX,
+                        'background-position-y': backgroundPositionY
                     });
                 }
             });
@@ -1237,7 +1324,8 @@ window.TableManager = {
             color: window.QuantickleConfig?.defaultNodeColor || '#ffffff',
             size: 30,
             shape: 'round-rectangle',
-            icon: ''
+            icon: '',
+            backgroundFit: 'contain'
         };
 
         // Attach to domain if provided
