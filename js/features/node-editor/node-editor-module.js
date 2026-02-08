@@ -82,6 +82,42 @@ if (typeof window !== 'undefined' && !window.normalizeColorInput) {
     window.normalizeColorInput = normalizeColorInput;
 }
 
+function resolveBackgroundFitValue(value, fallback = 'contain') {
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed) {
+            return trimmed;
+        }
+    }
+    return fallback;
+}
+
+function resolveBackgroundPositionValue(value, fallback = '50%') {
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed) {
+            return trimmed;
+        }
+    }
+    return fallback;
+}
+
+function resolveBackgroundFitForData(data) {
+    if (!data) {
+        return 'contain';
+    }
+    const directValue = resolveBackgroundFitValue(data.backgroundFit, '');
+    if (directValue) {
+        return directValue;
+    }
+    const type = data.type;
+    const typeSettings = (window.NodeTypes && type && window.NodeTypes[type]) || null;
+    const defaultSettings = window.NodeTypes && window.NodeTypes.default ? window.NodeTypes.default : null;
+    const typeFit = resolveBackgroundFitValue(typeSettings?.backgroundFit, '');
+    const defaultFit = resolveBackgroundFitValue(defaultSettings?.backgroundFit, 'contain');
+    return typeFit || defaultFit || 'contain';
+}
+
 class NodeEditorModule {
     constructor(dependencies) {
         // Required dependencies injected via constructor
@@ -1014,6 +1050,13 @@ class NodeEditorModule {
                             </div>
                         </div>
                         <div class="attribute-group">
+                            <label>Icon Fit:</label>
+                            <select id="node-background-fit">
+                                <option value="contain">Contain</option>
+                                <option value="cover">Cover</option>
+                            </select>
+                        </div>
+                        <div class="attribute-group">
                             <label>Icon Opacity:</label>
                             <input type="range" id="icon-opacity" min="0" max="1" step="0.1" value="1">
                             <span id="icon-opacity-value">1.0</span>
@@ -1141,6 +1184,13 @@ class NodeEditorModule {
                                 <input type="text" id="bulk-node-icon" placeholder="icon name or URL">
                                 <button type="button" class="file-input-button" data-file-target="bulk-node-icon">Browse…</button>
                             </div>
+                        </div>
+                        <div class="attribute-group">
+                            <label>Icon Fit:</label>
+                            <select id="bulk-node-background-fit">
+                                <option value="contain">Contain</option>
+                                <option value="cover">Cover</option>
+                            </select>
                         </div>
                         <div class="attribute-group">
                             <label>Icon Opacity:</label>
@@ -1379,6 +1429,7 @@ class NodeEditorModule {
                 'node-color',
                 'node-weight',
                 'node-icon',
+                'node-background-fit',
                 'node-border-color',
                 'node-shape',
                 'node-timestamp',
@@ -1396,6 +1447,7 @@ class NodeEditorModule {
                 'node-color',
                 'node-weight',
                 'node-icon',
+                'node-background-fit',
                 'node-border-color',
                 'node-shape',
                 'node-timestamp',
@@ -1512,6 +1564,11 @@ class NodeEditorModule {
                             const iconId = `${prefix}node-icon`;
                             this.setFieldValue(iconId, defaults.icon);
                             markBulkChanged(iconId);
+                        }
+                        if (defaults.backgroundFit !== undefined) {
+                            const fitId = `${prefix}node-background-fit`;
+                            this.setFieldValue(fitId, defaults.backgroundFit);
+                            markBulkChanged(fitId);
                         }
                         if (defaults.borderColor !== undefined) {
                             const borderColorId = `${prefix}node-border-color`;
@@ -1680,6 +1737,7 @@ class NodeEditorModule {
         set('node-opacity', data.opacity || 1);
         set('node-weight', data.weight || 1);
         set('node-icon', data.icon || '');
+        set('node-background-fit', resolveBackgroundFitForData(data));
         set('icon-opacity', data.iconOpacity != null ? data.iconOpacity : 1);
         set('node-info', data.info || '');
         const nodeType = data.type || 'default';
@@ -1754,7 +1812,7 @@ class NodeEditorModule {
 
         const disableFields = [
             'node-opacity', 'node-border-color', 'node-shape',
-            'node-weight', 'node-icon', 'icon-opacity', 'node-info',
+            'node-weight', 'node-icon', 'node-background-fit', 'icon-opacity', 'node-info',
             'node-graph-link-source', 'node-graph-link-key',
             'node-timestamp', 'node-label', 'node-show-label', 'node-type', 'node-id'
         ];
@@ -3276,6 +3334,7 @@ class NodeEditorModule {
             shape: getFieldValue('node-shape', v => v),
             weight: getFieldValue('node-weight', v => parseFloat(v) || 1),
             icon: getFieldValue('node-icon', v => (v || '').trim()),
+            backgroundFit: getFieldValue('node-background-fit', v => resolveBackgroundFitValue(v, 'contain')),
             iconOpacity: getFieldValue('icon-opacity', v => parseFloat(v)),
             info: getFieldValue('node-info', raw => { return window.DOMPurify ? DOMPurify.sanitize(raw) : raw; }),
             fontFamily: getFieldValue('node-font-family', v => v),
@@ -3713,10 +3772,13 @@ class NodeEditorModule {
             })();
 
             if (graphBackgroundImage) {
+                const backgroundFit = resolveBackgroundFitForData(data);
+                const backgroundPositionX = resolveBackgroundPositionValue(data.backgroundPositionX, '50%');
+                const backgroundPositionY = resolveBackgroundPositionValue(data.backgroundPositionY, '50%');
                 baseStyles['background-image'] = graphBackgroundImage;
-                baseStyles['background-fit'] = 'contain';
-                baseStyles['background-position-x'] = '50%';
-                baseStyles['background-position-y'] = '50%';
+                baseStyles['background-fit'] = backgroundFit;
+                baseStyles['background-position-x'] = backgroundPositionX;
+                baseStyles['background-position-y'] = backgroundPositionY;
                 baseStyles['background-repeat'] = 'no-repeat';
                 baseStyles['background-width'] = '70%';
                 baseStyles['background-height'] = '70%';
@@ -3742,6 +3804,20 @@ class NodeEditorModule {
         }
         if (data.italic !== undefined) {
             baseStyles['font-style'] = data.italic ? 'italic' : 'normal';
+        }
+
+        const backgroundImage = data.backgroundImage;
+        if (!isGraphLikeNode && backgroundImage && backgroundImage !== 'none') {
+            const backgroundFit = resolveBackgroundFitForData(data);
+            const backgroundPositionX = resolveBackgroundPositionValue(data.backgroundPositionX, '50%');
+            const backgroundPositionY = resolveBackgroundPositionValue(data.backgroundPositionY, '50%');
+            baseStyles['background-image'] = backgroundImage;
+            baseStyles['background-fit'] = backgroundFit;
+            baseStyles['background-position-x'] = backgroundPositionX;
+            baseStyles['background-position-y'] = backgroundPositionY;
+            baseStyles['background-repeat'] = 'no-repeat';
+            baseStyles['background-width'] = '100%';
+            baseStyles['background-height'] = '100%';
         }
 
         if (data.type === 'text') {
@@ -3905,13 +3981,17 @@ class NodeEditorModule {
                 const lighterColor = window.GraphRenderer && window.GraphRenderer.lightenColor
                     ? window.GraphRenderer.lightenColor(baseColor, 0.4)
                     : baseColor;
+                const fitValue = resolveBackgroundFitForData(node.data());
+                const positionX = resolveBackgroundPositionValue(node.data('backgroundPositionX'), '50%');
+                const positionY = resolveBackgroundPositionValue(node.data('backgroundPositionY'), '50%');
+                node.data('backgroundFit', fitValue);
                 node.style({
                     'background-image': bg,
                     'background-color': lighterColor,
-                    'background-fit': 'contain',
+                    'background-fit': fitValue,
                     'background-repeat': 'no-repeat',
-                    'background-position-x': '50%',
-                    'background-position-y': '50%',
+                    'background-position-x': positionX,
+                    'background-position-y': positionY,
                     'background-width': '100%',
                     'background-height': '100%'
                 });
