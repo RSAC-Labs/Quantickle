@@ -3981,10 +3981,10 @@ class NodeEditorModule {
                 const lighterColor = window.GraphRenderer && window.GraphRenderer.lightenColor
                     ? window.GraphRenderer.lightenColor(baseColor, 0.4)
                     : baseColor;
-                const fitValue = resolveBackgroundFitForData(node.data());
+                const storedFit = typeof node.data === 'function' ? node.data('backgroundFit') : null;
+                const fitValue = resolveBackgroundFitValue(storedFit, resolveBackgroundFitForData(node.data()));
                 const positionX = resolveBackgroundPositionValue(node.data('backgroundPositionX'), '50%');
                 const positionY = resolveBackgroundPositionValue(node.data('backgroundPositionY'), '50%');
-                node.data('backgroundFit', fitValue);
                 node.style({
                     'background-image': bg,
                     'background-color': lighterColor,
