@@ -82,6 +82,42 @@ if (typeof window !== 'undefined' && !window.normalizeColorInput) {
     window.normalizeColorInput = normalizeColorInput;
 }
 
+function resolveBackgroundFitValue(value, fallback = 'contain') {
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed) {
+            return trimmed;
+        }
+    }
+    return fallback;
+}
+
+function resolveBackgroundPositionValue(value, fallback = '50%') {
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed) {
+            return trimmed;
+        }
+    }
+    return fallback;
+}
+
+function resolveBackgroundFitForData(data) {
+    if (!data) {
+        return 'contain';
+    }
+    const directValue = resolveBackgroundFitValue(data.backgroundFit, '');
+    if (directValue) {
+        return directValue;
+    }
+    const type = data.type;
+    const typeSettings = (window.NodeTypes && type && window.NodeTypes[type]) || null;
+    const defaultSettings = window.NodeTypes && window.NodeTypes.default ? window.NodeTypes.default : null;
+    const typeFit = resolveBackgroundFitValue(typeSettings?.backgroundFit, '');
+    const defaultFit = resolveBackgroundFitValue(defaultSettings?.backgroundFit, 'contain');
+    return typeFit || defaultFit || 'contain';
+}
+
 class NodeEditorModule {
     constructor(dependencies) {
         // Required dependencies injected via constructor
@@ -3713,10 +3749,13 @@ class NodeEditorModule {
             })();
 
             if (graphBackgroundImage) {
+                const backgroundFit = resolveBackgroundFitForData(data);
+                const backgroundPositionX = resolveBackgroundPositionValue(data.backgroundPositionX, '50%');
+                const backgroundPositionY = resolveBackgroundPositionValue(data.backgroundPositionY, '50%');
                 baseStyles['background-image'] = graphBackgroundImage;
-                baseStyles['background-fit'] = 'contain';
-                baseStyles['background-position-x'] = '50%';
-                baseStyles['background-position-y'] = '50%';
+                baseStyles['background-fit'] = backgroundFit;
+                baseStyles['background-position-x'] = backgroundPositionX;
+                baseStyles['background-position-y'] = backgroundPositionY;
                 baseStyles['background-repeat'] = 'no-repeat';
                 baseStyles['background-width'] = '70%';
                 baseStyles['background-height'] = '70%';
@@ -3905,13 +3944,17 @@ class NodeEditorModule {
                 const lighterColor = window.GraphRenderer && window.GraphRenderer.lightenColor
                     ? window.GraphRenderer.lightenColor(baseColor, 0.4)
                     : baseColor;
+                const fitValue = resolveBackgroundFitForData(node.data());
+                const positionX = resolveBackgroundPositionValue(node.data('backgroundPositionX'), '50%');
+                const positionY = resolveBackgroundPositionValue(node.data('backgroundPositionY'), '50%');
+                node.data('backgroundFit', fitValue);
                 node.style({
                     'background-image': bg,
                     'background-color': lighterColor,
-                    'background-fit': 'contain',
+                    'background-fit': fitValue,
                     'background-repeat': 'no-repeat',
-                    'background-position-x': '50%',
-                    'background-position-y': '50%',
+                    'background-position-x': positionX,
+                    'background-position-y': positionY,
                     'background-width': '100%',
                     'background-height': '100%'
                 });
