@@ -3806,6 +3806,20 @@ class NodeEditorModule {
             baseStyles['font-style'] = data.italic ? 'italic' : 'normal';
         }
 
+        const backgroundImage = data.backgroundImage;
+        if (!isGraphLikeNode && backgroundImage && backgroundImage !== 'none') {
+            const backgroundFit = resolveBackgroundFitForData(data);
+            const backgroundPositionX = resolveBackgroundPositionValue(data.backgroundPositionX, '50%');
+            const backgroundPositionY = resolveBackgroundPositionValue(data.backgroundPositionY, '50%');
+            baseStyles['background-image'] = backgroundImage;
+            baseStyles['background-fit'] = backgroundFit;
+            baseStyles['background-position-x'] = backgroundPositionX;
+            baseStyles['background-position-y'] = backgroundPositionY;
+            baseStyles['background-repeat'] = 'no-repeat';
+            baseStyles['background-width'] = '100%';
+            baseStyles['background-height'] = '100%';
+        }
+
         if (data.type === 'text') {
             baseStyles.label = data.label || '';
             baseStyles['text-opacity'] = data.labelVisible !== false ? 1 : 0;
