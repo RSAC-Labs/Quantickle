@@ -39,6 +39,10 @@ class FileManagerModule {
         this.lastIgnoredDuplicateNodes = [];
 
         this._imagePreloadCache = new Map();
+        this.exportCaptureModes = Object.freeze({
+            viewport: 'viewport',
+            fullGraph: 'fullGraph'
+        });
         
         // File configuration
         this.config = {
@@ -4615,7 +4619,9 @@ class FileManagerModule {
         }
 
         const scale = Number.isFinite(desiredScale) && desiredScale > 0 ? desiredScale : 1;
-        const normalizedCaptureMode = captureMode === 'fullGraph' ? 'fullGraph' : 'viewport';
+        const normalizedCaptureMode = captureMode === this.exportCaptureModes.fullGraph
+            ? this.exportCaptureModes.fullGraph
+            : this.exportCaptureModes.viewport;
         const minScale = 1;
         const scaleReductionFactor = 0.75;
 
@@ -4652,31 +4658,43 @@ class FileManagerModule {
             : (this.cy.height ? this.cy.height() : 0);
 
         if (!hasVisibleElements || !hasDrawableBounds) {
+            const emptyModeWidth = normalizedCaptureMode === this.exportCaptureModes.fullGraph
+                ? Math.max(2, renderedBounds && renderedBounds.w ? renderedBounds.w : viewportWidth || 0)
+                : Math.max(2, viewportWidth || 0);
+            const emptyModeHeight = normalizedCaptureMode === this.exportCaptureModes.fullGraph
+                ? Math.max(2, renderedBounds && renderedBounds.h ? renderedBounds.h : viewportHeight || 0)
+                : Math.max(2, viewportHeight || 0);
+
             return {
                 pngDataUrl: this.createBlankSnapshotDataUrl(),
                 scale,
                 renderedBounds,
                 rect,
-                boundsWidth: Math.max(2, viewportWidth || 0),
-                boundsHeight: Math.max(2, viewportHeight || 0),
+                boundsWidth: emptyModeWidth,
+                boundsHeight: emptyModeHeight,
+                expectedOutput: {
+                    width: Math.max(1, Math.round(emptyModeWidth * scale)),
+                    height: Math.max(1, Math.round(emptyModeHeight * scale))
+                },
                 originX: 0,
                 originY: 0,
+                captureMode: normalizedCaptureMode,
                 isBlankSnapshot: true
             };
         }
 
-        const boundsWidth = normalizedCaptureMode === 'fullGraph'
+        const boundsWidth = normalizedCaptureMode === this.exportCaptureModes.fullGraph
             ? (renderedBounds && Number.isFinite(renderedBounds.w) && renderedBounds.w > 0 ? renderedBounds.w : viewportWidth)
             : viewportWidth;
 
-        const boundsHeight = normalizedCaptureMode === 'fullGraph'
+        const boundsHeight = normalizedCaptureMode === this.exportCaptureModes.fullGraph
             ? (renderedBounds && Number.isFinite(renderedBounds.h) && renderedBounds.h > 0 ? renderedBounds.h : viewportHeight)
             : viewportHeight;
 
-        const originX = normalizedCaptureMode === 'fullGraph' && renderedBounds && Number.isFinite(renderedBounds.x1)
+        const originX = normalizedCaptureMode === this.exportCaptureModes.fullGraph && renderedBounds && Number.isFinite(renderedBounds.x1)
             ? renderedBounds.x1
             : 0;
-        const originY = normalizedCaptureMode === 'fullGraph' && renderedBounds && Number.isFinite(renderedBounds.y1)
+        const originY = normalizedCaptureMode === this.exportCaptureModes.fullGraph && renderedBounds && Number.isFinite(renderedBounds.y1)
             ? renderedBounds.y1
             : 0;
 
@@ -4691,9 +4709,17 @@ class FileManagerModule {
 
         while (attemptedScale >= minScale) {
             try {
-                const pngOptions = normalizedCaptureMode === 'fullGraph'
-                    ? { full: true, scale: attemptedScale, bg: backgroundColor }
-                    : { full: true, scale: attemptedScale, bg: backgroundColor };
+                const pngOptions = normalizedCaptureMode === this.exportCaptureModes.fullGraph
+                    ? {
+                        full: true,
+                        scale: attemptedScale,
+                        bg: backgroundColor
+                    }
+                    : {
+                        full: false,
+                        scale: attemptedScale,
+                        bg: backgroundColor
+                    };
                 const candidate = this.cy.png(pngOptions);
 
                 if (!candidate || (typeof candidate === 'string' && !candidate.trim())) {
@@ -4729,14 +4755,10 @@ class FileManagerModule {
             );
         }
 
-        if (normalizedCaptureMode === 'viewport') {
-            pngDataUrl = await this.cropSnapshotToViewport(pngDataUrl, {
-                viewportWidth: boundsWidth,
-                viewportHeight: boundsHeight,
-                renderedBounds,
-                exportScale: scaleUsed
-            }) || pngDataUrl;
-        }
+        const expectedOutput = {
+            width: Math.max(1, Math.round(boundsWidth * scaleUsed)),
+            height: Math.max(1, Math.round(boundsHeight * scaleUsed))
+        };
 
         const composedDataUrl = await this.composeSnapshotWithContainerBackground(
             pngDataUrl,
@@ -4756,6 +4778,7 @@ class FileManagerModule {
             rect,
             boundsWidth,
             boundsHeight,
+            expectedOutput,
             originX,
             originY,
             captureMode: normalizedCaptureMode,
@@ -5328,7 +5351,10 @@ class FileManagerModule {
                     break;
 
                 case 'png': {
-                    const snapshot = await this.captureExportSnapshot({ desiredScale: 4, captureMode: 'viewport' });
+                    const snapshot = await this.captureExportSnapshot({
+                        desiredScale: 4,
+                        captureMode: this.exportCaptureModes.fullGraph
+                    });
                     const pngResponse = await fetch(snapshot.pngDataUrl);
                     data = await pngResponse.blob();
                     filename = `graph-export-${Date.now()}.png`;
@@ -5342,7 +5368,10 @@ class FileManagerModule {
                         return;
                     }
 
-                    const snapshot = await this.captureExportSnapshot({ desiredScale: 2, captureMode: 'viewport' });
+                    const snapshot = await this.captureExportSnapshot({
+                        desiredScale: 2,
+                        captureMode: this.exportCaptureModes.fullGraph
+                    });
                     if (snapshot.isBlankSnapshot) {
                         this.notifications.show('Blank graph has no drawable snapshot; exported empty PDF page instead.', 'warning');
                     }
@@ -5419,7 +5448,11 @@ class FileManagerModule {
             return error;
         };
 
-        const snapshot = await this.captureExportSnapshot({ desiredScale, captureMode: 'viewport', onError: markNotifiedError });
+        const snapshot = await this.captureExportSnapshot({
+            desiredScale,
+            captureMode: this.exportCaptureModes.viewport,
+            onError: markNotifiedError
+        });
         const { pngDataUrl, scale, renderedBounds, boundsWidth, boundsHeight, originX, originY } = snapshot;
 
         const graphExport = this.exportCurrentGraph();
