@@ -4615,6 +4615,8 @@ class FileManagerModule {
         }
 
         const scale = Number.isFinite(desiredScale) && desiredScale > 0 ? desiredScale : 1;
+        const minScale = 1;
+        const scaleReductionFactor = 0.75;
 
         await this.preloadBackgroundImagesForExport();
 
@@ -4672,25 +4674,50 @@ class FileManagerModule {
         }
 
         let pngDataUrl;
-        try {
-            pngDataUrl = this.cy.png({ full: true, scale, bg: backgroundColor });
-        } catch (err) {
-            err.__notified = true;
-            this.notifications.show('Capturing the graph snapshot failed.', 'error');
-            throw err;
+        let attemptedScale = scale;
+        let scaleUsed = scale;
+        let lastError = null;
+
+        while (attemptedScale >= minScale) {
+            try {
+                const candidate = this.cy.png({ full: true, scale: attemptedScale, bg: backgroundColor });
+
+                if (!candidate || (typeof candidate === 'string' && !candidate.trim())) {
+                    throw new Error('Failed to capture graph snapshot.');
+                }
+
+                if (typeof candidate !== 'string' || !candidate.startsWith('data:image/')) {
+                    throw new Error('Failed to capture a valid graph image snapshot.');
+                }
+
+                pngDataUrl = candidate;
+                scaleUsed = attemptedScale;
+                break;
+            } catch (err) {
+                lastError = err;
+                const nextScale = attemptedScale * scaleReductionFactor;
+                if (nextScale < minScale) {
+                    break;
+                }
+                attemptedScale = nextScale;
+            }
         }
 
-        if (!pngDataUrl || (typeof pngDataUrl === 'string' && !pngDataUrl.trim())) {
-            throw markNotifiedError('Failed to capture graph snapshot.');
+        if (!pngDataUrl) {
+            const originalMessage = lastError && lastError.message ? ` ${lastError.message}` : '';
+            throw markNotifiedError(`Failed to capture graph snapshot at export scales >= ${minScale}.${originalMessage}`);
         }
 
-        if (typeof pngDataUrl !== 'string' || !pngDataUrl.startsWith('data:image/')) {
-            throw markNotifiedError('Failed to capture a valid graph image snapshot.');
+        if (scaleUsed < scale) {
+            this.notifications.show(
+                `Graph export scale was reduced from ${scale.toFixed(2)}x to ${scaleUsed.toFixed(2)}x to complete the snapshot.`,
+                'warning'
+            );
         }
 
         return {
             pngDataUrl,
-            scale,
+            scale: scaleUsed,
             renderedBounds,
             rect,
             boundsWidth,
