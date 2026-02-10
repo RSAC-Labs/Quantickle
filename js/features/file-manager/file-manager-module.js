@@ -4718,7 +4718,12 @@ class FileManagerModule {
         const composedDataUrl = await this.composeSnapshotWithContainerBackground(
             pngDataUrl,
             container,
-            backgroundColor
+            {
+                fallbackColor: backgroundColor,
+                exportScale: scaleUsed,
+                originX: renderedBounds && Number.isFinite(renderedBounds.x1) ? renderedBounds.x1 : 0,
+                originY: renderedBounds && Number.isFinite(renderedBounds.y1) ? renderedBounds.y1 : 0
+            }
         );
 
         return {
@@ -4734,10 +4739,15 @@ class FileManagerModule {
         };
     }
 
-    async composeSnapshotWithContainerBackground(snapshotDataUrl, container, fallbackColor = '#ffffff') {
+    async composeSnapshotWithContainerBackground(snapshotDataUrl, container, options = {}) {
         if (!snapshotDataUrl || !container || typeof window === 'undefined') {
             return snapshotDataUrl;
         }
+
+        const fallbackColor = typeof options.fallbackColor === 'string' ? options.fallbackColor : '#ffffff';
+        const exportScale = Number.isFinite(options.exportScale) && options.exportScale > 0 ? options.exportScale : 1;
+        const originX = Number.isFinite(options.originX) ? options.originX : 0;
+        const originY = Number.isFinite(options.originY) ? options.originY : 0;
 
         const baseImage = await this.loadImageForExport(snapshotDataUrl);
         if (!baseImage) {
@@ -4753,7 +4763,8 @@ class FileManagerModule {
             return snapshotDataUrl;
         }
 
-        const computed = window.getComputedStyle(container);
+        const backgroundHost = this.resolveExportBackgroundHost(container);
+        const computed = window.getComputedStyle(backgroundHost);
         const backgroundFill = computed.backgroundColor && computed.backgroundColor !== 'rgba(0, 0, 0, 0)'
             ? computed.backgroundColor
             : fallbackColor;
@@ -4761,32 +4772,182 @@ class FileManagerModule {
         context.fillStyle = backgroundFill || fallbackColor;
         context.fillRect(0, 0, canvas.width, canvas.height);
 
-        const backgroundImageUrl = this.extractCssBackgroundUrl(computed.backgroundImage);
-        if (backgroundImageUrl) {
-            const backgroundImage = await this.loadImageForExport(backgroundImageUrl);
-            if (backgroundImage) {
-                this.drawContainerBackgroundImageForExport(context, backgroundImage, {
-                    canvasWidth: canvas.width,
-                    canvasHeight: canvas.height,
-                    backgroundSize: computed.backgroundSize,
-                    backgroundPosition: computed.backgroundPosition,
-                    backgroundRepeat: computed.backgroundRepeat
-                });
+        const backgroundImageUrls = this.extractCssBackgroundUrls(computed.backgroundImage);
+        if (backgroundImageUrls.length) {
+            for (let index = backgroundImageUrls.length - 1; index >= 0; index -= 1) {
+                const backgroundImage = await this.loadImageForExport(backgroundImageUrls[index]);
+                if (backgroundImage) {
+                    this.drawContainerBackgroundImageForExport(context, backgroundImage, {
+                        canvasWidth: canvas.width,
+                        canvasHeight: canvas.height,
+                        backgroundSize: computed.backgroundSize,
+                        backgroundPosition: computed.backgroundPosition,
+                        backgroundRepeat: computed.backgroundRepeat
+                    });
+                }
             }
         }
 
         context.drawImage(baseImage, 0, 0, canvas.width, canvas.height);
+        await this.drawCalloutLayerForExport(context, container, {
+            exportScale,
+            originX,
+            originY
+        });
         return canvas.toDataURL('image/png');
     }
 
-    extractCssBackgroundUrl(backgroundImageValue) {
+    resolveExportBackgroundHost(container) {
+        if (!container || typeof window === 'undefined' || typeof window.getComputedStyle !== 'function') {
+            return container;
+        }
+
+        const owner = container.parentElement;
+        if (!owner) {
+            return container;
+        }
+
+        const containerComputed = window.getComputedStyle(container);
+        const ownerComputed = window.getComputedStyle(owner);
+        const containerHasImage = containerComputed && containerComputed.backgroundImage && containerComputed.backgroundImage !== 'none';
+        const ownerHasImage = ownerComputed && ownerComputed.backgroundImage && ownerComputed.backgroundImage !== 'none';
+
+        if (!containerHasImage && ownerHasImage) {
+            return owner;
+        }
+
+        return container;
+    }
+
+    extractCssBackgroundUrls(backgroundImageValue) {
         if (!backgroundImageValue || backgroundImageValue === 'none') {
+            return [];
+        }
+
+        const urls = [];
+        const pattern = /url\((['"]?)(.*?)\1\)/gi;
+        const rawValue = String(backgroundImageValue);
+        let match = pattern.exec(rawValue);
+
+        while (match) {
+            if (match[2]) {
+                urls.push(match[2].trim());
+            }
+            match = pattern.exec(rawValue);
+        }
+
+        return urls;
+    }
+
+    async drawCalloutLayerForExport(context, container, options = {}) {
+        if (!context || !container) {
+            return;
+        }
+
+        const roots = [];
+        if (typeof container.querySelectorAll === 'function') {
+            roots.push(container);
+        }
+        const owner = container.parentElement;
+        if (owner && owner !== container && typeof owner.querySelectorAll === 'function') {
+            roots.push(owner);
+        }
+
+        const callouts = [];
+        roots.forEach(root => {
+            Array.from(root.querySelectorAll('.text-callout-layer .text-callout')).forEach(node => {
+                if (!callouts.includes(node)) {
+                    callouts.push(node);
+                }
+            });
+        });
+
+        if (!callouts.length) {
+            return;
+        }
+
+        const containerRect = typeof container.getBoundingClientRect === 'function'
+            ? container.getBoundingClientRect()
+            : null;
+        if (!containerRect) {
+            return;
+        }
+
+        const exportScale = Number.isFinite(options.exportScale) && options.exportScale > 0 ? options.exportScale : 1;
+        const originX = Number.isFinite(options.originX) ? options.originX : 0;
+        const originY = Number.isFinite(options.originY) ? options.originY : 0;
+
+        for (const callout of callouts) {
+            const calloutImage = await this.renderElementToImageForExport(callout);
+            if (!calloutImage) {
+                continue;
+            }
+
+            const rect = callout.getBoundingClientRect();
+            if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height) || rect.width <= 0 || rect.height <= 0) {
+                continue;
+            }
+
+            const targetX = (rect.left - containerRect.left - originX) * exportScale;
+            const targetY = (rect.top - containerRect.top - originY) * exportScale;
+            const targetWidth = rect.width * exportScale;
+            const targetHeight = rect.height * exportScale;
+
+            context.drawImage(calloutImage, targetX, targetY, targetWidth, targetHeight);
+        }
+    }
+
+    async renderElementToImageForExport(element) {
+        if (!element || typeof XMLSerializer === 'undefined') {
             return null;
         }
 
-        const firstLayer = String(backgroundImageValue).split(',')[0].trim();
-        const match = firstLayer.match(/^url\((['"]?)(.*?)\1\)$/i);
-        return match && match[2] ? match[2] : null;
+        const rect = element.getBoundingClientRect();
+        if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height) || rect.width <= 0 || rect.height <= 0) {
+            return null;
+        }
+
+        const clone = element.cloneNode(true);
+        this.inlineComputedStylesForExport(element, clone);
+
+        const serialized = new XMLSerializer().serializeToString(clone);
+        const foreignObjectMarkup = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}" viewBox="0 0 ${rect.width} ${rect.height}">
+                <foreignObject width="100%" height="100%">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="width:${rect.width}px;height:${rect.height}px;">${serialized}</div>
+                </foreignObject>
+            </svg>
+        `;
+
+        const svgBlob = new Blob([foreignObjectMarkup], { type: 'image/svg+xml;charset=utf-8' });
+        const svgUrl = URL.createObjectURL(svgBlob);
+
+        try {
+            return await this.loadImageForExport(svgUrl);
+        } finally {
+            URL.revokeObjectURL(svgUrl);
+        }
+    }
+
+    inlineComputedStylesForExport(source, target) {
+        if (!source || !target || typeof window === 'undefined' || typeof window.getComputedStyle !== 'function') {
+            return;
+        }
+
+        const computed = window.getComputedStyle(source);
+        const styleText = Array.from(computed)
+            .map(property => `${property}:${computed.getPropertyValue(property)};`)
+            .join('');
+
+        target.setAttribute('style', styleText);
+
+        const sourceChildren = source.children || [];
+        const targetChildren = target.children || [];
+        const childCount = Math.min(sourceChildren.length, targetChildren.length);
+
+        for (let i = 0; i < childCount; i += 1) {
+            this.inlineComputedStylesForExport(sourceChildren[i], targetChildren[i]);
+        }
     }
 
     drawContainerBackgroundImageForExport(context, image, options = {}) {
