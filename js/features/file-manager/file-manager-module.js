@@ -4715,8 +4715,14 @@ class FileManagerModule {
             );
         }
 
-        return {
+        const composedDataUrl = await this.composeSnapshotWithContainerBackground(
             pngDataUrl,
+            container,
+            backgroundColor
+        );
+
+        return {
+            pngDataUrl: composedDataUrl || pngDataUrl,
             scale: scaleUsed,
             renderedBounds,
             rect,
@@ -4726,6 +4732,113 @@ class FileManagerModule {
             originY: renderedBounds && Number.isFinite(renderedBounds.y1) ? renderedBounds.y1 : 0,
             isBlankSnapshot: false
         };
+    }
+
+    async composeSnapshotWithContainerBackground(snapshotDataUrl, container, fallbackColor = '#ffffff') {
+        if (!snapshotDataUrl || !container || typeof window === 'undefined') {
+            return snapshotDataUrl;
+        }
+
+        const baseImage = await this.loadImageForExport(snapshotDataUrl);
+        if (!baseImage) {
+            return snapshotDataUrl;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, baseImage.naturalWidth || baseImage.width || 1);
+        canvas.height = Math.max(1, baseImage.naturalHeight || baseImage.height || 1);
+
+        const context = canvas.getContext('2d');
+        if (!context) {
+            return snapshotDataUrl;
+        }
+
+        const computed = window.getComputedStyle(container);
+        const backgroundFill = computed.backgroundColor && computed.backgroundColor !== 'rgba(0, 0, 0, 0)'
+            ? computed.backgroundColor
+            : fallbackColor;
+
+        context.fillStyle = backgroundFill || fallbackColor;
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        const backgroundImageUrl = this.extractCssBackgroundUrl(computed.backgroundImage);
+        if (backgroundImageUrl) {
+            const backgroundImage = await this.loadImageForExport(backgroundImageUrl);
+            if (backgroundImage) {
+                this.drawContainerBackgroundImageForExport(context, backgroundImage, {
+                    canvasWidth: canvas.width,
+                    canvasHeight: canvas.height,
+                    backgroundSize: computed.backgroundSize,
+                    backgroundPosition: computed.backgroundPosition,
+                    backgroundRepeat: computed.backgroundRepeat
+                });
+            }
+        }
+
+        context.drawImage(baseImage, 0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL('image/png');
+    }
+
+    extractCssBackgroundUrl(backgroundImageValue) {
+        if (!backgroundImageValue || backgroundImageValue === 'none') {
+            return null;
+        }
+
+        const firstLayer = String(backgroundImageValue).split(',')[0].trim();
+        const match = firstLayer.match(/^url\((['"]?)(.*?)\1\)$/i);
+        return match && match[2] ? match[2] : null;
+    }
+
+    drawContainerBackgroundImageForExport(context, image, options = {}) {
+        const canvasWidth = Number.isFinite(options.canvasWidth) ? options.canvasWidth : 1;
+        const canvasHeight = Number.isFinite(options.canvasHeight) ? options.canvasHeight : 1;
+        const imageWidth = Math.max(1, image.naturalWidth || image.width || 1);
+        const imageHeight = Math.max(1, image.naturalHeight || image.height || 1);
+        const repeat = options.backgroundRepeat || 'no-repeat';
+        const size = options.backgroundSize || 'auto';
+        const position = options.backgroundPosition || '0% 0%';
+
+        if (/repeat/.test(repeat)) {
+            const pattern = context.createPattern(image, repeat);
+            if (pattern) {
+                context.save();
+                context.fillStyle = pattern;
+                context.fillRect(0, 0, canvasWidth, canvasHeight);
+                context.restore();
+            }
+            return;
+        }
+
+        let drawWidth = imageWidth;
+        let drawHeight = imageHeight;
+
+        if (size === 'cover' || size === 'contain') {
+            const scaleX = canvasWidth / imageWidth;
+            const scaleY = canvasHeight / imageHeight;
+            const scale = size === 'cover' ? Math.max(scaleX, scaleY) : Math.min(scaleX, scaleY);
+            drawWidth = imageWidth * scale;
+            drawHeight = imageHeight * scale;
+        }
+
+        const centered = /center/.test(position);
+        const offsetX = centered ? (canvasWidth - drawWidth) / 2 : 0;
+        const offsetY = centered ? (canvasHeight - drawHeight) / 2 : 0;
+
+        context.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
+    }
+
+    async loadImageForExport(source) {
+        if (!source || typeof Image === 'undefined') {
+            return null;
+        }
+
+        return new Promise((resolve) => {
+            const image = new Image();
+            image.crossOrigin = 'anonymous';
+            image.onload = () => resolve(image);
+            image.onerror = () => resolve(null);
+            image.src = source;
+        });
     }
 
     createBlankSnapshotDataUrl() {
