@@ -4763,7 +4763,8 @@ class FileManagerModule {
             return snapshotDataUrl;
         }
 
-        const computed = window.getComputedStyle(container);
+        const backgroundHost = this.resolveExportBackgroundHost(container);
+        const computed = window.getComputedStyle(backgroundHost);
         const backgroundFill = computed.backgroundColor && computed.backgroundColor !== 'rgba(0, 0, 0, 0)'
             ? computed.backgroundColor
             : fallbackColor;
@@ -4796,6 +4797,28 @@ class FileManagerModule {
         return canvas.toDataURL('image/png');
     }
 
+    resolveExportBackgroundHost(container) {
+        if (!container || typeof window === 'undefined' || typeof window.getComputedStyle !== 'function') {
+            return container;
+        }
+
+        const owner = container.parentElement;
+        if (!owner) {
+            return container;
+        }
+
+        const containerComputed = window.getComputedStyle(container);
+        const ownerComputed = window.getComputedStyle(owner);
+        const containerHasImage = containerComputed && containerComputed.backgroundImage && containerComputed.backgroundImage !== 'none';
+        const ownerHasImage = ownerComputed && ownerComputed.backgroundImage && ownerComputed.backgroundImage !== 'none';
+
+        if (!containerHasImage && ownerHasImage) {
+            return owner;
+        }
+
+        return container;
+    }
+
     extractCssBackgroundUrls(backgroundImageValue) {
         if (!backgroundImageValue || backgroundImageValue === 'none') {
             return [];
@@ -4817,11 +4840,28 @@ class FileManagerModule {
     }
 
     async drawCalloutLayerForExport(context, container, options = {}) {
-        if (!context || !container || typeof container.querySelectorAll !== 'function') {
+        if (!context || !container) {
             return;
         }
 
-        const callouts = Array.from(container.querySelectorAll('.text-callout-layer .text-callout'));
+        const roots = [];
+        if (typeof container.querySelectorAll === 'function') {
+            roots.push(container);
+        }
+        const owner = container.parentElement;
+        if (owner && owner !== container && typeof owner.querySelectorAll === 'function') {
+            roots.push(owner);
+        }
+
+        const callouts = [];
+        roots.forEach(root => {
+            Array.from(root.querySelectorAll('.text-callout-layer .text-callout')).forEach(node => {
+                if (!callouts.includes(node)) {
+                    callouts.push(node);
+                }
+            });
+        });
+
         if (!callouts.length) {
             return;
         }
@@ -4872,8 +4912,10 @@ class FileManagerModule {
 
         const serialized = new XMLSerializer().serializeToString(clone);
         const foreignObjectMarkup = `
-            <svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}">
-                <foreignObject width="100%" height="100%">${serialized}</foreignObject>
+            <svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}" viewBox="0 0 ${rect.width} ${rect.height}">
+                <foreignObject width="100%" height="100%">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="width:${rect.width}px;height:${rect.height}px;">${serialized}</div>
+                </foreignObject>
             </svg>
         `;
 
