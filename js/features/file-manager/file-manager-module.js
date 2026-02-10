@@ -39,10 +39,6 @@ class FileManagerModule {
         this.lastIgnoredDuplicateNodes = [];
 
         this._imagePreloadCache = new Map();
-        this.exportCaptureModes = Object.freeze({
-            viewport: 'viewport',
-            fullGraph: 'fullGraph'
-        });
         
         // File configuration
         this.config = {
@@ -4607,7 +4603,7 @@ class FileManagerModule {
         }
     }
 
-    async captureExportSnapshot({ desiredScale = 2, backgroundColor = '#ffffff', captureMode = 'viewport', onError } = {}) {
+    async captureExportSnapshot({ desiredScale = 2, backgroundColor = '#ffffff', onError } = {}) {
         const markNotifiedError = onError || (message => this.markExportError(message));
 
         if (!this.cy || typeof this.cy.png !== 'function') {
@@ -4619,9 +4615,6 @@ class FileManagerModule {
         }
 
         const scale = Number.isFinite(desiredScale) && desiredScale > 0 ? desiredScale : 1;
-        const normalizedCaptureMode = captureMode === this.exportCaptureModes.fullGraph
-            ? this.exportCaptureModes.fullGraph
-            : this.exportCaptureModes.viewport;
         const minScale = 1;
         const scaleReductionFactor = 0.75;
 
@@ -4650,53 +4643,31 @@ class FileManagerModule {
             && renderedBounds.h > 0
         );
 
-        const viewportWidth = rect && Number.isFinite(rect.width) && rect.width > 0
-            ? rect.width
-            : (this.cy.width ? this.cy.width() : 0);
-        const viewportHeight = rect && Number.isFinite(rect.height) && rect.height > 0
-            ? rect.height
-            : (this.cy.height ? this.cy.height() : 0);
-
         if (!hasVisibleElements || !hasDrawableBounds) {
-            const emptyModeWidth = normalizedCaptureMode === this.exportCaptureModes.fullGraph
-                ? Math.max(2, renderedBounds && renderedBounds.w ? renderedBounds.w : viewportWidth || 0)
-                : Math.max(2, viewportWidth || 0);
-            const emptyModeHeight = normalizedCaptureMode === this.exportCaptureModes.fullGraph
-                ? Math.max(2, renderedBounds && renderedBounds.h ? renderedBounds.h : viewportHeight || 0)
-                : Math.max(2, viewportHeight || 0);
-
             return {
                 pngDataUrl: this.createBlankSnapshotDataUrl(),
                 scale,
                 renderedBounds,
                 rect,
-                boundsWidth: emptyModeWidth,
-                boundsHeight: emptyModeHeight,
-                expectedOutput: {
-                    width: Math.max(1, Math.round(emptyModeWidth * scale)),
-                    height: Math.max(1, Math.round(emptyModeHeight * scale))
-                },
+                boundsWidth: 2,
+                boundsHeight: 2,
                 originX: 0,
                 originY: 0,
-                captureMode: normalizedCaptureMode,
                 isBlankSnapshot: true
             };
         }
 
-        const boundsWidth = normalizedCaptureMode === this.exportCaptureModes.fullGraph
-            ? (renderedBounds && Number.isFinite(renderedBounds.w) && renderedBounds.w > 0 ? renderedBounds.w : viewportWidth)
-            : viewportWidth;
+        const boundsWidth = renderedBounds && Number.isFinite(renderedBounds.w) && renderedBounds.w > 0
+            ? renderedBounds.w
+            : rect && Number.isFinite(rect.width) && rect.width > 0
+                ? rect.width
+                : (this.cy.width ? this.cy.width() : 0);
 
-        const boundsHeight = normalizedCaptureMode === this.exportCaptureModes.fullGraph
-            ? (renderedBounds && Number.isFinite(renderedBounds.h) && renderedBounds.h > 0 ? renderedBounds.h : viewportHeight)
-            : viewportHeight;
-
-        const originX = normalizedCaptureMode === this.exportCaptureModes.fullGraph && renderedBounds && Number.isFinite(renderedBounds.x1)
-            ? renderedBounds.x1
-            : 0;
-        const originY = normalizedCaptureMode === this.exportCaptureModes.fullGraph && renderedBounds && Number.isFinite(renderedBounds.y1)
-            ? renderedBounds.y1
-            : 0;
+        const boundsHeight = renderedBounds && Number.isFinite(renderedBounds.h) && renderedBounds.h > 0
+            ? renderedBounds.h
+            : rect && Number.isFinite(rect.height) && rect.height > 0
+                ? rect.height
+                : (this.cy.height ? this.cy.height() : 0);
 
         if (!boundsWidth || !boundsHeight) {
             throw markNotifiedError('Unable to determine graph dimensions for export.');
@@ -4709,18 +4680,7 @@ class FileManagerModule {
 
         while (attemptedScale >= minScale) {
             try {
-                const pngOptions = normalizedCaptureMode === this.exportCaptureModes.fullGraph
-                    ? {
-                        full: true,
-                        scale: attemptedScale,
-                        bg: backgroundColor
-                    }
-                    : {
-                        full: false,
-                        scale: attemptedScale,
-                        bg: backgroundColor
-                    };
-                const candidate = this.cy.png(pngOptions);
+                const candidate = this.cy.png({ full: true, scale: attemptedScale, bg: backgroundColor });
 
                 if (!candidate || (typeof candidate === 'string' && !candidate.trim())) {
                     throw new Error('Failed to capture graph snapshot.');
@@ -4755,469 +4715,17 @@ class FileManagerModule {
             );
         }
 
-        const expectedOutput = {
-            width: Math.max(1, Math.round(boundsWidth * scaleUsed)),
-            height: Math.max(1, Math.round(boundsHeight * scaleUsed))
-        };
-
-        const composedDataUrl = await this.composeSnapshotWithContainerBackground(
-            pngDataUrl,
-            container,
-            {
-                fallbackColor: backgroundColor,
-                exportScale: scaleUsed,
-                originX,
-                originY
-            }
-        );
-
         return {
-            pngDataUrl: composedDataUrl || pngDataUrl,
+            pngDataUrl,
             scale: scaleUsed,
             renderedBounds,
             rect,
             boundsWidth,
             boundsHeight,
-            expectedOutput,
-            originX,
-            originY,
-            captureMode: normalizedCaptureMode,
+            originX: renderedBounds && Number.isFinite(renderedBounds.x1) ? renderedBounds.x1 : 0,
+            originY: renderedBounds && Number.isFinite(renderedBounds.y1) ? renderedBounds.y1 : 0,
             isBlankSnapshot: false
         };
-    }
-
-
-    async cropSnapshotToViewport(snapshotDataUrl, options = {}) {
-        if (!snapshotDataUrl || typeof document === 'undefined') {
-            return snapshotDataUrl;
-        }
-
-        const viewportWidth = Number.isFinite(options.viewportWidth) ? options.viewportWidth : 0;
-        const viewportHeight = Number.isFinite(options.viewportHeight) ? options.viewportHeight : 0;
-        if (!(viewportWidth > 0) || !(viewportHeight > 0)) {
-            return snapshotDataUrl;
-        }
-
-        const renderedBounds = options.renderedBounds || null;
-        const boundsX = renderedBounds && Number.isFinite(renderedBounds.x1) ? renderedBounds.x1 : 0;
-        const boundsY = renderedBounds && Number.isFinite(renderedBounds.y1) ? renderedBounds.y1 : 0;
-        const exportScale = Number.isFinite(options.exportScale) && options.exportScale > 0 ? options.exportScale : 1;
-
-        const baseImage = await this.loadImageForExport(snapshotDataUrl);
-        if (!baseImage) {
-            return snapshotDataUrl;
-        }
-
-        const targetWidth = Math.max(1, Math.round(viewportWidth * exportScale));
-        const targetHeight = Math.max(1, Math.round(viewportHeight * exportScale));
-
-        const canvas = document.createElement('canvas');
-        canvas.width = targetWidth;
-        canvas.height = targetHeight;
-
-        const context = canvas.getContext('2d');
-        if (!context) {
-            return snapshotDataUrl;
-        }
-
-        const imageWidth = Math.max(1, Math.round(baseImage.naturalWidth || baseImage.width || 1));
-        const imageHeight = Math.max(1, Math.round(baseImage.naturalHeight || baseImage.height || 1));
-
-        const normalizedCrop = this.normalizeSnapshotCropRect(
-            {
-                sx: Math.round(boundsX * exportScale),
-                sy: Math.round(boundsY * exportScale),
-                sw: targetWidth,
-                sh: targetHeight
-            },
-            imageWidth,
-            imageHeight,
-            targetWidth,
-            targetHeight
-        );
-
-        if (!normalizedCrop) {
-            return snapshotDataUrl;
-        }
-
-        context.clearRect(0, 0, targetWidth, targetHeight);
-        context.drawImage(
-            baseImage,
-            normalizedCrop.sx,
-            normalizedCrop.sy,
-            normalizedCrop.sw,
-            normalizedCrop.sh,
-            normalizedCrop.dx,
-            normalizedCrop.dy,
-            normalizedCrop.dw,
-            normalizedCrop.dh
-        );
-
-        try {
-            return canvas.toDataURL('image/png');
-        } catch (error) {
-            if (this.isCanvasExportSecurityError(error)) {
-                return snapshotDataUrl;
-            }
-            throw error;
-        }
-    }
-
-    normalizeSnapshotCropRect(rect, imageWidth, imageHeight, targetWidth, targetHeight) {
-        const safeImageWidth = Math.max(1, Math.round(imageWidth || 1));
-        const safeImageHeight = Math.max(1, Math.round(imageHeight || 1));
-        const safeTargetWidth = Math.max(1, Math.round(targetWidth || 1));
-        const safeTargetHeight = Math.max(1, Math.round(targetHeight || 1));
-
-        const rawSx = Number.isFinite(rect?.sx) ? Math.round(rect.sx) : 0;
-        const rawSy = Number.isFinite(rect?.sy) ? Math.round(rect.sy) : 0;
-        const rawSw = Number.isFinite(rect?.sw) ? Math.round(rect.sw) : safeTargetWidth;
-        const rawSh = Number.isFinite(rect?.sh) ? Math.round(rect.sh) : safeTargetHeight;
-
-        if (!(rawSw > 0) || !(rawSh > 0)) {
-            return null;
-        }
-
-        const sx = Math.max(0, rawSx);
-        const sy = Math.max(0, rawSy);
-        const sourceRight = Math.min(safeImageWidth, rawSx + rawSw);
-        const sourceBottom = Math.min(safeImageHeight, rawSy + rawSh);
-        const sw = sourceRight - sx;
-        const sh = sourceBottom - sy;
-
-        if (!(sw > 0) || !(sh > 0)) {
-            return null;
-        }
-
-        const dx = Math.max(0, sx - rawSx);
-        const dy = Math.max(0, sy - rawSy);
-        const dw = Math.min(sw, safeTargetWidth - dx);
-        const dh = Math.min(sh, safeTargetHeight - dy);
-
-        if (!(dw > 0) || !(dh > 0)) {
-            return null;
-        }
-
-        return { sx, sy, sw: dw, sh: dh, dx, dy, dw, dh };
-    }
-
-    async composeSnapshotWithContainerBackground(snapshotDataUrl, container, options = {}) {
-        if (!snapshotDataUrl || !container || typeof window === 'undefined') {
-            return snapshotDataUrl;
-        }
-
-        const fallbackColor = typeof options.fallbackColor === 'string' ? options.fallbackColor : '#ffffff';
-        const exportScale = Number.isFinite(options.exportScale) && options.exportScale > 0 ? options.exportScale : 1;
-        const originX = Number.isFinite(options.originX) ? options.originX : 0;
-        const originY = Number.isFinite(options.originY) ? options.originY : 0;
-
-        const baseImage = await this.loadImageForExport(snapshotDataUrl);
-        if (!baseImage) {
-            return snapshotDataUrl;
-        }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, baseImage.naturalWidth || baseImage.width || 1);
-        canvas.height = Math.max(1, baseImage.naturalHeight || baseImage.height || 1);
-
-        const context = canvas.getContext('2d');
-        if (!context) {
-            return snapshotDataUrl;
-        }
-
-        const backgroundHost = this.resolveExportBackgroundHost(container);
-        const computed = window.getComputedStyle(backgroundHost);
-        const backgroundFill = computed.backgroundColor && computed.backgroundColor !== 'rgba(0, 0, 0, 0)'
-            ? computed.backgroundColor
-            : fallbackColor;
-
-        context.fillStyle = backgroundFill || fallbackColor;
-        context.fillRect(0, 0, canvas.width, canvas.height);
-
-        const backgroundImageUrls = this.extractCssBackgroundUrls(computed.backgroundImage);
-        if (backgroundImageUrls.length) {
-            for (let index = backgroundImageUrls.length - 1; index >= 0; index -= 1) {
-                const backgroundImage = await this.loadImageForExport(backgroundImageUrls[index]);
-                if (backgroundImage && this.isImageSafeForCanvasExport(backgroundImage)) {
-                    this.drawContainerBackgroundImageForExport(context, backgroundImage, {
-                        canvasWidth: canvas.width,
-                        canvasHeight: canvas.height,
-                        backgroundSize: computed.backgroundSize,
-                        backgroundPosition: computed.backgroundPosition,
-                        backgroundRepeat: computed.backgroundRepeat
-                    });
-                } else if (backgroundImage) {
-                    if (this.notifications && typeof this.notifications.show === 'function') {
-                        this.notifications.show(
-                            'One background image could not be included in export because the browser blocked canvas readback for that asset.',
-                            'warning'
-                        );
-                    }
-                }
-            }
-        }
-
-        context.drawImage(baseImage, 0, 0, canvas.width, canvas.height);
-        await this.drawCalloutLayerForExport(context, container, {
-            exportScale,
-            originX,
-            originY
-        });
-
-        try {
-            return canvas.toDataURL('image/png');
-        } catch (error) {
-            if (this.isCanvasExportSecurityError(error)) {
-                if (this.notifications && typeof this.notifications.show === 'function') {
-                    this.notifications.show(
-                        'Export overlay composition was skipped because one or more external images block canvas export (CORS). Exported the base graph snapshot instead.',
-                        'warning'
-                    );
-                }
-                return snapshotDataUrl;
-            }
-            throw error;
-        }
-    }
-
-    isCanvasExportSecurityError(error) {
-        if (!error) {
-            return false;
-        }
-
-        const message = typeof error.message === 'string' ? error.message : '';
-        return error.name === 'SecurityError' || /tainted canvases may not be exported/i.test(message);
-    }
-
-    isImageSafeForCanvasExport(image) {
-        if (!image || typeof document === 'undefined') {
-            return false;
-        }
-
-        const width = Math.max(1, image.naturalWidth || image.width || 1);
-        const height = Math.max(1, image.naturalHeight || image.height || 1);
-
-        const probeCanvas = document.createElement('canvas');
-        probeCanvas.width = width;
-        probeCanvas.height = height;
-
-        const probeContext = probeCanvas.getContext('2d');
-        if (!probeContext) {
-            return false;
-        }
-
-        try {
-            probeContext.drawImage(image, 0, 0, width, height);
-            probeCanvas.toDataURL('image/png');
-            return true;
-        } catch (error) {
-            return false;
-        }
-    }
-
-    resolveExportBackgroundHost(container) {
-        if (!container || typeof window === 'undefined' || typeof window.getComputedStyle !== 'function') {
-            return container;
-        }
-
-        const owner = container.parentElement;
-        if (!owner) {
-            return container;
-        }
-
-        const containerComputed = window.getComputedStyle(container);
-        const ownerComputed = window.getComputedStyle(owner);
-        const containerHasImage = containerComputed && containerComputed.backgroundImage && containerComputed.backgroundImage !== 'none';
-        const ownerHasImage = ownerComputed && ownerComputed.backgroundImage && ownerComputed.backgroundImage !== 'none';
-
-        if (!containerHasImage && ownerHasImage) {
-            return owner;
-        }
-
-        return container;
-    }
-
-    extractCssBackgroundUrls(backgroundImageValue) {
-        if (!backgroundImageValue || backgroundImageValue === 'none') {
-            return [];
-        }
-
-        const urls = [];
-        const pattern = /url\((['"]?)(.*?)\1\)/gi;
-        const rawValue = String(backgroundImageValue);
-        let match = pattern.exec(rawValue);
-
-        while (match) {
-            if (match[2]) {
-                urls.push(match[2].trim());
-            }
-            match = pattern.exec(rawValue);
-        }
-
-        return urls;
-    }
-
-    async drawCalloutLayerForExport(context, container, options = {}) {
-        if (!context || !container) {
-            return;
-        }
-
-        const roots = [];
-        if (typeof container.querySelectorAll === 'function') {
-            roots.push(container);
-        }
-        const owner = container.parentElement;
-        if (owner && owner !== container && typeof owner.querySelectorAll === 'function') {
-            roots.push(owner);
-        }
-
-        const callouts = [];
-        roots.forEach(root => {
-            Array.from(root.querySelectorAll('.text-callout-layer .text-callout')).forEach(node => {
-                if (!callouts.includes(node)) {
-                    callouts.push(node);
-                }
-            });
-        });
-
-        if (!callouts.length) {
-            return;
-        }
-
-        const containerRect = typeof container.getBoundingClientRect === 'function'
-            ? container.getBoundingClientRect()
-            : null;
-        if (!containerRect) {
-            return;
-        }
-
-        const exportScale = Number.isFinite(options.exportScale) && options.exportScale > 0 ? options.exportScale : 1;
-        const originX = Number.isFinite(options.originX) ? options.originX : 0;
-        const originY = Number.isFinite(options.originY) ? options.originY : 0;
-
-        for (const callout of callouts) {
-            const calloutImage = await this.renderElementToImageForExport(callout);
-            if (!calloutImage || !this.isImageSafeForCanvasExport(calloutImage)) {
-                continue;
-            }
-
-            const rect = callout.getBoundingClientRect();
-            if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height) || rect.width <= 0 || rect.height <= 0) {
-                continue;
-            }
-
-            const targetX = (rect.left - containerRect.left - originX) * exportScale;
-            const targetY = (rect.top - containerRect.top - originY) * exportScale;
-            const targetWidth = rect.width * exportScale;
-            const targetHeight = rect.height * exportScale;
-
-            context.drawImage(calloutImage, targetX, targetY, targetWidth, targetHeight);
-        }
-    }
-
-    async renderElementToImageForExport(element) {
-        if (!element || typeof XMLSerializer === 'undefined') {
-            return null;
-        }
-
-        const rect = element.getBoundingClientRect();
-        if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height) || rect.width <= 0 || rect.height <= 0) {
-            return null;
-        }
-
-        const clone = element.cloneNode(true);
-        this.inlineComputedStylesForExport(element, clone);
-
-        const serialized = new XMLSerializer().serializeToString(clone);
-        const foreignObjectMarkup = `
-            <svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}" viewBox="0 0 ${rect.width} ${rect.height}">
-                <foreignObject width="100%" height="100%">
-                    <div xmlns="http://www.w3.org/1999/xhtml" style="width:${rect.width}px;height:${rect.height}px;">${serialized}</div>
-                </foreignObject>
-            </svg>
-        `;
-
-        const svgBlob = new Blob([foreignObjectMarkup], { type: 'image/svg+xml;charset=utf-8' });
-        const svgUrl = URL.createObjectURL(svgBlob);
-
-        try {
-            return await this.loadImageForExport(svgUrl);
-        } finally {
-            URL.revokeObjectURL(svgUrl);
-        }
-    }
-
-    inlineComputedStylesForExport(source, target) {
-        if (!source || !target || typeof window === 'undefined' || typeof window.getComputedStyle !== 'function') {
-            return;
-        }
-
-        const computed = window.getComputedStyle(source);
-        const styleText = Array.from(computed)
-            .map(property => `${property}:${computed.getPropertyValue(property)};`)
-            .join('');
-
-        target.setAttribute('style', styleText);
-
-        const sourceChildren = source.children || [];
-        const targetChildren = target.children || [];
-        const childCount = Math.min(sourceChildren.length, targetChildren.length);
-
-        for (let i = 0; i < childCount; i += 1) {
-            this.inlineComputedStylesForExport(sourceChildren[i], targetChildren[i]);
-        }
-    }
-
-    drawContainerBackgroundImageForExport(context, image, options = {}) {
-        const canvasWidth = Number.isFinite(options.canvasWidth) ? options.canvasWidth : 1;
-        const canvasHeight = Number.isFinite(options.canvasHeight) ? options.canvasHeight : 1;
-        const imageWidth = Math.max(1, image.naturalWidth || image.width || 1);
-        const imageHeight = Math.max(1, image.naturalHeight || image.height || 1);
-        const repeat = options.backgroundRepeat || 'no-repeat';
-        const size = options.backgroundSize || 'auto';
-        const position = options.backgroundPosition || '0% 0%';
-
-        if (/repeat/.test(repeat)) {
-            const pattern = context.createPattern(image, repeat);
-            if (pattern) {
-                context.save();
-                context.fillStyle = pattern;
-                context.fillRect(0, 0, canvasWidth, canvasHeight);
-                context.restore();
-            }
-            return;
-        }
-
-        let drawWidth = imageWidth;
-        let drawHeight = imageHeight;
-
-        if (size === 'cover' || size === 'contain') {
-            const scaleX = canvasWidth / imageWidth;
-            const scaleY = canvasHeight / imageHeight;
-            const scale = size === 'cover' ? Math.max(scaleX, scaleY) : Math.min(scaleX, scaleY);
-            drawWidth = imageWidth * scale;
-            drawHeight = imageHeight * scale;
-        }
-
-        const centered = /center/.test(position);
-        const offsetX = centered ? (canvasWidth - drawWidth) / 2 : 0;
-        const offsetY = centered ? (canvasHeight - drawHeight) / 2 : 0;
-
-        context.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
-    }
-
-    async loadImageForExport(source) {
-        if (!source || typeof Image === 'undefined') {
-            return null;
-        }
-
-        return new Promise((resolve) => {
-            const image = new Image();
-            image.crossOrigin = 'anonymous';
-            image.onload = () => resolve(image);
-            image.onerror = () => resolve(null);
-            image.src = source;
-        });
     }
 
     createBlankSnapshotDataUrl() {
@@ -5351,10 +4859,7 @@ class FileManagerModule {
                     break;
 
                 case 'png': {
-                    const snapshot = await this.captureExportSnapshot({
-                        desiredScale: 4,
-                        captureMode: this.exportCaptureModes.fullGraph
-                    });
+                    const snapshot = await this.captureExportSnapshot({ desiredScale: 4 });
                     const pngResponse = await fetch(snapshot.pngDataUrl);
                     data = await pngResponse.blob();
                     filename = `graph-export-${Date.now()}.png`;
@@ -5368,10 +4873,7 @@ class FileManagerModule {
                         return;
                     }
 
-                    const snapshot = await this.captureExportSnapshot({
-                        desiredScale: 2,
-                        captureMode: this.exportCaptureModes.fullGraph
-                    });
+                    const snapshot = await this.captureExportSnapshot({ desiredScale: 2 });
                     if (snapshot.isBlankSnapshot) {
                         this.notifications.show('Blank graph has no drawable snapshot; exported empty PDF page instead.', 'warning');
                     }
@@ -5448,11 +4950,7 @@ class FileManagerModule {
             return error;
         };
 
-        const snapshot = await this.captureExportSnapshot({
-            desiredScale,
-            captureMode: this.exportCaptureModes.viewport,
-            onError: markNotifiedError
-        });
+        const snapshot = await this.captureExportSnapshot({ desiredScale, onError: markNotifiedError });
         const { pngDataUrl, scale, renderedBounds, boundsWidth, boundsHeight, originX, originY } = snapshot;
 
         const graphExport = this.exportCurrentGraph();
