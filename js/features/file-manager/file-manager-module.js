@@ -4794,7 +4794,30 @@ class FileManagerModule {
             originX,
             originY
         });
-        return canvas.toDataURL('image/png');
+
+        try {
+            return canvas.toDataURL('image/png');
+        } catch (error) {
+            if (this.isCanvasExportSecurityError(error)) {
+                if (this.notifications && typeof this.notifications.show === 'function') {
+                    this.notifications.show(
+                        'Export overlay composition was skipped because one or more external images block canvas export (CORS). Exported the base graph snapshot instead.',
+                        'warning'
+                    );
+                }
+                return snapshotDataUrl;
+            }
+            throw error;
+        }
+    }
+
+    isCanvasExportSecurityError(error) {
+        if (!error) {
+            return false;
+        }
+
+        const message = typeof error.message === 'string' ? error.message : '';
+        return error.name === 'SecurityError' || /tainted canvases may not be exported/i.test(message);
     }
 
     resolveExportBackgroundHost(container) {
