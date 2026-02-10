@@ -4673,6 +4673,66 @@ class FileManagerModule {
         };
     }
 
+
+    async normalizeSnapshotForPdf(imageSource, onError) {
+        const markNotifiedError = onError || (message => this.markExportError(message));
+
+        const toPdfFormat = (mimeType = '') => {
+            const normalized = String(mimeType).toLowerCase();
+            if (normalized === 'image/jpeg' || normalized === 'image/jpg') {
+                return 'JPEG';
+            }
+
+            if (normalized === 'image/webp') {
+                return 'WEBP';
+            }
+
+            return 'PNG';
+        };
+
+        if (!imageSource || typeof imageSource !== 'string') {
+            throw markNotifiedError('Graph snapshot is not in a supported image format for PDF export.');
+        }
+
+        const source = imageSource.trim();
+        if (!source) {
+            throw markNotifiedError('Graph snapshot is not in a supported image format for PDF export.');
+        }
+
+        const isRawBase64 = !source.includes(',') && /^[a-z0-9+/=\s]+$/i.test(source);
+        const normalizedSource = isRawBase64
+            ? `data:image/png;base64,${source.replace(/\s+/g, '')}`
+            : source;
+
+        try {
+            const response = await fetch(normalizedSource);
+            if (!response.ok) {
+                throw new Error(`Snapshot fetch failed with status ${response.status}`);
+            }
+
+            const blob = await response.blob();
+            const mimeType = blob.type && blob.type.startsWith('image/') ? blob.type : 'image/png';
+            const arrayBuffer = await blob.arrayBuffer();
+            const bytes = new Uint8Array(arrayBuffer);
+
+            const chunkSize = 0x8000;
+            let binary = '';
+            for (let index = 0; index < bytes.length; index += chunkSize) {
+                const chunk = bytes.subarray(index, index + chunkSize);
+                binary += String.fromCharCode(...chunk);
+            }
+
+            const base64 = btoa(binary);
+            return {
+                dataUrl: `data:${mimeType};base64,${base64}`,
+                format: toPdfFormat(mimeType)
+            };
+        } catch (error) {
+            throw markNotifiedError('Unable to normalize graph snapshot for PDF export.');
+        }
+    }
+
+
     /**
      * PUBLIC INTERFACE: Export graph data in specified format
      * @param {string} format - Export format ('json', 'csv', 'png', 'pdf')
@@ -4715,7 +4775,7 @@ class FileManagerModule {
                     }
 
                     const snapshot = await this.captureExportSnapshot({ desiredScale: 2 });
-                    const image = snapshot.pngDataUrl;
+                    const normalizedImage = await this.normalizeSnapshotForPdf(snapshot.pngDataUrl);
 
                     const container = snapshot.rect ? snapshot.rect : this.cy.container();
                     const containerWidth = container ? container.width || container.clientWidth || 0 : 0;
@@ -4730,7 +4790,8 @@ class FileManagerModule {
                     const pageWidth = pdfDoc.internal.pageSize.getWidth();
                     const pageHeight = pdfDoc.internal.pageSize.getHeight();
 
-                    const { width: imgWidth, height: imgHeight } = pdfDoc.getImageProperties(image);
+                    const imgWidth = Math.max(1, Math.round(snapshot.boundsWidth * snapshot.scale));
+                    const imgHeight = Math.max(1, Math.round(snapshot.boundsHeight * snapshot.scale));
                     const imageRatio = imgWidth / imgHeight;
 
                     let renderWidth = pageWidth;
@@ -4744,7 +4805,7 @@ class FileManagerModule {
                     const offsetX = (pageWidth - renderWidth) / 2;
                     const offsetY = (pageHeight - renderHeight) / 2;
 
-                    pdfDoc.addImage(image, 'PNG', offsetX, offsetY, renderWidth, renderHeight);
+                    pdfDoc.addImage(normalizedImage.dataUrl, normalizedImage.format, offsetX, offsetY, renderWidth, renderHeight);
 
                     data = pdfDoc.output('blob');
                     filename = `graph-export-${Date.now()}.pdf`;
