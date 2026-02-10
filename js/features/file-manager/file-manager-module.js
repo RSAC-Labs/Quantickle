@@ -4673,6 +4673,62 @@ class FileManagerModule {
         };
     }
 
+
+    async normalizeSnapshotForPdf(imageSource, onError) {
+        const markNotifiedError = onError || (message => this.markExportError(message));
+
+        if (!imageSource || typeof imageSource !== 'string') {
+            throw markNotifiedError('Graph snapshot is not in a supported image format for PDF export.');
+        }
+
+        const source = imageSource.trim();
+
+        if (!source) {
+            throw markNotifiedError('Graph snapshot is not in a supported image format for PDF export.');
+        }
+
+        if (/^data:image\/(png|jpeg|jpg);base64,/i.test(source)) {
+            return source;
+        }
+
+        if (!source.includes(',') && /^[a-z0-9+/=\s]+$/i.test(source)) {
+            return `data:image/png;base64,${source.replace(/\s+/g, '')}`;
+        }
+
+        try {
+            const response = await fetch(source);
+            if (!response.ok) {
+                throw new Error(`Snapshot fetch failed with status ${response.status}`);
+            }
+
+            const blob = await response.blob();
+            const dataUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(new Error('Failed to read snapshot image data.'));
+                reader.readAsDataURL(blob);
+            });
+
+            if (!dataUrl || typeof dataUrl !== 'string') {
+                throw new Error('Failed to normalize snapshot image data.');
+            }
+
+            if (dataUrl.startsWith('data:image/')) {
+                return dataUrl;
+            }
+
+            if (dataUrl.startsWith('data:')) {
+                const base64Payload = dataUrl.slice(dataUrl.indexOf(',') + 1);
+                return `data:image/png;base64,${base64Payload}`;
+            }
+
+            return dataUrl;
+        } catch (error) {
+            throw markNotifiedError('Unable to normalize graph snapshot for PDF export.');
+        }
+    }
+
+
     /**
      * PUBLIC INTERFACE: Export graph data in specified format
      * @param {string} format - Export format ('json', 'csv', 'png', 'pdf')
@@ -4715,7 +4771,7 @@ class FileManagerModule {
                     }
 
                     const snapshot = await this.captureExportSnapshot({ desiredScale: 2 });
-                    const image = snapshot.pngDataUrl;
+                    const normalizedImageDataUrl = await this.normalizeSnapshotForPdf(snapshot.pngDataUrl);
 
                     const container = snapshot.rect ? snapshot.rect : this.cy.container();
                     const containerWidth = container ? container.width || container.clientWidth || 0 : 0;
@@ -4730,7 +4786,8 @@ class FileManagerModule {
                     const pageWidth = pdfDoc.internal.pageSize.getWidth();
                     const pageHeight = pdfDoc.internal.pageSize.getHeight();
 
-                    const { width: imgWidth, height: imgHeight } = pdfDoc.getImageProperties(image);
+                    const imgWidth = Math.max(1, Math.round(snapshot.boundsWidth * snapshot.scale));
+                    const imgHeight = Math.max(1, Math.round(snapshot.boundsHeight * snapshot.scale));
                     const imageRatio = imgWidth / imgHeight;
 
                     let renderWidth = pageWidth;
@@ -4744,7 +4801,7 @@ class FileManagerModule {
                     const offsetX = (pageWidth - renderWidth) / 2;
                     const offsetY = (pageHeight - renderHeight) / 2;
 
-                    pdfDoc.addImage(image, 'PNG', offsetX, offsetY, renderWidth, renderHeight);
+                    pdfDoc.addImage(normalizedImageDataUrl, 'PNG', offsetX, offsetY, renderWidth, renderHeight);
 
                     data = pdfDoc.output('blob');
                     filename = `graph-export-${Date.now()}.pdf`;
