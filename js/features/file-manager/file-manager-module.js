@@ -4693,7 +4693,12 @@ class FileManagerModule {
             try {
                 const pngOptions = normalizedCaptureMode === 'fullGraph'
                     ? { full: true, scale: attemptedScale, bg: backgroundColor }
-                    : { scale: attemptedScale, bg: backgroundColor };
+                    : {
+                        full: false,
+                        bg: backgroundColor,
+                        maxWidth: Math.max(1, Math.round(boundsWidth * attemptedScale)),
+                        maxHeight: Math.max(1, Math.round(boundsHeight * attemptedScale))
+                    };
                 const candidate = this.cy.png(pngOptions);
 
                 if (!candidate || (typeof candidate === 'string' && !candidate.trim())) {
