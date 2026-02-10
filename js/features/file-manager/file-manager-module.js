@@ -4628,9 +4628,32 @@ class FileManagerModule {
             : { width: this.cy.width ? this.cy.width() : 0, height: this.cy.height ? this.cy.height() : 0 };
 
         const elements = typeof this.cy.elements === 'function' ? this.cy.elements() : null;
+        const hasVisibleElements = !!(elements && typeof elements.length === 'number' && elements.length > 0);
         const renderedBounds = elements && typeof elements.renderedBoundingBox === 'function'
             ? elements.renderedBoundingBox({ includeOverlays: false, includeEdges: true, includeLabels: true })
             : null;
+
+        const hasDrawableBounds = !!(
+            renderedBounds
+            && Number.isFinite(renderedBounds.w)
+            && Number.isFinite(renderedBounds.h)
+            && renderedBounds.w > 0
+            && renderedBounds.h > 0
+        );
+
+        if (!hasVisibleElements || !hasDrawableBounds) {
+            return {
+                pngDataUrl: this.createBlankSnapshotDataUrl(),
+                scale,
+                renderedBounds,
+                rect,
+                boundsWidth: 2,
+                boundsHeight: 2,
+                originX: 0,
+                originY: 0,
+                isBlankSnapshot: true
+            };
+        }
 
         const boundsWidth = renderedBounds && Number.isFinite(renderedBounds.w) && renderedBounds.w > 0
             ? renderedBounds.w
@@ -4661,6 +4684,10 @@ class FileManagerModule {
             throw markNotifiedError('Failed to capture graph snapshot.');
         }
 
+        if (typeof pngDataUrl !== 'string' || !pngDataUrl.startsWith('data:image/')) {
+            throw markNotifiedError('Failed to capture a valid graph image snapshot.');
+        }
+
         return {
             pngDataUrl,
             scale,
@@ -4669,8 +4696,24 @@ class FileManagerModule {
             boundsWidth,
             boundsHeight,
             originX: renderedBounds && Number.isFinite(renderedBounds.x1) ? renderedBounds.x1 : 0,
-            originY: renderedBounds && Number.isFinite(renderedBounds.y1) ? renderedBounds.y1 : 0
+            originY: renderedBounds && Number.isFinite(renderedBounds.y1) ? renderedBounds.y1 : 0,
+            isBlankSnapshot: false
         };
+    }
+
+    createBlankSnapshotDataUrl() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 2;
+        canvas.height = 2;
+
+        const context = canvas.getContext('2d');
+        if (!context) {
+            return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mP8//8/AwMDEwMDAwMjAAAUQALjP0v6wAAAAABJRU5ErkJggg==';
+        }
+
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL('image/png');
     }
 
 
@@ -4699,7 +4742,32 @@ class FileManagerModule {
             throw markNotifiedError('Graph snapshot is not in a supported image format for PDF export.');
         }
 
+        if (source === 'data:,') {
+            throw markNotifiedError('Failed to capture a valid image for PDF export.');
+        }
+
+        if (/^data:/i.test(source)) {
+            const mediaTypeMatch = source.match(/^data:([^;,]*)(?:;base64)?,/i);
+            const mediaType = mediaTypeMatch ? mediaTypeMatch[1].trim().toLowerCase() : '';
+            if (!mediaType || !mediaType.startsWith('image/')) {
+                throw markNotifiedError('Failed to capture a valid image for PDF export.');
+            }
+        }
+
         const isRawBase64 = !source.includes(',') && /^[a-z0-9+/=\s]+$/i.test(source);
+        if (isRawBase64) {
+            let decoded = '';
+            try {
+                decoded = atob(source.replace(/\s+/g, ''));
+            } catch (_) {
+                throw markNotifiedError('Failed to capture a valid image for PDF export.');
+            }
+
+            if (!decoded.length) {
+                throw markNotifiedError('Failed to capture a valid image for PDF export.');
+            }
+        }
+
         const normalizedSource = isRawBase64
             ? `data:image/png;base64,${source.replace(/\s+/g, '')}`
             : source;
@@ -4711,7 +4779,11 @@ class FileManagerModule {
             }
 
             const blob = await response.blob();
-            const mimeType = blob.type && blob.type.startsWith('image/') ? blob.type : 'image/png';
+            if (!(blob.size > 0) || !blob.type || !blob.type.startsWith('image/')) {
+                throw markNotifiedError('Failed to capture a valid image for PDF export.');
+            }
+
+            const mimeType = blob.type;
             const arrayBuffer = await blob.arrayBuffer();
             const bytes = new Uint8Array(arrayBuffer);
 
@@ -4775,6 +4847,9 @@ class FileManagerModule {
                     }
 
                     const snapshot = await this.captureExportSnapshot({ desiredScale: 2 });
+                    if (snapshot.isBlankSnapshot) {
+                        this.notifications.show('Blank graph has no drawable snapshot; exported empty PDF page instead.', 'warning');
+                    }
                     const normalizedImage = await this.normalizeSnapshotForPdf(snapshot.pngDataUrl);
 
                     const container = snapshot.rect ? snapshot.rect : this.cy.container();
