@@ -6,6 +6,8 @@
     let calloutLayerOwner = null;
     let fallbackLayer = null;
     let pendingViewportSync = false;
+    const DIMENSION_BASELINE_ZOOM = 1;
+    const DIMENSION_SOURCE = 'text-callout';
     const PREVIOUS_TYPE_KEY = '_calloutPrevType';
     const PREVIOUS_STYLE_KEY = '_calloutPrevStyle';
 
@@ -1015,10 +1017,51 @@
             div.style.maxHeight = '';
         }
 
-        // Update node style dimensions (don't overwrite user data)
+        // Update node style dimensions using graph-space values.
         const width = measuredWidth / zoom;
         const height = contentHeight / zoom;
         node.style({ width, height });
+
+        // Persist dimensions in a stable baseline space with calibration metadata
+        // so load-time normalization can recover graph-space sizes regardless of save zoom.
+        const authoredWidthByCallout = widthMode !== 'fixed';
+        const authoredHeightByCallout = heightMode !== 'fixed';
+        const dimensionUpdates = {};
+        const baselineWidth = measuredWidth / DIMENSION_BASELINE_ZOOM;
+        const baselineHeight = contentHeight / DIMENSION_BASELINE_ZOOM;
+
+        if (authoredWidthByCallout && Number.isFinite(baselineWidth) && baselineWidth > 0) {
+            dimensionUpdates.width = baselineWidth;
+        }
+        if (authoredHeightByCallout && Number.isFinite(baselineHeight) && baselineHeight > 0) {
+            dimensionUpdates.height = baselineHeight;
+        }
+        if (Number.isFinite(dimensionUpdates.width) || Number.isFinite(dimensionUpdates.height)) {
+            if (Number.isFinite(dimensionUpdates.width) && Number.isFinite(dimensionUpdates.height)) {
+                dimensionUpdates.size = Math.max(dimensionUpdates.width, dimensionUpdates.height);
+            }
+            if (preserveAspectRatio
+                && Number.isFinite(dimensionUpdates.width) && dimensionUpdates.width > 0
+                && Number.isFinite(dimensionUpdates.height) && dimensionUpdates.height > 0) {
+                dimensionUpdates.aspectRatio = dimensionUpdates.width / dimensionUpdates.height;
+            }
+            dimensionUpdates.calloutDimensionZoom = zoom;
+            dimensionUpdates.calloutDimensionSource = DIMENSION_SOURCE;
+            Object.keys(dimensionUpdates).forEach(key => {
+                const nextValue = dimensionUpdates[key];
+                const currentValue = node.data(key);
+                if (typeof nextValue === 'number' && Number.isFinite(nextValue)) {
+                    const currentNumeric = typeof currentValue === 'number' ? currentValue : parseFloat(currentValue);
+                    if (!Number.isFinite(currentNumeric) || Math.abs(currentNumeric - nextValue) > 0.001) {
+                        node.data(key, nextValue);
+                    }
+                    return;
+                }
+                if (currentValue !== nextValue) {
+                    node.data(key, nextValue);
+                }
+            });
+        }
 
         if (preserveAspectRatio) {
             if ((data.baseWidth == null || data.baseWidth <= 0) && Number.isFinite(width) && width > 0) {
