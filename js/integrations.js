@@ -73,49 +73,122 @@ window.IntegrationsManager = {
         opmlUpdatingListDisplay: false,
         opmlExistingGraphNames: new Set(),
         opmlExistingGraphCacheReady: false,
-        vtRelationshipForbiddenEndpoints: new Set()
+        vtRelationshipForbiddenEndpoints: new Set(),
+        integrationHosts: []
     },
 
-    createVirusTotalRelationshipTracker: function() {
-        if (!this.runtime.vtRelationshipForbiddenEndpoints) {
-            this.runtime.vtRelationshipForbiddenEndpoints = new Set();
-        }
+    moduleRegistry: null,
+    moduleServices: null,
 
-        const sessionBackoff = this.runtime.vtRelationshipForbiddenEndpoints;
-        const requestBackoff = new Set();
-        const loggedSkips = new Set();
-        const categoryKey = key => `category:${key}`;
-
-        const shouldSkip = (key, endpoint) => {
-            const category = categoryKey(key);
-            return sessionBackoff.has(endpoint)
-                || sessionBackoff.has(category)
-                || requestBackoff.has(endpoint)
-                || requestBackoff.has(category);
-        };
-
-        const recordForbidden = (key, endpoint) => {
-            const category = categoryKey(key);
-            sessionBackoff.add(endpoint);
-            sessionBackoff.add(category);
-            requestBackoff.add(endpoint);
-            requestBackoff.add(category);
-        };
-
-        const logSkip = (key, endpoint) => {
-            const logKey = `${key}:${endpoint}`;
-            if (loggedSkips.has(logKey)) {
-                return;
-            }
-            loggedSkips.add(logKey);
-            console.info(`VirusTotal relationship skipped (403 permission denied): ${endpoint}`);
-        };
+    createModuleServices: function() {
+        const fetchFn = (typeof window !== 'undefined' && typeof window.fetch === 'function')
+            ? window.fetch.bind(window)
+            : (typeof fetch === 'function' ? fetch : null);
 
         return {
-            shouldSkip,
-            recordForbidden,
-            logSkip
+            config: {
+                getRuntime: (key) => this.runtime?.[key],
+                setRuntime: (key, value) => {
+                    if (!this.runtime) {
+                        this.runtime = {};
+                    }
+                    this.runtime[key] = value;
+                },
+                getStorageKey: (key) => this.STORAGE_KEYS?.[key] || null
+            },
+            storage: {
+                getItem: (key) => {
+                    try {
+                        return localStorage.getItem(key);
+                    } catch (error) {
+                        console.warn('Storage getItem failed:', error);
+                        return null;
+                    }
+                },
+                setItem: (key, value) => {
+                    try {
+                        localStorage.setItem(key, value);
+                    } catch (error) {
+                        console.warn('Storage setItem failed:', error);
+                    }
+                },
+                removeItem: (key) => {
+                    try {
+                        localStorage.removeItem(key);
+                    } catch (error) {
+                        console.warn('Storage removeItem failed:', error);
+                    }
+                }
+            },
+            status: {
+                notify: (message, level = 'info', options = {}) => {
+                    let payload = { message, level, ...options };
+                    if (message && typeof message === 'object') {
+                        payload = { ...message };
+                    }
+
+                    const resolvedMessage = payload.message ?? '';
+                    const resolvedLevel = payload.level ?? level;
+                    const statusId = payload.statusId;
+
+                    if (statusId && window.IntegrationsManager?.updateStatus) {
+                        window.IntegrationsManager.updateStatus(statusId, resolvedMessage, resolvedLevel);
+                    }
+
+                    if (payload.toast !== false && window.UI?.notifications?.show) {
+                        window.UI.notifications.show(resolvedMessage, resolvedLevel);
+                    }
+                }
+            },
+            graph: window.GraphServiceAdapter?.create?.() || null,
+            network: {
+                fetch: (...args) => {
+                    if (!fetchFn) {
+                        return Promise.reject(new Error('Fetch is not available'));
+                    }
+                    return fetchFn(...args);
+                }
+            }
         };
+    },
+
+    initializeModuleRegistry: async function() {
+        if (!window.IntegrationModuleRegistry?.create) {
+            console.warn('Integration module registry not available');
+            return;
+        }
+
+        if (!this.moduleRegistry) {
+            this.moduleRegistry = window.IntegrationModuleRegistry.create();
+        }
+
+        this.moduleServices = this.createModuleServices();
+        this.registerDefaultModules();
+
+        if (this.moduleRegistry?.initAll) {
+            await this.moduleRegistry.initAll(this.moduleServices);
+        }
+    },
+
+    registerDefaultModules: function() {
+        if (!this.moduleRegistry?.register) {
+            return;
+        }
+
+        if (window.VirusTotalIntegrationModule?.create) {
+            this.moduleRegistry.register(window.VirusTotalIntegrationModule.create());
+        }
+    },
+
+    getModule: function(id) {
+        return this.moduleRegistry?.get?.(id) || null;
+    },
+
+    runAction: function(id, actionName, ctx, params) {
+        if (!this.moduleRegistry?.runAction) {
+            throw new Error('Integration module registry not initialized');
+        }
+        return this.moduleRegistry.runAction(id, actionName, ctx, params);
     },
 
     lastCirclMispManifest: [],
@@ -145,7 +218,9 @@ window.IntegrationsManager = {
         await this.loadNeo4jServerConfig();
         await this.loadCirclMispServerConfig();
         await this.loadProxyAllowlist();
+        await this.loadIntegrationAllowlist();
         await this.loadOpmlSources();
+        await this.initializeModuleRegistry();
         this.bindEvents();
     },
 
@@ -252,6 +327,36 @@ window.IntegrationsManager = {
             this.runtime.proxyAllowlist = [];
             setTextareaState({ value: '', placeholder: 'Unable to load proxy allowlist.', error: true });
             setHelp('Unable to load proxy allowlist from the server. Check that config/proxy-allowlist.json is accessible.');
+        }
+    },
+
+    loadIntegrationAllowlist: async function() {
+        const fetchFn = (typeof window !== 'undefined' && typeof window.fetch === 'function')
+            ? window.fetch.bind(window)
+            : (typeof fetch === 'function' ? fetch : null);
+
+        if (!fetchFn) {
+            return;
+        }
+
+        try {
+            const response = await fetchFn('config/integration-allowlist.json', { cache: 'no-store' });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            const entries = Array.isArray(data?.allowlist) ? data.allowlist.map(entry => entry.toString()) : [];
+            const normalized = entries.map(entry => entry.trim().toLowerCase()).filter(Boolean);
+            const current = new Set((this.runtime.integrationHosts || []).map(host => host.toLowerCase()));
+            normalized.forEach(host => current.add(host));
+            this.runtime.integrationHosts = Array.from(current);
+
+            if (this.runtime.integrationHosts.length) {
+                console.info('Integration allowlist hosts loaded:', this.runtime.integrationHosts);
+            }
+        } catch (error) {
+            console.warn('Failed to load integration allowlist', error);
         }
     },
 
@@ -2896,63 +3001,6 @@ window.IntegrationsManager = {
         };
     },
 
-    // Calculate detection statistics from VirusTotal data
-    calculateDetectionStats: function(lastAnalysisStats) {
-        const stats = lastAnalysisStats || {};
-        const total = Object.values(stats).reduce((sum, val) => {
-            return sum + (typeof val === 'number' ? val : 0);
-        }, 0);
-        const malicious = stats.malicious || 0;
-        return { malicious, total, detectionRatio: `${malicious}/${total}` };
-    },
-
-    // Normalize domain input by stripping protocol, paths and converting to lowercase
-    sanitizeDomain: function(domain) {
-        if (!domain) return '';
-        let clean = domain.trim();
-        try {
-            // If a full URL is provided, extract the hostname
-            clean = new URL(clean).hostname;
-        } catch (e) {
-            // Ignore errors – input wasn't a full URL
-        }
-        return clean.toLowerCase().replace(/\.$/, '');
-    },
-
-    getVTBlocklist: function() {
-        return this.runtime.vtBlocklist || [];
-    },
-
-    addToVTBlocklist: function(domain) {
-        const clean = this.sanitizeDomain(domain);
-        if (!clean) return { added: false, domain: '' };
-        const parts = clean.split('.');
-        const parent = parts.length > 2 ? parts.slice(-2).join('.') : clean;
-        if (!this.runtime.vtBlocklist.includes(parent)) {
-            this.runtime.vtBlocklist.push(parent);
-            localStorage.setItem(this.STORAGE_KEYS.VT_BLOCKLIST, this.runtime.vtBlocklist.join('\n'));
-            const el = document.getElementById('virustotalBlocklist');
-            if (el) el.value = this.runtime.vtBlocklist.join('\n');
-            return { added: true, domain: parent };
-        }
-        return { added: false, domain: parent };
-    },
-
-    isDomainBlocked: function(domain, list = this.getVTBlocklist()) {
-        const clean = this.sanitizeDomain(domain);
-        return list.some(b => clean === b || clean.endsWith(`.${b}`));
-    },
-
-    // Find a node by its label
-    findNodeByLabel: function(cy, label) {
-        return cy.nodes().filter(n => n.data('label') === label).first();
-    },
-
-    // Check if an edge exists in the given direction
-    edgeExists: function(cy, sourceId, targetId) {
-        return cy.edges(`[source = "${sourceId}"][target = "${targetId}"]`).length > 0;
-    },
-
     nodeDescriptorMappers: {},
 
     registerNodeDescriptorMapper: function(key, mapper) {
@@ -3032,366 +3080,6 @@ window.IntegrationsManager = {
         return descriptor;
     },
 
-    // Add a node only if a node with the same ID or label doesn't already exist
-    getOrCreateNode: async function(cy, id, data = {}, options = {}) {
-        if (!id) {
-            return { id: null, created: false };
-        }
-
-        // Check for existing node by ID to avoid duplicates
-        const existingById = cy.getElementById(id);
-        if (existingById && existingById.length > 0) {
-            return { id: existingById.id(), created: false };
-        }
-
-        // Also check for existing node by label to support legacy nodes
-        if (data.label) {
-            const existingByLabel = cy
-                .nodes()
-                .filter(n => n.data('label') === data.label)
-                .first();
-            if (existingByLabel && existingByLabel.length > 0) {
-                return { id: existingByLabel.id(), created: false };
-            }
-        }
-
-        const nodeType = data.type || 'default';
-
-        // Load domain for this node type if necessary
-        if (window.DomainLoader && typeof window.DomainLoader.ensureDomainForType === 'function') {
-            await window.DomainLoader.ensureDomainForType(nodeType);
-        }
-
-        // Ensure type definition exists – clone defaults if still missing
-        if (window.NodeTypes && !window.NodeTypes[nodeType]) {
-            window.NodeTypes[nodeType] = { ...(window.NodeTypes.default || {}) };
-        }
-
-        // Apply style from node type definitions
-        const typeSettings = window.NodeTypes && window.NodeTypes[nodeType] ? window.NodeTypes[nodeType] : {};
-        // Preserve the resolved node type on the node data so the type
-        // definition isn't lost when creating nodes via API integrations
-        // (e.g. VirusTotal, OpenAPI).
-        const styledData = { ...data, id, type: nodeType };
-        styledData.color = typeSettings.color || styledData.color;
-        styledData.size = typeSettings.size || styledData.size;
-        styledData.shape = typeSettings.shape || styledData.shape;
-        if ((!styledData.icon || styledData.icon === '') && styledData.iconHiddenDueToLOD !== true) {
-            styledData.icon = typeSettings.icon || '';
-        }
-        styledData.labelColor = typeSettings.labelColor || styledData.labelColor;
-        styledData.labelPlacement = typeSettings.labelPlacement || styledData.labelPlacement;
-
-        // Resolve icon to background image and other defaults
-        if (window.GraphRenderer && typeof window.GraphRenderer.normalizeNodeData === 'function') {
-            window.GraphRenderer.normalizeNodeData({ data: styledData });
-        }
-
-        const node = cy.add({ group: 'nodes', data: styledData });
-
-        // Update DataManager with the new node so tables and indexes stay in sync
-        if (window.DataManager && typeof window.DataManager.getGraphData === 'function' && typeof window.DataManager.setGraphData === 'function') {
-            const currentData = window.DataManager.getGraphData();
-            const newNodeData = { group: 'nodes', data: styledData, position: node.position() };
-            const updatedData = { nodes: [...currentData.nodes, newNodeData], edges: currentData.edges };
-            window.DataManager.setGraphData(updatedData, { skipLayout: true });
-        }
-
-        // Refresh node types table to include this new type
-        if (window.TableManager && typeof window.TableManager.updateNodeTypesTable === 'function') {
-            window.TableManager.updateNodeTypesTable('', true);
-        }
-
-        // Apply label color and placement
-        const labelColor = styledData.labelColor
-            || window.GraphAreaEditor?.getSettings?.()?.labelColor
-            || '#333333';
-
-        // Guard against null/undefined values which can cause Cytoscape style parsing errors
-        if (labelColor !== undefined && labelColor !== null) {
-            try {
-                node.style('color', String(labelColor));
-            } catch (styleErr) {
-            }
-        }
-
-        if (styledData.labelPlacement && styledData.labelPlacement !== 'dynamic') {
-            let textHalign = 'center';
-            let textValign = 'center';
-            switch (styledData.labelPlacement) {
-                case 'top':
-                    textValign = 'top';
-                    break;
-                case 'bottom':
-                    textValign = 'bottom';
-                    break;
-                case 'left':
-                    textHalign = 'left';
-                    break;
-                case 'right':
-                    textHalign = 'right';
-                    break;
-                default:
-                    break;
-            }
-            node.style({
-                'text-halign': textHalign,
-                'text-valign': textValign
-            });
-        }
-
-        const skipLayout = typeof options === 'boolean' ? options : options.skipLayout;
-        if (!skipLayout && window.LayoutManager && typeof window.LayoutManager.calculateOptimalSizing === 'function' && typeof window.LayoutManager.updateNodeStyles === 'function') {
-            const sizing = window.LayoutManager.calculateOptimalSizing(cy);
-            window.LayoutManager.updateNodeStyles(cy, sizing);
-        }
-
-        return { id: node.id(), created: true };
-    },
-
-    // Add an edge only if one with the same source and target doesn't exist
-    addEdgeIfNotExists: function(cy, edgeData, options = {}) {
-        if (!edgeData || !edgeData.source || !edgeData.target) {
-            return false;
-        }
-        const edgeCache = options.edgeCache instanceof Set ? options.edgeCache : null;
-        const edgeKey = `${edgeData.source}::${edgeData.target}`;
-        if (edgeCache) {
-            if (edgeCache.has(edgeKey)) {
-                return false;
-            }
-        } else if (this.edgeExists(cy, edgeData.source, edgeData.target)) {
-            return false;
-        }
-        cy.add({ group: 'edges', data: edgeData });
-        if (edgeCache) {
-            edgeCache.add(edgeKey);
-        }
-        const skipLayout = typeof options === 'boolean' ? options : options.skipLayout;
-        if (!skipLayout && window.LayoutManager && typeof window.LayoutManager.calculateOptimalSizing === 'function' && typeof window.LayoutManager.updateNodeStyles === 'function') {
-            const sizing = window.LayoutManager.calculateOptimalSizing(cy);
-            window.LayoutManager.updateNodeStyles(cy, sizing);
-        }
-        return true;
-    },
-
-    // Position new nodes near a source node without triggering a full layout
-    // If serviceName is provided (or passed via options.serviceName), wrap new nodes in a service
-    // container unless options.useServiceContainer is explicitly false. Set options.reparent=false
-    // to avoid parenting nodes under the source or a service container.
-    positionNodesNearSource: function(cy, sourceId, newNodeIds, serviceName = null, useServiceContainer = true) {
-        if (!cy || !sourceId || !Array.isArray(newNodeIds) || newNodeIds.length === 0) {
-            return;
-        }
-
-        // Support optional configuration object to control parenting and containers
-        let options = {};
-        if (serviceName && typeof serviceName === 'object') {
-            options = serviceName;
-            serviceName = typeof options.serviceName === 'string' ? options.serviceName : null;
-        } else if (typeof useServiceContainer === 'object') {
-            options = useServiceContainer;
-            useServiceContainer = typeof options.useServiceContainer === 'boolean' ? options.useServiceContainer : true;
-        }
-        if (typeof options.useServiceContainer === 'boolean') {
-            useServiceContainer = options.useServiceContainer;
-        }
-
-        const source = cy.getElementById(sourceId);
-        if (!source || source.empty()) {
-            return;
-        }
-
-        const layoutName = window.LayoutManager && typeof window.LayoutManager.currentLayout === 'string'
-            ? window.LayoutManager.currentLayout
-            : '';
-        const timelineLayoutActive = layoutName.startsWith('timeline');
-        const timelineScaffoldingPresent = cy.nodes('[type="timeline-bar"], [type="timeline-anchor"], [type="timeline-tick"]').length > 0;
-        const sourceTimelineScope = typeof source.data === 'function' ? source.data('_timelineScope') : null;
-        const avoidIntegrationContainer = timelineLayoutActive || timelineScaffoldingPresent || Boolean(sourceTimelineScope);
-
-        if (avoidIntegrationContainer) {
-            useServiceContainer = false;
-            if (options.reparent === undefined) {
-                options.reparent = false;
-            }
-        }
-
-        const reparentNodes = options.reparent !== false;
-
-        const origin = source.position();
-        const radius = 80;
-        const sourceParent = source.parent();
-        const desiredContainerPosition = { x: origin.x + radius + 40, y: origin.y };
-        let dataUpdated = false;
-        let graphData;
-        let nodeRecordById = null;
-        if (window.DataManager &&
-            typeof window.DataManager.getGraphData === 'function' &&
-            typeof window.DataManager.setGraphData === 'function') {
-            graphData = window.DataManager.getGraphData();
-            if (graphData && Array.isArray(graphData.nodes)) {
-                nodeRecordById = new Map();
-                graphData.nodes.forEach(nodeRecord => {
-                    if (nodeRecord && nodeRecord.data && nodeRecord.data.id) {
-                        nodeRecordById.set(nodeRecord.data.id, nodeRecord);
-                    }
-                });
-            }
-        }
-
-        // Optional service container
-        let container = null;
-        let containerId = null;
-        if (serviceName && useServiceContainer) {
-            containerId = `${serviceName.toLowerCase()}_container_${sourceId}`;
-            container = cy.getElementById(containerId);
-            if (!container || container.empty()) {
-                const pos = { ...desiredContainerPosition };
-                if (window.GraphEditorAdapter && typeof window.GraphEditorAdapter.addContainer === 'function') {
-                    const tempContainer = window.GraphEditorAdapter.addContainer(pos.x, pos.y, { label: serviceName, id: containerId });
-                    if (tempContainer && typeof tempContainer.id === 'function') {
-                        if (tempContainer.id() === containerId) {
-                            container = tempContainer;
-                        } else {
-                            typeof tempContainer.remove === 'function' && tempContainer.remove();
-                        }
-                    }
-                }
-                if (!container || container.empty()) {
-                    container = cy.add({
-                        group: 'nodes',
-                        data: { id: containerId, label: serviceName, type: 'container', isContainer: true },
-                        position: pos,
-                        classes: 'container'
-                    });
-                }
-                if (sourceParent && sourceParent.length) {
-                    container.move({ parent: sourceParent.id() });
-                }
-                if (graphData) {
-                    graphData.nodes.push({
-                        data: {
-                            id: containerId,
-                            label: serviceName,
-                            type: 'container',
-                            parent: sourceParent && sourceParent.length ? sourceParent.id() : undefined
-                        },
-                        classes: 'container'
-                    });
-                    dataUpdated = true;
-                }
-            }
-
-            const shouldRecenterContainer = () => {
-                if (!container || (typeof container.empty === 'function' && container.empty())) {
-                    return false;
-                }
-
-                const pos = typeof container.position === 'function'
-                    ? container.position()
-                    : (container[0] && typeof container[0].position === 'function' ? container[0].position() : null);
-
-                const anchoredSource = typeof container.scratch === 'function'
-                    ? container.scratch('_integrationAnchorSource')
-                    : undefined;
-
-                const hasValidCoords = pos && Number.isFinite(pos.x) && Number.isFinite(pos.y);
-                const nearOrigin = !hasValidCoords || (Math.abs(pos.x) < 1 && Math.abs(pos.y) < 1);
-
-                return anchoredSource !== sourceId || nearOrigin;
-            };
-
-            if (shouldRecenterContainer()) {
-                if (typeof container.position === 'function') {
-                    container.position(desiredContainerPosition);
-                }
-                if (typeof container.scratch === 'function') {
-                    container.scratch('_integrationAnchorSource', sourceId);
-                }
-            }
-        }
-
-        const elementCache = new Map();
-        const getElementById = (id) => {
-            if (!id) {
-                return null;
-            }
-            if (elementCache.has(id)) {
-                return elementCache.get(id);
-            }
-            const element = cy.getElementById(id);
-            elementCache.set(id, element);
-            return element;
-        };
-
-        newNodeIds.forEach((id, index) => {
-            const node = getElementById(id);
-            if (!node || node.empty()) return;
-
-            const currentParent = node.parent();
-            const currentParentId = currentParent && currentParent.length ? currentParent.id() : null;
-
-            if (reparentNodes) {
-                if (serviceName && useServiceContainer && container) {
-                    if (!currentParentId || currentParentId === container.id()) {
-                        node.move({ parent: container.id() });
-                    }
-                    if (graphData) {
-                        const nodeRecord = nodeRecordById ? nodeRecordById.get(id) : null;
-                        if (nodeRecord && nodeRecord.data && !nodeRecord.data.parent) {
-                            nodeRecord.data.parent = container.id();
-                            dataUpdated = true;
-                        }
-                    }
-                } else if (sourceParent && sourceParent.length) {
-                    if (!currentParentId || currentParentId === sourceParent.id()) {
-                        node.move({ parent: sourceParent.id() });
-                    }
-
-                    if (graphData) {
-                        const nodeRecord = nodeRecordById ? nodeRecordById.get(id) : null;
-                        if (nodeRecord && nodeRecord.data && !nodeRecord.data.parent) {
-                            nodeRecord.data.parent = sourceParent.id();
-                            dataUpdated = true;
-                        }
-                    }
-                }
-            }
-
-            const angle = (2 * Math.PI * index) / newNodeIds.length;
-            node.position({
-                x: origin.x + radius * Math.cos(angle),
-                y: origin.y + radius * Math.sin(angle)
-            });
-        });
-
-        if (serviceName && useServiceContainer && container) {
-            const childCount = typeof container.children === 'function' ? container.children().length : 0;
-            if (childCount === 0) {
-                if (graphData) {
-                    graphData.nodes = graphData.nodes.filter(n => !(n.data && n.data.id === container.id()));
-                    dataUpdated = true;
-                }
-                container.remove();
-                container = null;
-            }
-        }
-
-        if (serviceName && useServiceContainer && container && window.GraphRenderer) {
-            if (window.GraphRenderer.arrangeContainerNodes) {
-                window.GraphRenderer.arrangeContainerNodes(container);
-            } else if (window.GraphRenderer.updateContainerBounds) {
-                window.GraphRenderer.updateContainerBounds(container);
-            }
-        }
-
-        if (graphData && dataUpdated) {
-            window.DataManager.setGraphData(graphData, { skipLayout: true });
-        }
-
-    },
-
     // Sanitize arbitrary HTML with DOMPurify if available, falling back to a basic whitelist
     sanitizeHTML: function(dirty) {
         if (window.DOMPurify) {
@@ -3431,11 +3119,6 @@ window.IntegrationsManager = {
             .filter(([_, value]) => value !== undefined && value !== null && value !== '')
             .map(([key, value]) => `${stripTags(key)}: ${stripTags(value)}`);
         return lines.join('\n');
-    },
-
-    // Get API key for VirusTotal from runtime storage
-    getVirusTotalApiKey: function() {
-        return this.runtime.virustotalApiKey;
     },
 
     // Get API key for OpenAI from runtime storage
@@ -3566,1773 +3249,6 @@ window.IntegrationsManager = {
         return Boolean(neo4jUrl && neo4jUsername && neo4jPassword);
     },
 
-    // VirusTotal API Functions
-    
-    // Generic VirusTotal API request function
-    makeVirusTotalRequest: async function(endpoint, method = 'GET', body = null, options = {}) {
-        const apiKey = this.getVirusTotalApiKey();
-        
-        if (!apiKey) {
-            throw new Error('VirusTotal API key not configured');
-        }
-
-        const {
-            allowForbidden = false
-        } = options;
-        
-        const url = `https://www.virustotal.com/api/v3${endpoint}`;
-        
-        const requestOptions = {
-            method: method,
-            headers: {
-                'x-apikey': apiKey,
-                'Content-Type': 'application/json'
-            }
-        };
-        
-        if (body && method !== 'GET') {
-            requestOptions.body = body instanceof FormData ? body : JSON.stringify(body);
-            if (!(body instanceof FormData)) {
-                requestOptions.headers['Content-Type'] = 'application/json';
-            } else {
-                delete requestOptions.headers['Content-Type']; // Let browser set boundary for FormData
-            }
-        }
-
-        try {
-            const response = await fetch(url, requestOptions);
-
-            if (!response.ok) {
-                if (response.status === 401) {
-                    const error = new Error('Invalid VirusTotal API key');
-                    error.status = response.status;
-                    throw error;
-                } else if (response.status === 429) {
-                    const error = new Error('VirusTotal API quota exceeded');
-                    error.status = response.status;
-                    throw error;
-                } else if (response.status === 403 && allowForbidden) {
-                    const fallbackData = await response.json().catch(() => ({ data: [] }));
-                    return fallbackData || { data: [] };
-                } else if (response.status === 404) {
-                    const error = new Error('Not found in VirusTotal');
-                    error.code = 'VT_NOT_FOUND';
-                    error.status = response.status;
-                    throw error;
-                } else {
-                    const error = new Error(`VirusTotal API request failed: ${response.status} ${response.statusText}`);
-                    error.status = response.status;
-                    throw error;
-                }
-            }
-
-            const data = await response.json();
-
-            return data;
-        } catch (error) {
-            if (error?.code === 'VT_NOT_FOUND') {
-                console.info('VirusTotal resource not found:', endpoint);
-            } else {
-                console.error('VirusTotal API error:', error);
-            }
-            throw error;
-        }
-    },
-
-    // Fetch basic information for a domain including subdomains and siblings
-    fetchVirusTotalDomainInfo: async function(domain) {
-        const cleanDomain = this.sanitizeDomain(domain);
-        const encoded = encodeURIComponent(cleanDomain);
-        try {
-            const [domainData, subdomains, siblings] = await Promise.all([
-                this.makeVirusTotalRequest(`/domains/${encoded}`),
-                this.makeVirusTotalRequest(`/domains/${encoded}/subdomains`).catch(() => ({ data: [] })),
-                this.makeVirusTotalRequest(`/domains/${encoded}/siblings`).catch(() => ({ data: [] }))
-            ]);
-
-            const attributes = domainData.data?.attributes || {};
-            const subdomainList = (subdomains.data || []).map(d => d.id || d).join(', ');
-            const siblingList = (siblings.data || []).map(d => d.id || d).join(', ');
-            const { malicious, detectionRatio } = this.calculateDetectionStats(attributes.last_analysis_stats);
-            const creationDate = attributes.creation_date ? new Date(attributes.creation_date * 1000).toISOString() : null;
-
-            const infoFields = {
-                'Detection Ratio': detectionRatio,
-                'Subdomains': subdomainList,
-                'Sibling Domains': siblingList,
-                'Creation Date': creationDate
-            };
-            const infoHtml = this.formatInfoHTML(infoFields);
-            const infoText = this.formatInfoText(infoFields);
-            return {
-                detectionRatio,
-                malicious,
-                creationDate,
-                info: infoText,
-                infoHtml
-            };
-        } catch (e) {
-            console.error('Failed to fetch domain info:', e);
-            const infoFields = { 'Detection Ratio': '0/0' };
-            const infoHtml = this.formatInfoHTML(infoFields);
-            const infoText = this.formatInfoText(infoFields);
-            return {
-                detectionRatio: '0/0',
-                malicious: 0,
-                creationDate: null,
-                info: infoText,
-                infoHtml
-            };
-        }
-    },
-
-    // Fetch basic information for a file
-    fetchVirusTotalFileInfo: async function(hash) {
-        try {
-            const data = await this.makeVirusTotalRequest(`/files/${hash}`);
-            const attributes = data.data?.attributes || {};
-            const { malicious, detectionRatio } = this.calculateDetectionStats(attributes.last_analysis_stats);
-            const fileName = attributes.meaningful_name || (attributes.names && attributes.names[0]) || hash;
-            const fileType = attributes.type_description || attributes.type_tag || '';
-            const firstSubmissionDate = attributes.first_submission_date ? new Date(attributes.first_submission_date * 1000).toISOString() : null;
-
-            const infoFields = {
-                'Detection Ratio': detectionRatio,
-                'File Name': fileName,
-                'File Type': fileType,
-                'First Seen': firstSubmissionDate
-            };
-            const infoHtml = this.formatInfoHTML(infoFields);
-            const infoText = this.formatInfoText(infoFields);
-            return {
-                detectionRatio,
-                malicious,
-                fileName,
-                fileType,
-                firstSubmissionDate,
-                info: infoText,
-                infoHtml
-            };
-        } catch (e) {
-            console.error('Failed to fetch file info:', e);
-            const infoFields = { 'Detection Ratio': '0/0' };
-            const infoHtml = this.formatInfoHTML(infoFields);
-            const infoText = this.formatInfoText(infoFields);
-            return {
-                detectionRatio: '0/0',
-                malicious: 0,
-                fileName: hash,
-                fileType: '',
-                firstSubmissionDate: null,
-                info: infoText,
-                infoHtml
-            };
-        }
-    },
-
-    // Fetch basic information for an IP address
-    fetchVirusTotalIPInfo: async function(ip) {
-        try {
-            const data = await this.makeVirusTotalRequest(`/ip_addresses/${ip}`);
-            const attributes = data.data?.attributes || {};
-            const { malicious, detectionRatio } = this.calculateDetectionStats(attributes.last_analysis_stats);
-            const country = attributes.country || null;
-            const lastModDate = attributes.last_modification_date ? new Date(attributes.last_modification_date * 1000).toISOString() : null;
-
-            const infoFields = {
-                'Detection Ratio': detectionRatio,
-                'Country': country,
-                'Last Seen': lastModDate
-            };
-            const infoHtml = this.formatInfoHTML(infoFields);
-            const infoText = this.formatInfoText(infoFields);
-            return {
-                detectionRatio,
-                malicious,
-                country,
-                lastModDate,
-                info: infoText,
-                infoHtml
-            };
-        } catch (e) {
-            console.error('Failed to fetch IP info:', e);
-            const infoFields = { 'Detection Ratio': '0/0' };
-            const infoHtml = this.formatInfoHTML(infoFields);
-            const infoText = this.formatInfoText(infoFields);
-            return {
-                detectionRatio: '0/0',
-                malicious: 0,
-                country: null,
-                lastModDate: null,
-                info: infoText,
-                infoHtml
-            };
-        }
-    },
-
-    // Fetch basic information for a URL
-    fetchVirusTotalURLInfo: async function(url) {
-        try {
-            const data = await this.queryVirusTotalURL(url);
-            const attributes = data.data?.attributes || {};
-            const { detectionRatio } = this.calculateDetectionStats(attributes.last_analysis_stats);
-            const lastAnalysisDate = attributes.last_analysis_date
-                ? new Date(attributes.last_analysis_date * 1000).toISOString()
-                : null;
-
-            const infoFields = {
-                'Detection Ratio': detectionRatio,
-                'Last Analysis': lastAnalysisDate
-            };
-            const infoHtml = this.formatInfoHTML(infoFields);
-            const infoText = this.formatInfoText(infoFields);
-            return {
-                detectionRatio,
-                lastAnalysisDate,
-                info: infoText,
-                infoHtml
-            };
-        } catch (e) {
-            console.error('Failed to fetch URL info:', e);
-            const infoFields = { 'Detection Ratio': '0/0' };
-            const infoHtml = this.formatInfoHTML(infoFields);
-            const infoText = this.formatInfoText(infoFields);
-            return {
-                detectionRatio: '0/0',
-                lastAnalysisDate: null,
-                info: infoText,
-                infoHtml
-            };
-        }
-    },
-
-    // Helper to create a domain node enriched with VirusTotal info
-    createDomainNodeWithInfo: async function(cy, domain, extraData = {}, options = {}) {
-        const cleanDomain = this.sanitizeDomain(domain);
-        if (this.isDomainBlocked(cleanDomain)) {
-            return { id: null, created: false };
-        }
-        const infoData = await this.fetchVirusTotalDomainInfo(cleanDomain);
-        const sanitized = cleanDomain.replace(/[^a-zA-Z0-9]/g, '_');
-        const color = extraData.color || (infoData.malicious > 0 ? '#FF4444' : '#FF5282');
-        const nodeData = {
-            id: `domain_${sanitized}`,
-            label: cleanDomain,
-            type: 'domain',
-            color,
-            size: 40,
-            domain: cleanDomain,
-            detectionRatio: infoData.detectionRatio,
-            timestamp: infoData.creationDate,
-            info: infoData.info,
-            infoHtml: infoData.infoHtml,
-            ...extraData
-        };
-        const { id, created } = await this.getOrCreateNode(cy, cleanDomain, nodeData, options);
-
-        cy.getElementById(id).data('info', infoData.info);
-        cy.getElementById(id).data('infoHtml', infoData.infoHtml);
-        return { id, created };
-    },
-
-    // Helper to create an IP node enriched with VirusTotal info
-    createIPNodeWithInfo: async function(cy, ip, extraData = {}, options = {}) {
-        const infoData = await this.fetchVirusTotalIPInfo(ip);
-        const sanitized = ip.replace(/[^a-zA-Z0-9]/g, '_');
-        const color = extraData.color || '#0080FF';
-        const nodeData = {
-            id: `ip_${sanitized}`,
-            label: ip,
-            type: 'ipaddress',
-            color,
-            size: 40,
-            ipAddress: ip,
-            detectionRatio: infoData.detectionRatio,
-            country: infoData.country,
-            timestamp: infoData.lastModDate,
-            info: infoData.info,
-            infoHtml: infoData.infoHtml,
-            ...extraData
-        };
-        const { id, created } = await this.getOrCreateNode(cy, nodeData.id, nodeData, options);
-        cy.getElementById(id).data('info', infoData.info);
-        cy.getElementById(id).data('infoHtml', infoData.infoHtml);
-        return { id, created };
-    },
-
-    // Helper to create a file node enriched with VirusTotal info
-    createFileNodeWithInfo: async function(cy, hash, extraData = {}, options = {}) {
-        const infoData = await this.fetchVirusTotalFileInfo(hash);
-        const label = hash;
-        const color = extraData.color || (infoData.malicious > 0 ? '#FF4444' : '#80FF80');
-        const nodeData = {
-            id: `file_${hash}`,
-            label,
-            type: 'malware',
-            color,
-            size: 35,
-            fileHash: hash,
-            fileName: infoData.fileName,
-            fileType: infoData.fileType,
-            detectionRatio: infoData.detectionRatio,
-            timestamp: infoData.firstSubmissionDate,
-            info: infoData.info,
-            infoHtml: infoData.infoHtml,
-            ...extraData
-        };
-        const { id, created } = await this.getOrCreateNode(cy, nodeData.id, nodeData, options);
-        cy.getElementById(id).data('info', infoData.info);
-        cy.getElementById(id).data('infoHtml', infoData.infoHtml);
-        return { id, created };
-    },
-
-    async updateVirusTotalInfoForNodes(nodes = []) {
-        const stats = {
-            processed: 0,
-            updated: 0,
-            skippedUnsupported: 0,
-            skippedWithData: 0,
-            errors: 0
-        };
-
-        let nodeList = nodes;
-        if (nodeList && typeof nodeList.toArray === 'function') {
-            nodeList = nodeList.toArray();
-        } else if (!Array.isArray(nodeList) && nodeList && typeof nodeList[Symbol.iterator] === 'function') {
-            nodeList = Array.from(nodeList);
-        } else if (!Array.isArray(nodeList)) {
-            nodeList = [];
-        }
-
-        if (!Array.isArray(nodeList) || nodeList.length === 0) {
-            return stats;
-        }
-
-        const hasValue = value => {
-            if (value === undefined || value === null) {
-                return false;
-            }
-            if (typeof value === 'string') {
-                return value.trim().length > 0;
-            }
-            return true;
-        };
-
-        const hasVirusTotalData = node => {
-            const detectionRatio = node.data('detectionRatio');
-            const normalizedInfo = [node.data('info'), node.data('infoHtml')]
-                .map(value => typeof value === 'string' ? value.toLowerCase() : '')
-                .join(' ');
-
-            const hasDetectionRatio = hasValue(detectionRatio) && /\d+\/\d+/.test(String(detectionRatio));
-            const mentionsDetectionRatio = normalizedInfo.includes('detection ratio');
-
-            return hasDetectionRatio || mentionsDetectionRatio;
-        };
-
-        const handlers = {};
-        handlers.domain = async node => {
-            const identifier = this.sanitizeDomain(node.data('domain') || node.data('label') || node.id());
-            if (!identifier || this.isDomainBlocked(identifier)) {
-                return null;
-            }
-            const infoData = await this.fetchVirusTotalDomainInfo(identifier);
-            return {
-                info: infoData.info,
-                infoHtml: infoData.infoHtml,
-                timestamp: infoData.creationDate,
-                detectionRatio: infoData.detectionRatio
-            };
-        };
-        handlers.ipaddress = async node => {
-            const identifier = node.data('ipAddress') || node.data('label') || node.id();
-            if (!identifier) {
-                return null;
-            }
-            const infoData = await this.fetchVirusTotalIPInfo(identifier);
-            return {
-                info: infoData.info,
-                infoHtml: infoData.infoHtml,
-                timestamp: infoData.lastModDate,
-                detectionRatio: infoData.detectionRatio
-            };
-        };
-        handlers.filename = async node => {
-            const identifier = (node.data('fileHash') || node.data('label') || node.id() || '').toLowerCase();
-            if (!identifier) {
-                return null;
-            }
-            const infoData = await this.fetchVirusTotalFileInfo(identifier);
-            return {
-                info: infoData.info,
-                infoHtml: infoData.infoHtml,
-                timestamp: infoData.firstSubmissionDate,
-                detectionRatio: infoData.detectionRatio
-            };
-        };
-        handlers.malware = async node => handlers.filename(node);
-        handlers.url = async node => {
-            const identifier = node.data('url') || node.data('label') || node.id();
-            if (!identifier) {
-                return null;
-            }
-            const infoData = await this.fetchVirusTotalURLInfo(identifier);
-            return {
-                info: infoData.info,
-                infoHtml: infoData.infoHtml,
-                timestamp: infoData.lastAnalysisDate,
-                detectionRatio: infoData.detectionRatio
-            };
-        };
-
-        for (const node of nodeList) {
-            if (!node || typeof node.data !== 'function') {
-                continue;
-            }
-
-            const nodeType = (node.data('type') || '').toString().toLowerCase();
-            const handler = handlers[nodeType];
-            if (!handler) {
-                stats.skippedUnsupported++;
-                continue;
-            }
-
-            const hasInfo = hasValue(node.data('info'));
-            const hasTimestamp = hasValue(node.data('timestamp'));
-            const vtSignaturePresent = hasVirusTotalData(node);
-
-            if (hasInfo && hasTimestamp && vtSignaturePresent) {
-                stats.skippedWithData++;
-                continue;
-            }
-
-            stats.processed++;
-            try {
-                const infoData = await handler(node);
-                if (!infoData) {
-                    continue;
-                }
-
-                if (!hasInfo && hasValue(infoData.info)) {
-                    node.data('info', infoData.info);
-                }
-                if (!hasValue(node.data('infoHtml')) && hasValue(infoData.infoHtml)) {
-                    node.data('infoHtml', infoData.infoHtml);
-                }
-                if (!hasTimestamp && hasValue(infoData.timestamp)) {
-                    node.data('timestamp', infoData.timestamp);
-                }
-                if (!hasValue(node.data('detectionRatio')) && hasValue(infoData.detectionRatio)) {
-                    node.data('detectionRatio', infoData.detectionRatio);
-                }
-
-                stats.updated++;
-            } catch (error) {
-                stats.errors++;
-                console.error('Quick VirusTotal info update failed:', error);
-            }
-        }
-
-        return stats;
-    },
-    
-    // Query file analysis by hash (MD5, SHA1, or SHA256)
-    queryVirusTotalFile: async function(fileHash) {
-        if (!fileHash) {
-            throw new Error('File hash is required');
-        }
-        
-        // Validate hash format
-        const hash = fileHash.trim().toLowerCase();
-        if (!/^[a-f0-9]{32}$/.test(hash) && // MD5
-            !/^[a-f0-9]{40}$/.test(hash) && // SHA1
-            !/^[a-f0-9]{64}$/.test(hash)) { // SHA256
-            throw new Error('Invalid hash format. Must be MD5, SHA1, or SHA256');
-        }
-        
-        return await this.makeVirusTotalRequest(`/files/${hash}`);
-    },
-    
-    // Enhanced file analysis with relationship data
-    queryVirusTotalFileEnhanced: async function(fileHash) {
-        if (!fileHash) {
-            throw new Error('File hash is required');
-        }
-        
-        // Validate hash format
-        const hash = fileHash.trim().toLowerCase();
-        if (!/^[a-f0-9]{32}$/.test(hash) && // MD5
-            !/^[a-f0-9]{40}$/.test(hash) && // SHA1
-            !/^[a-f0-9]{64}$/.test(hash)) { // SHA256
-            throw new Error('Invalid hash format. Must be MD5, SHA1, or SHA256');
-        }
-        
-        try {
-            // Get basic file information
-            const fileData = await this.makeVirusTotalRequest(`/files/${hash}`);
-            const relationshipTracker = this.createVirusTotalRelationshipTracker();
-
-            const relationshipRequests = [
-                { key: 'contacted_domains', endpoint: `/files/${hash}/contacted_domains` },
-                { key: 'contacted_ips', endpoint: `/files/${hash}/contacted_ips` },
-                { key: 'itw_domains', endpoint: `/files/${hash}/itw_domains` },
-                { key: 'itw_ips', endpoint: `/files/${hash}/itw_ips` },
-                { key: 'memory_pattern_domains', endpoint: `/files/${hash}/memory_pattern_domains` },
-                { key: 'memory_pattern_ips', endpoint: `/files/${hash}/memory_pattern_ips` },
-                { key: 'execution_parents', endpoint: `/files/${hash}/execution_parents` },
-                { key: 'submissions', endpoint: `/files/${hash}/submissions` }
-            ];
-
-            const relationshipResults = await Promise.all(
-                relationshipRequests.map(async ({ key, endpoint }) => {
-                    if (relationshipTracker.shouldSkip(key, endpoint)) {
-                        relationshipTracker.logSkip(key, endpoint);
-                        return { key, data: [] };
-                    }
-
-                    try {
-                        const response = await this.makeVirusTotalRequest(endpoint);
-                        return { key, data: response.data || [] };
-                    } catch (error) {
-                        if (error?.status === 403) {
-                            relationshipTracker.recordForbidden(key, endpoint);
-                            relationshipTracker.logSkip(key, endpoint);
-                            return { key, data: [] };
-                        }
-                        console.warn('VirusTotal relationship request failed:', endpoint, error);
-                        return { key, data: [] };
-                    }
-                })
-            );
-
-            const relationships = relationshipResults.reduce((acc, result) => {
-                acc[result.key] = result.data;
-                return acc;
-            }, {});
-            
-            // Enhance the file data with relationship information
-            const enhancedData = {
-                ...fileData,
-                relationships
-            };
-            
-            return enhancedData;
-        } catch (error) {
-            console.error('Enhanced VirusTotal query failed:', error);
-            // Fallback to basic query if enhanced fails
-            return await this.makeVirusTotalRequest(`/files/${hash}`);
-        }
-    },
-    
-    // Query domain analysis with relationship data
-    queryVirusTotalDomain: async function(domain, { includeRelationships = true } = {}) {
-        if (!domain) {
-            throw new Error('Domain is required');
-        }
-
-        const cleanDomain = this.sanitizeDomain(domain);
-
-        // Basic domain validation
-        const domainPattern = /^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$/;
-        if (!domainPattern.test(cleanDomain)) {
-            throw new Error('Invalid domain format');
-        }
-
-        const encoded = encodeURIComponent(cleanDomain);
-
-        // Get basic domain data
-        const domainData = await this.makeVirusTotalRequest(`/domains/${encoded}`);
-
-        if (!includeRelationships) {
-            return { data: domainData.data, relationships: {} };
-        }
-
-        const relationshipTracker = this.createVirusTotalRelationshipTracker();
-
-        // Fetch relationship data in parallel
-        const relationshipRequests = [
-            { key: 'communicating_files', endpoint: `/domains/${encoded}/communicating_files` },
-            { key: 'downloaded_files', endpoint: `/domains/${encoded}/downloaded_files` },
-            { key: 'referrer_files', endpoint: `/domains/${encoded}/referrer_files` },
-            { key: 'resolutions', endpoint: `/domains/${encoded}/resolutions` },
-            { key: 'subdomains', endpoint: `/domains/${encoded}/subdomains` },
-            { key: 'siblings', endpoint: `/domains/${encoded}/siblings` }
-        ];
-
-        const relationshipResults = await Promise.all(
-            relationshipRequests.map(async ({ key, endpoint }) => {
-                if (relationshipTracker.shouldSkip(key, endpoint)) {
-                    relationshipTracker.logSkip(key, endpoint);
-                    return { key, data: [] };
-                }
-                try {
-                    const response = await this.makeVirusTotalRequest(endpoint);
-                    return { key, data: response.data || [] };
-                } catch (error) {
-                    if (error?.status === 403) {
-                        relationshipTracker.recordForbidden(key, endpoint);
-                        relationshipTracker.logSkip(key, endpoint);
-                        return { key, data: [] };
-                    }
-                    console.warn('VirusTotal relationship request failed:', endpoint, error);
-                    return { key, data: [] };
-                }
-            })
-        );
-
-        const relationships = relationshipResults.reduce((acc, result) => {
-            acc[result.key] = result.data;
-            return acc;
-        }, {});
-
-        return {
-            data: domainData.data,
-            relationships
-        };
-    },
-
-    // Query IP address analysis with relationship data
-    queryVirusTotalIP: async function(ipAddress, { includeRelationships = true } = {}) {
-        if (!ipAddress) {
-            throw new Error('IP address is required');
-        }
-
-        // Basic IP validation (IPv4 and IPv6)
-        const ipv4Pattern = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-        const ipv6Pattern = /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/;
-
-        const ip = ipAddress.trim();
-        if (!ipv4Pattern.test(ip) && !ipv6Pattern.test(ip)) {
-            throw new Error('Invalid IP address format');
-        }
-
-        // Get basic IP data
-        const ipData = await this.makeVirusTotalRequest(`/ip_addresses/${ip}`);
-
-        if (!includeRelationships) {
-            return { data: ipData.data, relationships: {} };
-        }
-
-        const relationshipTracker = this.createVirusTotalRelationshipTracker();
-
-        // Fetch relationship data in parallel
-        const relationshipRequests = [
-            { key: 'communicating_files', endpoint: `/ip_addresses/${ip}/communicating_files` },
-            { key: 'downloaded_files', endpoint: `/ip_addresses/${ip}/downloaded_files` },
-            { key: 'referrer_files', endpoint: `/ip_addresses/${ip}/referrer_files` },
-            { key: 'resolutions', endpoint: `/ip_addresses/${ip}/resolutions` }
-        ];
-
-        const relationshipResults = await Promise.all(
-            relationshipRequests.map(async ({ key, endpoint }) => {
-                if (relationshipTracker.shouldSkip(key, endpoint)) {
-                    relationshipTracker.logSkip(key, endpoint);
-                    return { key, data: [] };
-                }
-                try {
-                    const response = await this.makeVirusTotalRequest(endpoint);
-                    return { key, data: response.data || [] };
-                } catch (error) {
-                    if (error?.status === 403) {
-                        relationshipTracker.recordForbidden(key, endpoint);
-                        relationshipTracker.logSkip(key, endpoint);
-                        return { key, data: [] };
-                    }
-                    console.warn('VirusTotal relationship request failed:', endpoint, error);
-                    return { key, data: [] };
-                }
-            })
-        );
-
-        const relationships = relationshipResults.reduce((acc, result) => {
-            acc[result.key] = result.data;
-            return acc;
-        }, {});
-
-        return {
-            data: ipData.data,
-            relationships
-        };
-    },
-    
-    // Query URL analysis (URL must be base64 encoded)
-    queryVirusTotalURL: async function(url) {
-        if (!url) {
-            throw new Error('URL is required');
-        }
-        
-        // Basic URL validation
-        try {
-            new URL(url.trim());
-        } catch (e) {
-            throw new Error('Invalid URL format');
-        }
-        
-        // Base64 encode the URL (without padding)
-        const urlId = btoa(url.trim()).replace(/=/g, '');
-        
-        return await this.makeVirusTotalRequest(`/urls/${urlId}`);
-    },
-    
-    // Submit URL for analysis
-    submitVirusTotalURL: async function(url) {
-        if (!url) {
-            throw new Error('URL is required');
-        }
-        
-        // Basic URL validation
-        try {
-            new URL(url.trim());
-        } catch (e) {
-            throw new Error('Invalid URL format');
-        }
-        
-        const formData = new FormData();
-        formData.append('url', url.trim());
-        
-        return await this.makeVirusTotalRequest('/urls', 'POST', formData);
-    },
-    
-    // Get file upload URL for large files
-    getVirusTotalUploadURL: async function() {
-        return await this.makeVirusTotalRequest('/files/upload_url');
-    },
-    
-    // Process VirusTotal file analysis data and create graph nodes
-    processVirusTotalFileData: async function(data, fileHash, queryType = 'file') {
-        if (!data || !data.data) {
-            throw new Error('Invalid VirusTotal file data format');
-        }
-
-        const fileData = data.data;
-        const attributes = fileData.attributes;
-        const relationships = data.relationships || {}; // Enhanced relationship data
-
-        if (!window.GraphRenderer || !window.GraphRenderer.cy) {
-            throw new Error('Graph not initialized');
-        }
-
-        // Ensure cybersecurity domain node types are loaded so nodes receive correct styling
-        if (window.DomainLoader && typeof window.DomainLoader.loadAndActivateDomains === 'function') {
-            try {
-                await window.DomainLoader.loadAndActivateDomains(['cybersecurity']);
-            } catch (e) {
-                // Fallback silently if domain loading fails
-            }
-        }
-
-        const cy = window.GraphRenderer.cy;
-        const existingNodeIds = new Set(cy.nodes().map(n => n.id()));
-        const bulkOptions = { skipLayout: true };
-        const edgeCache = new Set(cy.edges().map(edge => `${edge.data('source')}::${edge.data('target')}`));
-        const edgeOptions = { ...bulkOptions, edgeCache };
-        let nodesAdded = 0;
-        let edgesAdded = 0;
-        
-        // Create main file node
-        // Always label the node with the file hash to prevent label changes
-        const fileLabel = fileHash;
-        const { malicious: fileMalicious, detectionRatio: fileDetectionRatio } = this.calculateDetectionStats(attributes.last_analysis_stats);
-        const fileInfoFields = {
-            'Detection Ratio': fileDetectionRatio,
-            'File Name': attributes.meaningful_name || (attributes.names && attributes.names[0]) || fileHash,
-            'File Type': attributes.type_description || attributes.type_tag || '',
-            'File Size': attributes.size ? `${attributes.size} bytes` : null,
-            'First Seen': attributes.first_submission_date ? new Date(attributes.first_submission_date * 1000).toISOString() : null,
-            'Last Seen': attributes.last_submission_date ? new Date(attributes.last_submission_date * 1000).toISOString() : null
-        };
-        const fileInfoHtml = this.formatInfoHTML(fileInfoFields);
-        const fileInfoText = this.formatInfoText(fileInfoFields);
-        const fileNodeData = {
-            id: `file_${fileHash}`,
-            label: fileLabel,
-            type: 'malware',
-            color: fileMalicious > 0 ? '#FF4444' : '#80FF80',
-            size: 35,
-            fileHash: fileHash,
-            fileSize: attributes.size,
-            fileName: attributes.meaningful_name || (attributes.names && attributes.names[0]) || fileHash,
-            fileType: attributes.type_description || attributes.type_tag || '',
-            detectionRatio: fileDetectionRatio,
-            firstSeen: attributes.first_submission_date ? new Date(attributes.first_submission_date * 1000).toISOString() : null,
-            lastSeen: attributes.last_submission_date ? new Date(attributes.last_submission_date * 1000).toISOString() : null,
-            timestamp: attributes.first_submission_date ? new Date(attributes.first_submission_date * 1000).toISOString() : null,
-            info: fileInfoText,
-            infoHtml: fileInfoHtml
-        };
-        const { id: fileNodeId, created: fileCreated } = await this.getOrCreateNode(cy, fileNodeData.id, fileNodeData, bulkOptions);
-        cy.getElementById(fileNodeId).data('info', fileInfoText);
-        cy.getElementById(fileNodeId).data('infoHtml', fileInfoHtml);
-        if (fileCreated) {
-            nodesAdded++;
-        } else {
-        }
-        
-        // Create network communication relationships (domains and IPs)
-
-        // Process contacted domains from both sources
-        const allContactedDomains = new Set();
-        
-        // Add domains from basic file data
-        if (attributes.contacted_domains) {
-            attributes.contacted_domains.forEach(domain => allContactedDomains.add(domain));
-        }
-        
-        // Add domains from enhanced relationship data
-        if (relationships.contacted_domains) {
-            relationships.contacted_domains.forEach(domainObj => {
-                const domain = domainObj.id; // API returns domain name directly in id field
-                if (domain) {
-                    allContactedDomains.add(domain);
-                }
-            });
-        }
-        
-        // Create nodes for all contacted domains
-        for (const domain of allContactedDomains) {
-            const { id: domainNodeId, created } = await this.createDomainNodeWithInfo(cy, domain, {}, bulkOptions);
-            if (!domainNodeId) continue;
-            if (created) {
-                nodesAdded++;
-            }
-
-            const edgeData = {
-                id: `${fileNodeId}_connects_to_${domainNodeId}`,
-                source: fileNodeId,
-                target: domainNodeId,
-                label: 'connects to'
-            };
-            if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
-                edgesAdded++;
-            }
-        }
-        
-        // Process contacted IPs from both sources
-        const allContactedIps = new Set();
-        
-        // Add IPs from basic file data
-        if (attributes.contacted_ips) {
-            attributes.contacted_ips.forEach(ip => allContactedIps.add(ip));
-        }
-        
-        // Add IPs from enhanced relationship data
-        if (relationships.contacted_ips) {
-            relationships.contacted_ips.forEach(ipObj => {
-                const ip = ipObj.id; // API returns IP address directly in id field
-                if (ip) {
-                    allContactedIps.add(ip);
-                }
-            });
-        }
-        
-        // Create nodes for all contacted IPs
-        for (const ip of allContactedIps) {
-            const { id: ipNodeId, created } = await this.createIPNodeWithInfo(cy, ip, {}, bulkOptions);
-            if (created) {
-                nodesAdded++;
-            } else {
-            }
-
-            const edgeData = {
-                id: `${fileNodeId}_connects_to_${ipNodeId}`,
-                source: fileNodeId,
-                target: ipNodeId,
-                label: 'connects to'
-            };
-            if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
-                edgesAdded++;
-            } else {
-            }
-        }
-        
-        // Create reference relationships (domains/IPs mentioned in file)
-        if (attributes.dns_lookups) {
-            for (const domain of attributes.dns_lookups) {
-                const { id: domainNodeId, created } = await this.createDomainNodeWithInfo(cy, domain, {}, bulkOptions);
-                if (!domainNodeId) continue;
-                if (created) {
-                    nodesAdded++;
-                }
-
-                const edgeData = {
-                    id: `${fileNodeId}_refers_to_${domainNodeId}`,
-                    source: fileNodeId,
-                    target: domainNodeId,
-                    label: 'refers to'
-                };
-                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
-                    edgesAdded++;
-                }
-            }
-        }
-        
-        // Create download source relationships
-        if (attributes.downloadable_from) {
-            for (const source of attributes.downloadable_from) {
-                let existingSourceId, created;
-                const ipPattern = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-                if (ipPattern.test(source)) {
-                    ({ id: existingSourceId, created } = await this.createIPNodeWithInfo(cy, source, {}, bulkOptions));
-                } else {
-                    ({ id: existingSourceId, created } = await this.createDomainNodeWithInfo(cy, source, {}, bulkOptions));
-                }
-                if (!existingSourceId) continue;
-                if (created) {
-                    nodesAdded++;
-                }
-
-                const edgeData = {
-                    id: `${fileNodeId}_downloaded_from_${existingSourceId}`,
-                    source: existingSourceId,
-                    target: fileNodeId,
-                    label: 'downloaded from'
-                };
-                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
-                    edgesAdded++;
-                }
-            }
-        }
-
-        // Create submitter relationships (link to existing submitter nodes)
-        if (attributes.submitter && attributes.submitter.id) {
-            const submitterLabel = attributes.submitter.id;
-            const submitterNodeData = {
-                id: `submitter_${attributes.submitter.id}`,
-                label: submitterLabel,
-                type: 'submitter',
-                color: '#C62828',
-                size: 32,
-                submitterId: attributes.submitter.id
-            };
-            const { id: submitterNodeId, created } = await this.getOrCreateNode(cy, submitterNodeData.id, submitterNodeData, bulkOptions);
-            if (created) {
-                nodesAdded++;
-            }
-
-            const edgeData = {
-                id: `${submitterNodeId}_submitted_${fileNodeId}`,
-                source: submitterNodeId,
-                target: fileNodeId,
-                label: 'submitted'
-            };
-            if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
-                edgesAdded++;
-            }
-        }
-        
-        // Process enhanced relationship data from VirusTotal API
-
-        // ITW (In The Wild) domains - where the file was downloaded from
-        if (relationships.itw_domains) {
-            for (const domainObj of relationships.itw_domains) {
-                const domain = domainObj.id;
-                if (!domain) {
-                    continue;
-                }
-                const { id: domainNodeId, created } = await this.createDomainNodeWithInfo(cy, domain, {
-                    color: '#FF9800',
-                    size: 42,
-                    domain: domain,
-                    category: 'itw_domain'
-                }, bulkOptions);
-                if (!domainNodeId) continue;
-                if (created) {
-                    nodesAdded++;
-                }
-
-                const edgeData = {
-                    id: `${fileNodeId}_downloaded_from_${domainNodeId}`,
-                    source: domainNodeId,
-                    target: fileNodeId,
-                    label: 'downloaded from (ITW)'
-                };
-                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
-                    edgesAdded++;
-                }
-            }
-        }
-        
-        // ITW IPs - where the file was downloaded from
-        if (relationships.itw_ips) {
-            for (const ipObj of relationships.itw_ips) {
-                const ip = ipObj.id;
-                if (!ip) {
-                    continue;
-                }
-
-                const { id: ipNodeId, created } = await this.createIPNodeWithInfo(cy, ip, {
-                    color: '#FF5722',
-                    size: 42,
-                    ipAddress: ip,
-                    category: 'itw_ip'
-                }, bulkOptions);
-                if (created) {
-                    nodesAdded++;
-                }
-
-                const edgeData = {
-                    id: `${fileNodeId}_downloaded_from_${ipNodeId}`,
-                    source: ipNodeId,
-                    target: fileNodeId,
-                    label: 'downloaded from (ITW)'
-                };
-                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
-                    edgesAdded++;
-                }
-            }
-        }
-        
-        // Memory pattern domains - domains found in memory analysis
-        if (relationships.memory_pattern_domains) {
-            for (const domainObj of relationships.memory_pattern_domains) {
-                const domain = domainObj.id;
-                if (!domain) {
-                    continue;
-                }
-                const { id: domainNodeId, created } = await this.createDomainNodeWithInfo(cy, domain, {
-                    color: '#9C27B0',
-                    size: 38,
-                    domain: domain,
-                    category: 'memory_domain'
-                }, bulkOptions);
-                if (!domainNodeId) continue;
-                if (created) {
-                    nodesAdded++;
-                }
-
-                const edgeData = {
-                    id: `${fileNodeId}_memory_references_${domainNodeId}`,
-                    source: fileNodeId,
-                    target: domainNodeId,
-                    label: 'memory pattern'
-                };
-                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
-                    edgesAdded++;
-                }
-            }
-        }
-        
-        // Memory pattern IPs - IPs found in memory analysis
-        if (relationships.memory_pattern_ips) {
-            for (const ipObj of relationships.memory_pattern_ips) {
-                const ip = ipObj.id;
-                if (!ip) {
-                    continue;
-                }
-
-                const { id: ipNodeId, created } = await this.createIPNodeWithInfo(cy, ip, {
-                    color: '#673AB7',
-                    size: 38,
-                    ipAddress: ip,
-                    category: 'memory_ip'
-                }, bulkOptions);
-                if (created) {
-                    nodesAdded++;
-                }
-
-                const edgeData = {
-                    id: `${fileNodeId}_memory_references_${ipNodeId}`,
-                    source: fileNodeId,
-                    target: ipNodeId,
-                    label: 'memory pattern'
-                };
-                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
-                    edgesAdded++;
-                }
-            }
-        }
-
-        // Other related malware files
-        const fileRelationships = [
-            { key: 'downloaded_files', label: 'downloads' },
-            { key: 'bundled_files', label: 'bundles' },
-            { key: 'similar_files', label: 'similar to' }
-        ];
-
-        for (const rel of fileRelationships) {
-            const files = relationships[rel.key];
-            if (!files) continue;
-            for (const fileObj of files) {
-                const hash = fileObj.sha256 || fileObj.id;
-                if (!hash) continue;
-
-                const { id: relatedNodeId, created } = await this.createFileNodeWithInfo(cy, hash, { category: rel.key }, bulkOptions);
-                if (created) {
-                    nodesAdded++;
-                }
-
-                const edgeData = {
-                    id: `${fileNodeId}_${rel.key}_${relatedNodeId}`,
-                    source: fileNodeId,
-                    target: relatedNodeId,
-                    label: rel.label
-                };
-                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
-                    edgesAdded++;
-                }
-            }
-        }
-
-        // Execution parents - files that executed this file
-        if (relationships.execution_parents) {
-            for (const parentObj of relationships.execution_parents) {
-                const parentHash = parentObj.sha256 || parentObj.id;
-                if (!parentHash) {
-                    continue;
-                }
-
-                const { id: parentNodeId, created } = await this.createFileNodeWithInfo(cy, parentHash, {
-                    color: '#795548',
-                    size: 40,
-                    fileHash: parentHash,
-                    category: 'execution_parent'
-                }, bulkOptions);
-                if (created) {
-                    nodesAdded++;
-                }
-
-                const edgeData = {
-                    id: `${parentNodeId}_executed_${fileNodeId}`,
-                    source: parentNodeId,
-                    target: fileNodeId,
-                    label: 'executed'
-                };
-                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
-                    edgesAdded++;
-                }
-            }
-        }
-        
-        // Enhanced submissions with submitter IDs  
-        if (relationships.submissions) {
-            for (const submissionObj of relationships.submissions) {
-                const submitterId = submissionObj.attributes?.source_key; // Correct field name from API
-                if (!submitterId) {
-                    continue;
-                }
-
-                const submitterLabel = submitterId;
-
-                const submitterNodeData = {
-                    id: `submitter_${submitterId}`,
-                    label: submitterLabel,
-                    type: 'submitter',
-                    color: '#C62828',
-                    size: 35,
-                    submitterId: submitterId,
-                    category: 'enhanced_submitter',
-                    country: submissionObj.attributes?.country,
-                    city: submissionObj.attributes?.city,
-                    fileName: submissionObj.attributes?.name
-                };
-                const { id: submitterNodeId, created } = await this.getOrCreateNode(cy, submitterNodeData.id, submitterNodeData, bulkOptions);
-                if (created) {
-                    nodesAdded++;
-                }
-
-                const edgeData = {
-                    id: `${submitterNodeId}_submitted_${fileNodeId}`,
-                    source: submitterNodeId,
-                    target: fileNodeId,
-                    label: 'submitted (enhanced)'
-                };
-                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
-                    edgesAdded++;
-                }
-            }
-        }
-        // Create nodes for detected threats (existing logic)
-        if (attributes.last_analysis_results) {
-            for (const [engine, result] of Object.entries(attributes.last_analysis_results)) {
-                if (result.category === 'malicious' && result.result) {
-                    const label = result.result;
-                    const threatNodeData = {
-                        id: `threat_${result.result.replace(/[^a-zA-Z0-9]/g, '_')}`,
-                        label: label,
-                        type: 'malware_family',
-                        color: '#E91E83',
-                        size: 25,
-                        detectedBy: engine
-                    };
-                    const { id: threatNodeId, created } = await this.getOrCreateNode(cy, threatNodeData.id, threatNodeData, bulkOptions);
-                    if (created) {
-                        nodesAdded++;
-                    }
-
-                    const edgeData = {
-                        id: `${fileNodeId}_detected_as_${threatNodeId}`,
-                        source: fileNodeId,
-                        target: threatNodeId,
-                        label: `detected by ${engine}`
-                    };
-                    if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
-                        edgesAdded++;
-                    }
-                }
-            }
-        }
-        
-        const newNodeIds = cy.nodes().map(n => n.id()).filter(id => !existingNodeIds.has(id) && id !== fileNodeId);
-        this.positionNodesNearSource(cy, fileNodeId, newNodeIds, 'VirusTotal');
-
-        if (window.LayoutManager && typeof window.LayoutManager.calculateOptimalSizing === 'function' && typeof window.LayoutManager.updateNodeStyles === 'function') {
-            const sizing = window.LayoutManager.calculateOptimalSizing(cy);
-            window.LayoutManager.updateNodeStyles(cy, sizing);
-        }
-
-        if (window.TableManager && window.TableManager.updateTables) {
-            window.TableManager.updateTables();
-            if (window.TableManager.updateTotalDataTable) {
-                window.TableManager.updateTotalDataTable();
-            }
-        }
-        if (window.GraphAreaEditor && window.GraphAreaEditor.applySettings) {
-            window.GraphAreaEditor.applySettings();
-        }
-        
-        // Prevent label color changes during render by preserving current settings
-        let preservedLabelColor = null;
-        let preservedLabelSize = null;
-        if (window.GraphAreaEditor && window.GraphAreaEditor.getSettings) {
-            const settings = window.GraphAreaEditor.getSettings();
-            preservedLabelColor = settings.labelColor;
-            preservedLabelSize = settings.labelSize;
-        }
-        
-        return {
-            nodesAdded,
-            edgesAdded,
-            fileHash,
-            detectionRatio: fileDetectionRatio,
-            malicious: fileMalicious,
-            preservedLabelSettings: {
-                color: preservedLabelColor,
-                size: preservedLabelSize
-            }
-        };
-    },
-    
-    // Process VirusTotal domain data and create graph nodes
-    processVirusTotalDomainData: async function(data, domain) {
-        if (!data || !data.data) {
-            throw new Error('Invalid VirusTotal domain data format');
-        }
-
-        const cleanDomain = this.sanitizeDomain(domain);
-        if (this.isDomainBlocked(cleanDomain)) {
-            return { nodesAdded: 0, edgesAdded: 0, domain: cleanDomain, detectionRatio: '0/0', reputation: 0 };
-        }
-
-        // Debug logging to track exactly what we received and where we're adding it
-        console.log('=== PROCESS DOMAIN DATA DEBUG ===');
-        console.log('Raw VirusTotal domain data:', data);
-        console.log('Target domain:', cleanDomain);
-        console.log('Active graph before import:', window.GraphManager?.currentGraph?.title || window.GraphManager?.currentGraph?.graphId || 'none');
-
-
-        const domainData = data.data;
-        const attributes = domainData.attributes;
-        const { malicious: domainMalicious, detectionRatio: domainDetectionRatio } = this.calculateDetectionStats(attributes.last_analysis_stats);
-
-        if (!window.GraphRenderer || !window.GraphRenderer.cy) {
-            throw new Error('Graph not initialized');
-        }
-
-        // Ensure cybersecurity node types are loaded for styling
-        if (window.DomainLoader && typeof window.DomainLoader.loadAndActivateDomains === 'function') {
-            try {
-                await window.DomainLoader.loadAndActivateDomains(['cybersecurity']);
-            } catch (e) {
-            }
-        }
-
-        const cy = window.GraphRenderer.cy;
-        const existingNodeIds = new Set(cy.nodes().map(n => n.id()));
-        const bulkOptions = { skipLayout: true };
-        const edgeCache = new Set(cy.edges().map(edge => `${edge.data('source')}::${edge.data('target')}`));
-        const edgeOptions = { ...bulkOptions, edgeCache };
-        let nodesAdded = 0;
-        let edgesAdded = 0;
-        const createdNodes = [];
-        const createdEdges = [];
-        const relationships = data.relationships || {};
-
-        // Create main domain node
-        const domainLabel = cleanDomain;
-        const subdomainsList = (relationships.subdomains || []).map(s => s.id || s).join(', ');
-        const siblingsList = (relationships.siblings || []).map(s => s.id || s).join(', ');
-        const domainInfoFields = {
-            'Detection Ratio': domainDetectionRatio,
-            'Reputation': attributes.reputation || 0,
-            'Subdomains': subdomainsList,
-            'Sibling Domains': siblingsList,
-            'Creation Date': attributes.creation_date ? new Date(attributes.creation_date * 1000).toISOString() : null,
-            'Last Seen': attributes.last_modification_date ? new Date(attributes.last_modification_date * 1000).toISOString() : null
-        };
-        const domainInfoHtml = this.formatInfoHTML(domainInfoFields);
-        const domainInfoText = this.formatInfoText(domainInfoFields);
-
-        // Build the main domain node data
-        const domainNodeData = {
-            id: `domain_${cleanDomain.replace(/[^a-zA-Z0-9]/g, '_')}`,
-            label: domainLabel,
-            type: 'domain',
-            color: domainMalicious > 0 ? '#FF4444' : '#FF5282',
-            size: 40,
-            domain: cleanDomain,
-            reputation: attributes.reputation || 0,
-            detectionRatio: domainDetectionRatio,
-            lastSeen: attributes.last_modification_date ? new Date(attributes.last_modification_date * 1000).toISOString() : null,
-            timestamp: attributes.creation_date ? new Date(attributes.creation_date * 1000).toISOString() : null,
-            info: domainInfoText,
-            infoHtml: domainInfoHtml
-        };
-
-        // Create or fetch the node in the graph
-        const { id: domainNodeId, created: domainCreated } = await this.getOrCreateNode(
-            cy,
-            domainNodeData.id,
-            domainNodeData,
-            bulkOptions
-        );
-        cy.getElementById(domainNodeId).data('info', domainInfoText);
-        cy.getElementById(domainNodeId).data('infoHtml', domainInfoHtml);
-        if (domainCreated) {
-            nodesAdded++;
-            createdNodes.push(domainNodeId);
-        }
-
-        // Collect associated IPs
-        const ipSet = new Set();
-        if (attributes.last_dns_records) {
-            attributes.last_dns_records.forEach(record => {
-                if (record && record.type === 'A' && record.value) {
-                    ipSet.add(record.value);
-                }
-            });
-        }
-        if (relationships.resolutions) {
-            relationships.resolutions.forEach(resObj => {
-                const ip = resObj.attributes?.ip_address || resObj.id || resObj;
-                if (ip) ipSet.add(ip);
-            });
-        }
-
-        // Create IP nodes and edges from domain
-        for (const ip of ipSet) {
-            const { id: ipNodeId, created } = await this.createIPNodeWithInfo(cy, ip, {}, bulkOptions);
-            if (created) {
-                nodesAdded++;
-                createdNodes.push(ipNodeId);
-            }
-
-            const edgeData = {
-                id: `${domainNodeId}_resolves_to_${ipNodeId}`,
-                source: domainNodeId,
-                target: ipNodeId,
-                label: 'resolves to'
-            };
-            if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
-                edgesAdded++;
-                createdEdges.push(edgeData.id);
-            }
-        }
-
-        // Create malware nodes and edges from domain relationships
-        const malwareRelationships = [
-            { key: 'communicating_files', label: 'communicates with', direction: 'from_file' },
-            { key: 'referrer_files', label: 'refers', direction: 'from_file' },
-            { key: 'downloaded_files', label: 'downloads', direction: 'to_file' }
-        ];
-
-        for (const rel of malwareRelationships) {
-            const files = relationships[rel.key];
-            if (!files) continue;
-
-            for (const fileObj of files) {
-                const hash = fileObj.sha256 || fileObj.id || fileObj;
-                if (!hash) continue;
-
-                const { id: fileNodeId, created } = await this.createFileNodeWithInfo(cy, hash, {}, bulkOptions);
-                if (created) {
-                    nodesAdded++;
-                    createdNodes.push(fileNodeId);
-                }
-
-                const sourceId = rel.direction === 'from_file' ? fileNodeId : domainNodeId;
-                const targetId = rel.direction === 'from_file' ? domainNodeId : fileNodeId;
-                const edgeData = {
-                    id: `${sourceId}_${rel.key}_${targetId}`,
-                    source: sourceId,
-                    target: targetId,
-                    label: rel.label
-                };
-                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
-                    edgesAdded++;
-                    createdEdges.push(edgeData.id);
-                }
-            }
-        }
-
-        // Position any newly created nodes near the domain node
-        this.positionNodesNearSource(cy, domainNodeId, createdNodes.filter(id => id !== domainNodeId), 'VirusTotal');
-
-        if (window.LayoutManager && typeof window.LayoutManager.calculateOptimalSizing === 'function' && typeof window.LayoutManager.updateNodeStyles === 'function') {
-            const sizing = window.LayoutManager.calculateOptimalSizing(cy);
-            window.LayoutManager.updateNodeStyles(cy, sizing);
-        }
-
-        // Sync GraphManager/DataManager so renderGraph uses the updated data
-        if (window.GraphManager?.rebuildCurrentGraphFromCy) {
-            window.GraphManager.rebuildCurrentGraphFromCy(cy);
-
-            if (window.DataManager && typeof window.DataManager.setGraphData === 'function') {
-                window.DataManager.setGraphData(window.GraphManager.currentGraph);
-            }
-        }
-
-        if (window.TableManager && window.TableManager.updateTables) {
-            window.TableManager.updateTables();
-            if (window.TableManager.updateTotalDataTable) {
-                window.TableManager.updateTotalDataTable();
-            }
-        }
-        if (window.GraphAreaEditor && window.GraphAreaEditor.applySettings) {
-            window.GraphAreaEditor.applySettings();
-        }
-
-        return {
-            nodesAdded,
-            edgesAdded,
-            domain: cleanDomain,
-            detectionRatio: domainDetectionRatio,
-            reputation: attributes.reputation || 0
-        };
-    },
-
-    // Process VirusTotal IP data and create graph nodes
-    processVirusTotalIPData: async function(data, ipAddress) {
-        if (!data || !data.data) {
-            throw new Error('Invalid VirusTotal IP data format');
-        }
-
-        const ipData = data.data;
-        const attributes = ipData.attributes || {};
-
-        if (!window.GraphRenderer || !window.GraphRenderer.cy) {
-            throw new Error('Graph not initialized');
-        }
-
-        // Load cybersecurity node types if they're not already active
-        if (window.DomainLoader && typeof window.DomainLoader.loadAndActivateDomains === 'function') {
-            try {
-                await window.DomainLoader.loadAndActivateDomains(['cybersecurity']);
-            } catch (e) {
-            }
-        }
-
-        const cy = window.GraphRenderer.cy;
-        const existingNodeIds = new Set(cy.nodes().map(n => n.id()));
-        const bulkOptions = { skipLayout: true };
-        const edgeCache = new Set(cy.edges().map(edge => `${edge.data('source')}::${edge.data('target')}`));
-        const edgeOptions = { ...bulkOptions, edgeCache };
-        let nodesAdded = 0;
-        let edgesAdded = 0;
-
-        const { detectionRatio: ipDetectionRatio } = this.calculateDetectionStats(attributes.last_analysis_stats);
-        const asnNumber = attributes.asn || attributes.as_number || null;
-        const asnDisplay = asnNumber ? `AS${asnNumber}` : null;
-        const asOwner = attributes.as_owner || attributes.asn_owner || null;
-        const ipInfoFields = {
-            'Detection Ratio': ipDetectionRatio,
-            'Country': attributes.country || null,
-            'ASN': asnDisplay && asOwner ? `${asnDisplay} (${asOwner})` : asnDisplay || asOwner || null,
-            'Last Seen': attributes.last_modification_date ? new Date(attributes.last_modification_date * 1000).toISOString() : null
-        };
-        const ipInfoHtml = this.formatInfoHTML(ipInfoFields);
-        const ipInfoText = this.formatInfoText(ipInfoFields);
-        const ipNodeData = {
-            id: `ip_${ipAddress.replace(/[^a-zA-Z0-9]/g, '_')}`,
-            label: ipAddress,
-            type: 'ipaddress',
-            color: '#0080FF',
-            size: 40,
-            ipAddress: ipAddress,
-            detectionRatio: ipDetectionRatio,
-            country: attributes.country || null,
-            asn: asnNumber || null,
-            asOwner: asOwner || null,
-            lastSeen: attributes.last_modification_date ? new Date(attributes.last_modification_date * 1000).toISOString() : null,
-            timestamp: attributes.last_modification_date ? new Date(attributes.last_modification_date * 1000).toISOString() : null,
-            info: ipInfoText,
-            infoHtml: ipInfoHtml
-        };
-        const { id: ipNodeId, created: ipCreated } = await this.getOrCreateNode(cy, ipNodeData.id, ipNodeData, bulkOptions);
-        cy.getElementById(ipNodeId).data('info', ipInfoText);
-        cy.getElementById(ipNodeId).data('infoHtml', ipInfoHtml);
-        if (ipCreated) {
-            nodesAdded++;
-        }
-
-        const resolutions = data.relationships ? data.relationships.resolutions || [] : [];
-        for (const res of resolutions) {
-            const domain = res.attributes?.host_name || res.attributes?.hostname || res.id || res;
-            if (!domain) continue;
-
-            const { id: domainNodeId, created } = await this.createDomainNodeWithInfo(cy, domain, {}, bulkOptions);
-            if (!domainNodeId) continue;
-            if (created) {
-                nodesAdded++;
-            }
-
-            const edgeData = {
-                id: `${domainNodeId}_resolves_to_${ipNodeId}`,
-                source: domainNodeId,
-                target: ipNodeId,
-                label: 'resolves to'
-            };
-            if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
-                edgesAdded++;
-            }
-        }
-
-        // Create malware nodes and edges from IP relationships
-        const malwareRelationships = [
-            { key: 'communicating_files', label: 'communicates with', direction: 'from_file' },
-            { key: 'referrer_files', label: 'refers', direction: 'from_file' },
-            { key: 'downloaded_files', label: 'downloads', direction: 'to_file' }
-        ];
-
-        for (const rel of malwareRelationships) {
-            const files = data.relationships ? data.relationships[rel.key] : null;
-            if (!files) continue;
-
-            for (const fileObj of files) {
-                const hash = fileObj.sha256 || fileObj.id || fileObj;
-                if (!hash) continue;
-
-                const { id: fileNodeId, created } = await this.createFileNodeWithInfo(cy, hash, {}, bulkOptions);
-                if (created) {
-                    nodesAdded++;
-                }
-
-                const sourceId = rel.direction === 'from_file' ? fileNodeId : ipNodeId;
-                const targetId = rel.direction === 'from_file' ? ipNodeId : fileNodeId;
-                const edgeData = {
-                    id: `${sourceId}_${rel.key}_${targetId}`,
-                    source: sourceId,
-                    target: targetId,
-                    label: rel.label
-                };
-                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
-                    edgesAdded++;
-                }
-            }
-        }
-
-        const newNodeIds = cy.nodes().map(n => n.id()).filter(id => !existingNodeIds.has(id) && id !== ipNodeId);
-        this.positionNodesNearSource(cy, ipNodeId, newNodeIds, 'VirusTotal');
-
-        if (window.LayoutManager && typeof window.LayoutManager.calculateOptimalSizing === 'function' && typeof window.LayoutManager.updateNodeStyles === 'function') {
-            const sizing = window.LayoutManager.calculateOptimalSizing(cy);
-            window.LayoutManager.updateNodeStyles(cy, sizing);
-        }
-
-        if (window.TableManager && window.TableManager.updateTables) {
-            window.TableManager.updateTables();
-            if (window.TableManager.updateTotalDataTable) {
-                window.TableManager.updateTotalDataTable();
-            }
-        }
-        if (window.GraphAreaEditor && window.GraphAreaEditor.applySettings) {
-            window.GraphAreaEditor.applySettings();
-        }
-
-        return {
-            nodesAdded,
-            edgesAdded,
-            ip: ipAddress,
-            detectionRatio: ipDetectionRatio
-        };
-    },
-
-    // Process VirusTotal URL data and create graph nodes
-    processVirusTotalURLData: async function(data, url) {
-        if (!data || !data.data) {
-            throw new Error('Invalid VirusTotal URL data format');
-        }
-
-        const urlData = data.data;
-        const attributes = urlData.attributes || {};
-
-        if (!window.GraphRenderer || !window.GraphRenderer.cy) {
-            throw new Error('Graph not initialized');
-        }
-
-        // Load cybersecurity types so imported URL nodes get appropriate styling
-        if (window.DomainLoader && typeof window.DomainLoader.loadAndActivateDomains === 'function') {
-            try {
-                await window.DomainLoader.loadAndActivateDomains(['cybersecurity']);
-            } catch (e) {
-            }
-        }
-
-        const cy = window.GraphRenderer.cy;
-        const existingNodeIds = new Set(cy.nodes().map(n => n.id()));
-        const bulkOptions = { skipLayout: true };
-        const edgeCache = new Set(cy.edges().map(edge => `${edge.data('source')}::${edge.data('target')}`));
-        const edgeOptions = { ...bulkOptions, edgeCache };
-        let nodesAdded = 0;
-        let edgesAdded = 0;
-
-        const urlLabel = url;
-        const { detectionRatio: urlDetectionRatio } = this.calculateDetectionStats(attributes.last_analysis_stats);
-        const urlInfoFields = {
-            'Detection Ratio': urlDetectionRatio,
-            'Last Analysis': attributes.last_analysis_date ? new Date(attributes.last_analysis_date * 1000).toISOString() : null
-        };
-        const urlInfoHtml = this.formatInfoHTML(urlInfoFields);
-        const urlInfoText = this.formatInfoText(urlInfoFields);
-        const urlNodeData = {
-            id: `url_${url.replace(/[^a-zA-Z0-9]/g, '_')}`,
-            label: urlLabel,
-            type: 'url',
-            color: '#FFA500',
-            size: 40,
-            url: url,
-            detectionRatio: urlDetectionRatio,
-            info: urlInfoText,
-            infoHtml: urlInfoHtml
-        };
-        const { id: urlNodeId, created: urlCreated } = await this.getOrCreateNode(cy, urlNodeData.id, urlNodeData, bulkOptions);
-        cy.getElementById(urlNodeId).data('info', urlInfoText);
-        cy.getElementById(urlNodeId).data('infoHtml', urlInfoHtml);
-        if (urlCreated) {
-            nodesAdded++;
-        }
-
-        let domain = null;
-        try {
-            domain = new URL(attributes.url || url).hostname;
-        } catch (e) {
-            domain = null;
-        }
-
-        if (domain) {
-            const { id: domainNodeId, created } = await this.createDomainNodeWithInfo(cy, domain, {}, bulkOptions);
-            if (domainNodeId) {
-                if (created) {
-                    nodesAdded++;
-                }
-
-                const edgeData = {
-                    id: `${urlNodeId}_links_to_${domainNodeId}`,
-                    source: urlNodeId,
-                    target: domainNodeId,
-                    label: 'links to'
-                };
-                if (this.addEdgeIfNotExists(cy, edgeData, edgeOptions)) {
-                    edgesAdded++;
-                }
-            }
-        }
-
-        const newNodeIds = cy.nodes().map(n => n.id()).filter(id => !existingNodeIds.has(id) && id !== urlNodeId);
-        this.positionNodesNearSource(cy, urlNodeId, newNodeIds, 'VirusTotal');
-
-        if (window.LayoutManager && typeof window.LayoutManager.calculateOptimalSizing === 'function' && typeof window.LayoutManager.updateNodeStyles === 'function') {
-            const sizing = window.LayoutManager.calculateOptimalSizing(cy);
-            window.LayoutManager.updateNodeStyles(cy, sizing);
-        }
-
-        if (window.TableManager && window.TableManager.updateTables) {
-            window.TableManager.updateTables();
-            if (window.TableManager.updateTotalDataTable) {
-                window.TableManager.updateTotalDataTable();
-            }
-        }
-        if (window.GraphAreaEditor && window.GraphAreaEditor.applySettings) {
-            window.GraphAreaEditor.applySettings();
-        }
-
-        return {
-            nodesAdded,
-            edgesAdded,
-            url,
-            detectionRatio: urlDetectionRatio
-        };
-    },
-
-    // Main function to query and import VirusTotal data
-    importVirusTotalData: async function(identifier, queryType) {
-        try {
-            this.updateStatus('virustotalStatus', `Querying VirusTotal ${queryType}...`, 'loading');
-            
-            let data;
-            let result;
-            
-            switch (queryType) {
-                case 'file':
-                    data = await this.queryVirusTotalFileEnhanced(identifier);
-                    result = await this.processVirusTotalFileData(data, identifier, queryType);
-                    break;
-                case 'domain':
-                    const cleanDomain = this.sanitizeDomain(identifier);
-                    data = await this.queryVirusTotalDomain(cleanDomain, { includeRelationships: true });
-                    result = await this.processVirusTotalDomainData(data, cleanDomain);
-                    identifier = cleanDomain;
-                    break;
-                case 'ip':
-                    data = await this.queryVirusTotalIP(identifier, { includeRelationships: true });
-                    result = await this.processVirusTotalIPData(data, identifier);
-                    break;
-                case 'url':
-                    data = await this.queryVirusTotalURL(identifier);
-                    result = await this.processVirusTotalURLData(data, identifier);
-                    break;
-                default:
-                    throw new Error(`Unsupported query type: ${queryType}`);
-            }
-            
-            // Restore preserved label settings if they were captured
-            if (result.preservedLabelSettings && window.GraphAreaEditor && window.GraphAreaEditor.getSettings) {
-                const { color, size } = result.preservedLabelSettings;
-                const current = window.GraphAreaEditor.getSettings();
-                const newSettings = {};
-                if (color && current.labelColor !== color) {
-                    newSettings.labelColor = color;
-                }
-                if (size && current.labelSize !== size) {
-                    newSettings.labelSize = size;
-                }
-
-                if (Object.keys(newSettings).length && window.GraphAreaEditor.applySettings) {
-                    window.GraphAreaEditor.applySettings(newSettings);
-                }
-            }
-            
-            // Show success message
-            const message = `Imported ${result.nodesAdded} nodes and ${result.edgesAdded} edges for ${queryType}: ${identifier}`;
-            this.updateStatus('virustotalStatus', message, 'success');
-            
-            if (window.UI && window.UI.showNotification) {
-                window.UI.showNotification(message, 'success');
-            }
-            
-            return result;
-        } catch (error) {
-            console.error('VirusTotal import failed:', error);
-            this.updateStatus('virustotalStatus', error.message, 'error');
-            
-            if (window.UI && window.UI.showNotification) {
-                window.UI.showNotification(`VirusTotal import failed: ${error.message}`, 'error');
-            }
-            
-            throw error;
-        }
-    },
-
-    
 };
 
 // Global functions for UI interactions
@@ -5478,7 +3394,7 @@ window.saveCirclLuConfig = async function() {
 };
 
 window.testVirusTotalConnection = async function() {
-    const apiKey = window.IntegrationsManager.getVirusTotalApiKey();
+    const apiKey = window.IntegrationsManager.runtime.virustotalApiKey;
 
     if (!apiKey) {
         window.IntegrationsManager.updateStatus('virustotalStatus', 'No API key configured', 'error');
@@ -5488,13 +3404,16 @@ window.testVirusTotalConnection = async function() {
     window.IntegrationsManager.updateStatus('virustotalStatus', 'Testing connection...', 'testing');
 
     try {
-        // Use generic request helper to ensure API key header is included
-        await window.IntegrationsManager.makeVirusTotalRequest('/users/me');
+        await window.IntegrationsManager.runAction('virustotal', 'testConnection', { source: 'ui' }, {});
         window.IntegrationsManager.updateStatus('virustotalStatus', 'Connection successful', 'success');
     } catch (error) {
         console.error('VirusTotal connection test failed:', error);
         if (error.message.includes('Invalid VirusTotal API key')) {
             window.IntegrationsManager.updateStatus('virustotalStatus', 'Invalid API key', 'error');
+        } else if (error.message.includes('VirusTotal proxy blocked')) {
+            window.IntegrationsManager.updateStatus('virustotalStatus', 'VirusTotal proxy blocked (check proxy allowlist)', 'error');
+        } else if (error.message.includes('VirusTotal access forbidden')) {
+            window.IntegrationsManager.updateStatus('virustotalStatus', 'VirusTotal access forbidden (check account permissions)', 'error');
         } else if (error.message.includes('VirusTotal API quota exceeded')) {
             window.IntegrationsManager.updateStatus('virustotalStatus', 'API quota exceeded', 'error');
         } else {
@@ -5561,7 +3480,10 @@ window.queryVirusTotalFile = async function() {
     }
     
     try {
-        const result = await window.IntegrationsManager.importVirusTotalData(fileHash.trim(), 'file');
+        const result = await window.IntegrationsManager.runAction('virustotal', 'enrichFromGraph', { source: 'ui' }, {
+            identifier: fileHash.trim(),
+            queryType: 'file'
+        });
         
         if (window.UI && window.UI.showNotification) {
             window.UI.showNotification(
@@ -5588,7 +3510,10 @@ window.queryVirusTotalDomain = async function() {
     }
     
     try {
-        const result = await window.IntegrationsManager.importVirusTotalData(domain.trim(), 'domain');
+        const result = await window.IntegrationsManager.runAction('virustotal', 'enrichFromGraph', { source: 'ui' }, {
+            identifier: domain.trim(),
+            queryType: 'domain'
+        });
         
         if (window.UI && window.UI.showNotification) {
             window.UI.showNotification(
@@ -5615,7 +3540,10 @@ window.queryVirusTotalIP = async function() {
     }
     
     try {
-        const result = await window.IntegrationsManager.importVirusTotalData(ipAddress.trim(), 'ip');
+        const result = await window.IntegrationsManager.runAction('virustotal', 'enrichFromGraph', { source: 'ui' }, {
+            identifier: ipAddress.trim(),
+            queryType: 'ip'
+        });
         
         if (window.UI && window.UI.showNotification) {
             window.UI.showNotification(`IP analysis imported (basic implementation)`, 'success');
@@ -5639,7 +3567,10 @@ window.queryVirusTotalURL = async function() {
     }
     
     try {
-        const result = await window.IntegrationsManager.importVirusTotalData(url.trim(), 'url');
+        const result = await window.IntegrationsManager.runAction('virustotal', 'enrichFromGraph', { source: 'ui' }, {
+            identifier: url.trim(),
+            queryType: 'url'
+        });
         
         if (window.UI && window.UI.showNotification) {
             window.UI.showNotification(`URL analysis imported (basic implementation)`, 'success');
@@ -5665,7 +3596,9 @@ window.submitVirusTotalURL = async function() {
     try {
         window.IntegrationsManager.updateStatus('virustotalStatus', 'Submitting URL for analysis...', 'loading');
         
-        const result = await window.IntegrationsManager.submitVirusTotalURL(url.trim());
+        const result = await window.IntegrationsManager.runAction('virustotal', 'submitUrl', { source: 'ui' }, {
+            url: url.trim()
+        });
         
         if (window.UI && window.UI.showNotification) {
             window.UI.showNotification(`URL submitted successfully. Analysis ID: ${result.data.id}`, 'success');

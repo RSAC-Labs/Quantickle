@@ -600,13 +600,15 @@ window.NodeTypes = {
         size: 20,
         shape: 'ellipse',
         icon: '',
-        labelColor: '#333333'
+        labelColor: '#333333',
+        backgroundFit: 'contain'
     },
     container: {
         color: '#d3d3d3',
         size: 28,
         shape: 'round-rectangle',
         icon: '',
+        backgroundFit: 'contain',
         coordinateSpace: {
             x: 1000,
             y: 1000,
@@ -619,20 +621,23 @@ window.NodeTypes = {
         size: 110,
         shape: 'round-rectangle',
         icon: '/assets/domains/symbols/graph.png',
-        labelColor: '#312e81'
+        labelColor: '#312e81',
+        backgroundFit: 'contain'
     },
     'graph-return': {
         color: '#ede9fe',
         size: 110,
         shape: 'round-rectangle',
         icon: '/assets/domains/symbols/graph.png',
-        labelColor: '#312e81'
+        labelColor: '#312e81',
+        backgroundFit: 'contain'
     },
     image: {
         color: '#ffffff',
         size: 240,
         shape: 'round-rectangle',
         icon: '',
+        backgroundFit: 'contain',
         backgroundColor: '#ffffff',
         borderColor: '#d1d5db',
         borderWidth: 1,
@@ -651,6 +656,7 @@ window.NodeTypes = {
         size: 1,
         shape: 'round-rectangle',
         icon: '',
+        backgroundFit: 'contain',
         fontFamily: 'Arial',
         fontSize: 14,
         fontColor: '#333333',
@@ -669,6 +675,7 @@ window.NodeTypes = {
         size: 120,
         shape: 'round-rectangle',
         icon: '',
+        backgroundFit: 'contain',
         borderColor: '#999999',
         borderWidth: 1,
         zoom: 2

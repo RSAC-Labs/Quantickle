@@ -471,15 +471,34 @@ class GraphStylingModule {
      * Generate performance-optimized default styles
      */
     generateDefaultStyles() {
+        const resolveBackgroundFit = (value, fallback = 'contain') => {
+            if (typeof value === 'string') {
+                const trimmed = value.trim();
+                if (trimmed) {
+                    return trimmed;
+                }
+            }
+            return fallback;
+        };
+        const resolveBackgroundPosition = (value, fallback = '50%') => {
+            if (typeof value === 'string') {
+                const trimmed = value.trim();
+                if (trimmed) {
+                    return trimmed;
+                }
+            }
+            return fallback;
+        };
+
         const baseNodeStyle = {
             'background-color': ele => ele.data('color') || this.config.defaultNodeColor || '#ffffff',
             'background-image': 'none',
-            'background-fit': 'contain',
+            'background-fit': ele => resolveBackgroundFit(ele.data('backgroundFit'), 'contain'),
             'background-repeat': 'no-repeat',
-            'background-position-x': '50%',
-            'background-position-y': '50%',
-            'background-width': '100%',
-            'background-height': '100%',
+            'background-position-x': ele => resolveBackgroundPosition(ele.data('backgroundPositionX'), '50%'),
+            'background-position-y': ele => resolveBackgroundPosition(ele.data('backgroundPositionY'), '50%'),
+            'background-width': ele => ele.data('backgroundWidth') || 'auto',
+            'background-height': ele => ele.data('backgroundHeight') || 'auto',
             'background-opacity': 1.0,
             'width': ele => ele.data('size') || 30,
             'height': ele => ele.data('size') || 30,
@@ -612,8 +631,9 @@ class GraphStylingModule {
                     },
                     'text-background-shape': 'roundrectangle',
                     'text-outline-width': 0,
-                    'background-fit': 'contain',
-                    'background-position-y': '0%'
+                    'background-fit': ele => resolveBackgroundFit(ele.data('backgroundFit'), 'contain'),
+                    'background-position-x': ele => resolveBackgroundPosition(ele.data('backgroundPositionX'), '50%'),
+                    'background-position-y': ele => resolveBackgroundPosition(ele.data('backgroundPositionY'), '50%')
                 }
             },
             {

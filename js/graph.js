@@ -102,6 +102,42 @@ window.GraphRenderer = {
         return nearLeft || nearRight || nearTop || nearBottom;
     },
 
+    resolveBackgroundFitValue(value, fallback = 'contain') {
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (trimmed) {
+                return trimmed;
+            }
+        }
+        return fallback;
+    },
+
+    resolveBackgroundPositionValue(value, fallback = '50%') {
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (trimmed) {
+                return trimmed;
+            }
+        }
+        return fallback;
+    },
+
+    resolveBackgroundFitForType(type) {
+        const typeSettings = window.NodeTypes && type && window.NodeTypes[type]
+            ? window.NodeTypes[type]
+            : null;
+        const defaultSettings = window.NodeTypes && window.NodeTypes.default
+            ? window.NodeTypes.default
+            : null;
+        const typeFit = typeSettings && typeof typeSettings.backgroundFit === 'string'
+            ? typeSettings.backgroundFit
+            : '';
+        const defaultFit = defaultSettings && typeof defaultSettings.backgroundFit === 'string'
+            ? defaultSettings.backgroundFit
+            : '';
+        return this.resolveBackgroundFitValue(typeFit, this.resolveBackgroundFitValue(defaultFit, 'contain'));
+    },
+
     // Graph instance navigation state
     graphInstanceStack: [],
     graphInstanceLoading: false,
@@ -2117,9 +2153,21 @@ window.GraphRenderer = {
                 }
 
                 if (backgroundImage && backgroundImage !== 'none') {
-                    styleUpdate['background-fit'] = 'contain';
-                    styleUpdate['background-position-x'] = '50%';
-                    styleUpdate['background-position-y'] = '50%';
+                    const backgroundFit = this.resolveBackgroundFitValue(
+                        typeof first.data === 'function' ? first.data('backgroundFit') : null,
+                        this.resolveBackgroundFitForType('graph-return')
+                    );
+                    const backgroundPositionX = this.resolveBackgroundPositionValue(
+                        typeof first.data === 'function' ? first.data('backgroundPositionX') : null,
+                        '50%'
+                    );
+                    const backgroundPositionY = this.resolveBackgroundPositionValue(
+                        typeof first.data === 'function' ? first.data('backgroundPositionY') : null,
+                        '50%'
+                    );
+                    styleUpdate['background-fit'] = backgroundFit;
+                    styleUpdate['background-position-x'] = backgroundPositionX;
+                    styleUpdate['background-position-y'] = backgroundPositionY;
                     styleUpdate['background-repeat'] = 'no-repeat';
                     styleUpdate['background-width'] = '70%';
                     styleUpdate['background-height'] = '70%';
@@ -4627,10 +4675,10 @@ window.GraphRenderer = {
                         ele.data('color') ||
                         (window.QuantickleConfig?.defaultNodeColor || '#ffffff'),
                     'background-image': 'none',
-                    'background-fit': 'contain',
+                    'background-fit': ele => this.resolveBackgroundFitValue(ele.data('backgroundFit'), 'contain'),
                     'background-repeat': 'no-repeat',
-                    'background-position-x': '50%',
-                    'background-position-y': '50%',
+                    'background-position-x': ele => this.resolveBackgroundPositionValue(ele.data('backgroundPositionX'), '50%'),
+                    'background-position-y': ele => this.resolveBackgroundPositionValue(ele.data('backgroundPositionY'), '50%'),
                     'background-width': '100%',
                     'background-height': '100%',
                     'background-opacity': 1.0, // Full opacity - icons will be applied directly via node.style()
@@ -4832,9 +4880,9 @@ window.GraphRenderer = {
                         'shadow-offset-x': 0,
                         'shadow-offset-y': 0
                     }),
-                    'background-fit': 'contain',
-                    'background-position-x': '50%',
-                    'background-position-y': '50%',
+                    'background-fit': ele => this.resolveBackgroundFitValue(ele.data('backgroundFit'), 'contain'),
+                    'background-position-x': ele => this.resolveBackgroundPositionValue(ele.data('backgroundPositionX'), '50%'),
+                    'background-position-y': ele => this.resolveBackgroundPositionValue(ele.data('backgroundPositionY'), '50%'),
                     'background-repeat': 'no-repeat',
                     'background-width': '70%',
                     'background-height': '70%'
@@ -4943,8 +4991,9 @@ window.GraphRenderer = {
                         const size = parseFloat(ele.data('size'));
                         return Number.isFinite(size) ? Math.max(20, size) : 120;
                     },
-                    'background-fit': 'contain',
-                    'background-position-y': '0%',
+                    'background-fit': ele => this.resolveBackgroundFitValue(ele.data('backgroundFit'), 'contain'),
+                    'background-position-x': ele => this.resolveBackgroundPositionValue(ele.data('backgroundPositionX'), '50%'),
+                    'background-position-y': ele => this.resolveBackgroundPositionValue(ele.data('backgroundPositionY'), '50%'),
                     'text-valign': 'bottom',
                     'text-halign': 'center',
                     'text-wrap': 'wrap',
@@ -10831,6 +10880,7 @@ window.GraphRenderer = {
         const backgroundImageReference = sanitizedIcon
             ? (this.resolveBackgroundImage(sanitizedIcon) || this.buildBackgroundImage(sanitizedIcon))
             : null;
+        const resolvedBackgroundFit = this.resolveBackgroundFitForType(type);
 
         // Build node configuration
         const nodeConfig = {
@@ -10847,6 +10897,7 @@ window.GraphRenderer = {
                 customGlow: false,
                 customLabelColor: !!labelColor,
                 backgroundImage: sanitizedIcon && backgroundImageReference ? backgroundImageReference : 'none',
+                backgroundFit: resolvedBackgroundFit,
                 icon: sanitizedIcon || ''
             },
             position: { x: x, y: y }
@@ -10946,17 +10997,20 @@ window.GraphRenderer = {
                 window.NodeEditor.applyIconStyle(node, sanitizedIcon);
             } else {
                 const backgroundImage = backgroundImageReference || this.buildBackgroundImage(sanitizedIcon) || 'none';
+                const backgroundPositionX = this.resolveBackgroundPositionValue(null, '50%');
+                const backgroundPositionY = this.resolveBackgroundPositionValue(null, '50%');
                 node.style({
                     'background-image': backgroundImage,
-                    'background-fit': 'contain',
+                    'background-fit': resolvedBackgroundFit,
                     'background-width': '100%',
                     'background-height': '100%',
                     'background-repeat': 'no-repeat',
-                    'background-position-x': '50%',
-                    'background-position-y': '50%'
+                    'background-position-x': backgroundPositionX,
+                    'background-position-y': backgroundPositionY
                 });
                 node.data('backgroundImage', backgroundImage);
             }
+            node.data('backgroundFit', resolvedBackgroundFit);
             node.data('icon', sanitizedIcon);
         }
 
@@ -10987,6 +11041,7 @@ window.GraphRenderer = {
                     customLabelColor: !!labelColor,
                     labelColor: labelColor,
                     backgroundImage: sanitizedIcon && backgroundImageReference ? backgroundImageReference : 'none',
+                    backgroundFit: resolvedBackgroundFit,
                     icon: sanitizedIcon || ''
                 },
                 position: { x: x, y: y }
@@ -13289,10 +13344,12 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
             const existingColor = node.data('color');
             const existingSize = node.data('size');
             const existingShape = node.data('shape');
+            const existingBackgroundFit = node.data('backgroundFit');
 
             const defaultColor = (typeSettings && typeSettings.color) || globalDefaultColor;
             const defaultSize = (typeSettings && typeSettings.size) || 30;
             const defaultShape = (typeSettings && typeSettings.shape) || 'round-rectangle';
+            const defaultBackgroundFit = this.resolveBackgroundFitForType(nodeType);
 
             // Only set defaults if no explicit value exists (preserve CSV colors/sizes)
             if (!existingColor) {
@@ -13303,6 +13360,9 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
             }
             if (!existingShape) {
                 node.data('shape', defaultShape);
+            }
+            if (!existingBackgroundFit) {
+                node.data('backgroundFit', defaultBackgroundFit);
             }
 
             // Ensure container nodes handle collapse state
@@ -13431,6 +13491,10 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
                 };
 
                 let enforcedBackgroundImage = null;
+                const enforcedBackgroundFit = this.resolveBackgroundFitValue(
+                    node.data('backgroundFit'),
+                    this.resolveBackgroundFitForType(nodeType)
+                );
                 const graphNodeDefaults = window.NodeTypes?.[nodeType] || window.NodeTypes?.graph || {};
                 const candidateBackgrounds = [
                     node.data('backgroundImage'),
@@ -13482,6 +13546,7 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
                     node.data('icon', resolvedIcon);
                 }
                 node.data('backgroundImage', enforcedBackgroundImage || 'none');
+                node.data('backgroundFit', enforcedBackgroundFit);
                 if (isBold === undefined) {
                     node.data('bold', true);
                 }
@@ -13509,9 +13574,17 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
                 }
 
                 if (enforcedBackgroundImage) {
-                    graphStyleUpdate['background-fit'] = 'contain';
-                    graphStyleUpdate['background-position-x'] = '50%';
-                    graphStyleUpdate['background-position-y'] = '50%';
+                    const backgroundPositionX = this.resolveBackgroundPositionValue(
+                        node.data('backgroundPositionX'),
+                        '50%'
+                    );
+                    const backgroundPositionY = this.resolveBackgroundPositionValue(
+                        node.data('backgroundPositionY'),
+                        '50%'
+                    );
+                    graphStyleUpdate['background-fit'] = enforcedBackgroundFit;
+                    graphStyleUpdate['background-position-x'] = backgroundPositionX;
+                    graphStyleUpdate['background-position-y'] = backgroundPositionY;
                     graphStyleUpdate['background-repeat'] = 'no-repeat';
                     graphStyleUpdate['background-width'] = '70%';
                     graphStyleUpdate['background-height'] = '70%';
@@ -13630,15 +13703,38 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
             if (backgroundImage && backgroundImage !== 'none') {
                 const originalColor = node.data('color');
                 const lighterColor = window.GraphRenderer.lightenColor(originalColor, 0.4);
+                const resolvedBackgroundFit = this.resolveBackgroundFitValue(
+                    node.data('backgroundFit'),
+                    this.resolveBackgroundFitForType(nodeType)
+                );
+                const backgroundPositionX = this.resolveBackgroundPositionValue(
+                    node.data('backgroundPositionX'),
+                    '50%'
+                );
+                const backgroundPositionY = this.resolveBackgroundPositionValue(
+                    node.data('backgroundPositionY'),
+                    '50%'
+                );
+                const resolveBackgroundDimension = (value) => {
+                    if (value === null || value === undefined) {
+                        return null;
+                    }
+                    if (typeof value === 'string' && !value.trim()) {
+                        return null;
+                    }
+                    return value;
+                };
+                const backgroundWidth = resolveBackgroundDimension(node.data('backgroundWidth'));
+                const backgroundHeight = resolveBackgroundDimension(node.data('backgroundHeight'));
                 node.style({
                     'background-color': lighterColor,  // Lighter background for icon visibility
                     'background-image': backgroundImage,
-                    'background-fit': 'contain',  // Show full icon, don't crop
+                    'background-fit': resolvedBackgroundFit,  // Show full icon, don't crop
                     'background-repeat': 'no-repeat',
-                    'background-position-x': '50%',
-                    'background-position-y': '50%',
-                    'background-width': '100%',
-                    'background-height': '100%',
+                    'background-position-x': backgroundPositionX,
+                    'background-position-y': backgroundPositionY,
+                    'background-width': backgroundWidth || 'auto',
+                    'background-height': backgroundHeight || 'auto',
                 });
             } else {
                 node.style('background-image', 'none');

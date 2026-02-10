@@ -19,9 +19,11 @@ const NODE_MODULES_DIR = path.join(__dirname, 'node_modules');
 const DOMAIN_DIR = path.join(ASSETS_DIR, 'domains');
 const EXAMPLES_DIR = path.join(ASSETS_DIR, 'examples');
 const PROXY_ALLOWLIST_PATH = path.join(CONFIG_DIR, 'proxy-allowlist.json');
+const INTEGRATION_ALLOWLIST_PATH = path.join(CONFIG_DIR, 'integration-allowlist.json');
 const DEFAULT_MISP_FEED_URL = 'https://www.circl.lu/doc/misp/feed-osint/';
 
 let proxyAllowlist = [];
+let integrationAllowlist = [];
 const wildcardRegexCache = new Map();
 
 const DEFAULT_BROWSER_HEADERS = Object.freeze({
@@ -47,6 +49,7 @@ const PASSTHROUGH_HEADERS = [
     'accept-language',
     'cache-control',
     'pragma',
+    'x-apikey',
     'sec-ch-ua',
     'sec-ch-ua-mobile',
     'sec-ch-ua-platform',
@@ -129,17 +132,17 @@ function determineSiteRelationship(targetUrl, refererUrl) {
     return 'cross-site';
 }
 
-function normalizeAllowlistEntries(entries) {
+function normalizeAllowlistEntries(entries, { allowEmpty = false } = {}) {
     if (!Array.isArray(entries)) {
-        throw new Error('Proxy allowlist must be provided as an array of host patterns.');
+        throw new Error('Allowlist must be provided as an array of host patterns.');
     }
 
     const cleaned = entries
         .map(value => (value == null ? '' : String(value)).trim().toLowerCase())
         .filter(Boolean);
 
-    if (cleaned.length === 0) {
-        throw new Error('Proxy allowlist must include at least one host pattern.');
+    if (cleaned.length === 0 && !allowEmpty) {
+        throw new Error('Allowlist must include at least one host pattern.');
     }
 
     return cleaned;
@@ -162,6 +165,25 @@ async function setProxyAllowlist(entries, { persist = true } = {}) {
     await buildConfigIndex();
 
     return proxyAllowlist;
+}
+
+async function setIntegrationAllowlist(entries, { persist = true } = {}) {
+    const normalized = normalizeAllowlistEntries(entries, { allowEmpty: true });
+    integrationAllowlist = normalized;
+    wildcardRegexCache.clear();
+
+    if (!persist) {
+        return integrationAllowlist;
+    }
+
+    await fs.mkdir(CONFIG_DIR, { recursive: true });
+    await fs.writeFile(
+        INTEGRATION_ALLOWLIST_PATH,
+        JSON.stringify({ allowlist: integrationAllowlist }, null, 2)
+    );
+    await buildConfigIndex();
+
+    return integrationAllowlist;
 }
 
 async function loadProxyAllowlist() {
@@ -198,6 +220,39 @@ async function loadProxyAllowlist() {
     throw new Error(message);
 }
 
+async function loadIntegrationAllowlist() {
+    try {
+        const file = await fs.readFile(INTEGRATION_ALLOWLIST_PATH, 'utf8');
+        const parsed = JSON.parse(file);
+        if (Array.isArray(parsed?.allowlist)) {
+            await setIntegrationAllowlist(parsed.allowlist, { persist: false });
+            return;
+        }
+    } catch (err) {
+        if (err.code !== 'ENOENT') {
+            console.error('Failed to read integration allowlist from disk', err);
+            throw err;
+        }
+    }
+
+    const envRaw = typeof process.env.INTEGRATION_ALLOWLIST === 'string'
+        ? process.env.INTEGRATION_ALLOWLIST.trim()
+        : '';
+    if (envRaw) {
+        const envEntries = envRaw.split(',').map(entry => entry.trim()).filter(Boolean);
+        try {
+            await setIntegrationAllowlist(envEntries, { persist: true });
+            return;
+        } catch (err) {
+            console.error('Invalid INTEGRATION_ALLOWLIST configuration', err);
+            throw err;
+        }
+    }
+
+    integrationAllowlist = [];
+    wildcardRegexCache.clear();
+}
+
 function compileWildcard(pattern) {
     if (!wildcardRegexCache.has(pattern)) {
         const source = pattern
@@ -210,14 +265,14 @@ function compileWildcard(pattern) {
     return wildcardRegexCache.get(pattern);
 }
 
-function isAllowedHost(hostname) {
+function isHostAllowedByList(hostname, allowlist) {
     if (!hostname) {
         return false;
     }
 
     const normalizedHost = String(hostname).toLowerCase();
 
-    return proxyAllowlist.some(entry => {
+    return allowlist.some(entry => {
         if (entry === '*') {
             return true;
         }
@@ -226,6 +281,14 @@ function isAllowedHost(hostname) {
         }
         return normalizedHost === entry || normalizedHost.endsWith(`.${entry}`);
     });
+}
+
+function getCombinedProxyAllowlist() {
+    return Array.from(new Set([...proxyAllowlist, ...integrationAllowlist]));
+}
+
+function isAllowedHost(hostname) {
+    return isHostAllowedByList(hostname, getCombinedProxyAllowlist());
 }
 
 // Generate a manifest of all domain JSON files for client-side discovery
@@ -247,6 +310,9 @@ buildConfigIndex().catch(err => {
 
 loadProxyAllowlist().catch(err => {
     console.error('Failed to initialize proxy allowlist', err);
+});
+loadIntegrationAllowlist().catch(err => {
+    console.error('Failed to initialize integration allowlist', err);
 });
 
 // Middleware
@@ -467,6 +533,8 @@ app.get('/api/proxy', async (req, res) => {
             } else if (override) {
                 upstreamHeaders[headerName] = override;
             }
+        } else if (headerName === 'x-apikey' && req.headers[headerName]) {
+            upstreamHeaders[headerName] = req.headers[headerName];
         }
     }
 
