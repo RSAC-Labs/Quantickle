@@ -4603,7 +4603,7 @@ class FileManagerModule {
         }
     }
 
-    async captureExportSnapshot({ desiredScale = 2, backgroundColor = '#ffffff', onError } = {}) {
+    async captureExportSnapshot({ desiredScale = 2, backgroundColor = '#ffffff', captureMode = 'viewport', onError } = {}) {
         const markNotifiedError = onError || (message => this.markExportError(message));
 
         if (!this.cy || typeof this.cy.png !== 'function') {
@@ -4615,6 +4615,7 @@ class FileManagerModule {
         }
 
         const scale = Number.isFinite(desiredScale) && desiredScale > 0 ? desiredScale : 1;
+        const normalizedCaptureMode = captureMode === 'fullGraph' ? 'fullGraph' : 'viewport';
         const minScale = 1;
         const scaleReductionFactor = 0.75;
 
@@ -4643,31 +4644,41 @@ class FileManagerModule {
             && renderedBounds.h > 0
         );
 
+        const viewportWidth = rect && Number.isFinite(rect.width) && rect.width > 0
+            ? rect.width
+            : (this.cy.width ? this.cy.width() : 0);
+        const viewportHeight = rect && Number.isFinite(rect.height) && rect.height > 0
+            ? rect.height
+            : (this.cy.height ? this.cy.height() : 0);
+
         if (!hasVisibleElements || !hasDrawableBounds) {
             return {
                 pngDataUrl: this.createBlankSnapshotDataUrl(),
                 scale,
                 renderedBounds,
                 rect,
-                boundsWidth: 2,
-                boundsHeight: 2,
+                boundsWidth: Math.max(2, viewportWidth || 0),
+                boundsHeight: Math.max(2, viewportHeight || 0),
                 originX: 0,
                 originY: 0,
                 isBlankSnapshot: true
             };
         }
 
-        const boundsWidth = renderedBounds && Number.isFinite(renderedBounds.w) && renderedBounds.w > 0
-            ? renderedBounds.w
-            : rect && Number.isFinite(rect.width) && rect.width > 0
-                ? rect.width
-                : (this.cy.width ? this.cy.width() : 0);
+        const boundsWidth = normalizedCaptureMode === 'fullGraph'
+            ? (renderedBounds && Number.isFinite(renderedBounds.w) && renderedBounds.w > 0 ? renderedBounds.w : viewportWidth)
+            : viewportWidth;
 
-        const boundsHeight = renderedBounds && Number.isFinite(renderedBounds.h) && renderedBounds.h > 0
-            ? renderedBounds.h
-            : rect && Number.isFinite(rect.height) && rect.height > 0
-                ? rect.height
-                : (this.cy.height ? this.cy.height() : 0);
+        const boundsHeight = normalizedCaptureMode === 'fullGraph'
+            ? (renderedBounds && Number.isFinite(renderedBounds.h) && renderedBounds.h > 0 ? renderedBounds.h : viewportHeight)
+            : viewportHeight;
+
+        const originX = normalizedCaptureMode === 'fullGraph' && renderedBounds && Number.isFinite(renderedBounds.x1)
+            ? renderedBounds.x1
+            : 0;
+        const originY = normalizedCaptureMode === 'fullGraph' && renderedBounds && Number.isFinite(renderedBounds.y1)
+            ? renderedBounds.y1
+            : 0;
 
         if (!boundsWidth || !boundsHeight) {
             throw markNotifiedError('Unable to determine graph dimensions for export.');
@@ -4680,7 +4691,10 @@ class FileManagerModule {
 
         while (attemptedScale >= minScale) {
             try {
-                const candidate = this.cy.png({ full: true, scale: attemptedScale, bg: backgroundColor });
+                const pngOptions = normalizedCaptureMode === 'fullGraph'
+                    ? { full: true, scale: attemptedScale, bg: backgroundColor }
+                    : { scale: attemptedScale, bg: backgroundColor };
+                const candidate = this.cy.png(pngOptions);
 
                 if (!candidate || (typeof candidate === 'string' && !candidate.trim())) {
                     throw new Error('Failed to capture graph snapshot.');
@@ -4721,8 +4735,8 @@ class FileManagerModule {
             {
                 fallbackColor: backgroundColor,
                 exportScale: scaleUsed,
-                originX: renderedBounds && Number.isFinite(renderedBounds.x1) ? renderedBounds.x1 : 0,
-                originY: renderedBounds && Number.isFinite(renderedBounds.y1) ? renderedBounds.y1 : 0
+                originX,
+                originY
             }
         );
 
@@ -4733,8 +4747,9 @@ class FileManagerModule {
             rect,
             boundsWidth,
             boundsHeight,
-            originX: renderedBounds && Number.isFinite(renderedBounds.x1) ? renderedBounds.x1 : 0,
-            originY: renderedBounds && Number.isFinite(renderedBounds.y1) ? renderedBounds.y1 : 0,
+            originX,
+            originY,
+            captureMode: normalizedCaptureMode,
             isBlankSnapshot: false
         };
     }
@@ -5189,7 +5204,7 @@ class FileManagerModule {
                     break;
 
                 case 'png': {
-                    const snapshot = await this.captureExportSnapshot({ desiredScale: 4 });
+                    const snapshot = await this.captureExportSnapshot({ desiredScale: 4, captureMode: 'viewport' });
                     const pngResponse = await fetch(snapshot.pngDataUrl);
                     data = await pngResponse.blob();
                     filename = `graph-export-${Date.now()}.png`;
@@ -5203,7 +5218,7 @@ class FileManagerModule {
                         return;
                     }
 
-                    const snapshot = await this.captureExportSnapshot({ desiredScale: 2 });
+                    const snapshot = await this.captureExportSnapshot({ desiredScale: 2, captureMode: 'viewport' });
                     if (snapshot.isBlankSnapshot) {
                         this.notifications.show('Blank graph has no drawable snapshot; exported empty PDF page instead.', 'warning');
                     }
@@ -5280,7 +5295,7 @@ class FileManagerModule {
             return error;
         };
 
-        const snapshot = await this.captureExportSnapshot({ desiredScale, onError: markNotifiedError });
+        const snapshot = await this.captureExportSnapshot({ desiredScale, captureMode: 'viewport', onError: markNotifiedError });
         const { pngDataUrl, scale, renderedBounds, boundsWidth, boundsHeight, originX, originY } = snapshot;
 
         const graphExport = this.exportCurrentGraph();
