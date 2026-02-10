@@ -4797,11 +4797,38 @@ class FileManagerModule {
             return snapshotDataUrl;
         }
 
-        const drawOffsetX = Math.round(boundsX * exportScale);
-        const drawOffsetY = Math.round(boundsY * exportScale);
+        const imageWidth = Math.max(1, Math.round(baseImage.naturalWidth || baseImage.width || 1));
+        const imageHeight = Math.max(1, Math.round(baseImage.naturalHeight || baseImage.height || 1));
+
+        const normalizedCrop = this.normalizeSnapshotCropRect(
+            {
+                sx: Math.round(boundsX * exportScale),
+                sy: Math.round(boundsY * exportScale),
+                sw: targetWidth,
+                sh: targetHeight
+            },
+            imageWidth,
+            imageHeight,
+            targetWidth,
+            targetHeight
+        );
+
+        if (!normalizedCrop) {
+            return snapshotDataUrl;
+        }
 
         context.clearRect(0, 0, targetWidth, targetHeight);
-        context.drawImage(baseImage, drawOffsetX, drawOffsetY);
+        context.drawImage(
+            baseImage,
+            normalizedCrop.sx,
+            normalizedCrop.sy,
+            normalizedCrop.sw,
+            normalizedCrop.sh,
+            normalizedCrop.dx,
+            normalizedCrop.dy,
+            normalizedCrop.dw,
+            normalizedCrop.dh
+        );
 
         try {
             return canvas.toDataURL('image/png');
@@ -4811,6 +4838,44 @@ class FileManagerModule {
             }
             throw error;
         }
+    }
+
+    normalizeSnapshotCropRect(rect, imageWidth, imageHeight, targetWidth, targetHeight) {
+        const safeImageWidth = Math.max(1, Math.round(imageWidth || 1));
+        const safeImageHeight = Math.max(1, Math.round(imageHeight || 1));
+        const safeTargetWidth = Math.max(1, Math.round(targetWidth || 1));
+        const safeTargetHeight = Math.max(1, Math.round(targetHeight || 1));
+
+        const rawSx = Number.isFinite(rect?.sx) ? Math.round(rect.sx) : 0;
+        const rawSy = Number.isFinite(rect?.sy) ? Math.round(rect.sy) : 0;
+        const rawSw = Number.isFinite(rect?.sw) ? Math.round(rect.sw) : safeTargetWidth;
+        const rawSh = Number.isFinite(rect?.sh) ? Math.round(rect.sh) : safeTargetHeight;
+
+        if (!(rawSw > 0) || !(rawSh > 0)) {
+            return null;
+        }
+
+        const sx = Math.max(0, rawSx);
+        const sy = Math.max(0, rawSy);
+        const sourceRight = Math.min(safeImageWidth, rawSx + rawSw);
+        const sourceBottom = Math.min(safeImageHeight, rawSy + rawSh);
+        const sw = sourceRight - sx;
+        const sh = sourceBottom - sy;
+
+        if (!(sw > 0) || !(sh > 0)) {
+            return null;
+        }
+
+        const dx = Math.max(0, sx - rawSx);
+        const dy = Math.max(0, sy - rawSy);
+        const dw = Math.min(sw, safeTargetWidth - dx);
+        const dh = Math.min(sh, safeTargetHeight - dy);
+
+        if (!(dw > 0) || !(dh > 0)) {
+            return null;
+        }
+
+        return { sx, sy, sw: dw, sh: dh, dx, dy, dw, dh };
     }
 
     async composeSnapshotWithContainerBackground(snapshotDataUrl, container, options = {}) {
