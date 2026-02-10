@@ -4673,6 +4673,46 @@ class FileManagerModule {
         };
     }
 
+
+    async normalizeSnapshotForPdf(imageSource, onError) {
+        const markNotifiedError = onError || (message => this.markExportError(message));
+
+        if (!imageSource || typeof imageSource !== 'string') {
+            throw markNotifiedError('Graph snapshot is not in a supported image format for PDF export.');
+        }
+
+        const image = await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(markNotifiedError('Unable to decode graph snapshot for PDF export.'));
+            img.src = imageSource;
+        });
+
+        const width = image.naturalWidth || image.width;
+        const height = image.naturalHeight || image.height;
+
+        if (!width || !height) {
+            throw markNotifiedError('Unable to determine snapshot dimensions for PDF export.');
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+
+        const context = canvas.getContext('2d');
+        if (!context) {
+            throw markNotifiedError('Unable to prepare graph image for PDF export.');
+        }
+
+        context.drawImage(image, 0, 0, width, height);
+
+        return {
+            dataUrl: canvas.toDataURL('image/png'),
+            width,
+            height
+        };
+    }
+
     /**
      * PUBLIC INTERFACE: Export graph data in specified format
      * @param {string} format - Export format ('json', 'csv', 'png', 'pdf')
@@ -4715,7 +4755,7 @@ class FileManagerModule {
                     }
 
                     const snapshot = await this.captureExportSnapshot({ desiredScale: 2 });
-                    const image = snapshot.pngDataUrl;
+                    const normalizedImage = await this.normalizeSnapshotForPdf(snapshot.pngDataUrl);
 
                     const container = snapshot.rect ? snapshot.rect : this.cy.container();
                     const containerWidth = container ? container.width || container.clientWidth || 0 : 0;
@@ -4730,7 +4770,8 @@ class FileManagerModule {
                     const pageWidth = pdfDoc.internal.pageSize.getWidth();
                     const pageHeight = pdfDoc.internal.pageSize.getHeight();
 
-                    const { width: imgWidth, height: imgHeight } = pdfDoc.getImageProperties(image);
+                    const imgWidth = normalizedImage.width;
+                    const imgHeight = normalizedImage.height;
                     const imageRatio = imgWidth / imgHeight;
 
                     let renderWidth = pageWidth;
@@ -4744,7 +4785,7 @@ class FileManagerModule {
                     const offsetX = (pageWidth - renderWidth) / 2;
                     const offsetY = (pageHeight - renderHeight) / 2;
 
-                    pdfDoc.addImage(image, 'PNG', offsetX, offsetY, renderWidth, renderHeight);
+                    pdfDoc.addImage(normalizedImage.dataUrl, 'PNG', offsetX, offsetY, renderWidth, renderHeight);
 
                     data = pdfDoc.output('blob');
                     filename = `graph-export-${Date.now()}.pdf`;
