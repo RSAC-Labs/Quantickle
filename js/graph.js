@@ -9174,6 +9174,16 @@ window.GraphRenderer = {
             payload.preserveAspectRatio = node.data('preserveAspectRatio');
         }
 
+        const calloutDimensionZoom = numericFromData('calloutDimensionZoom');
+        if (Number.isFinite(calloutDimensionZoom) && calloutDimensionZoom > 0) {
+            payload.calloutDimensionZoom = calloutDimensionZoom;
+        }
+
+        const calloutDimensionSource = node.data('calloutDimensionSource');
+        if (typeof calloutDimensionSource === 'string' && calloutDimensionSource.trim()) {
+            payload.calloutDimensionSource = calloutDimensionSource;
+        }
+
         if (nodeType === 'image') {
             const imageRequestedWidth = numericFromData('imageRequestedWidth');
             if (Number.isFinite(imageRequestedWidth) && imageRequestedWidth > 0) {
@@ -13242,10 +13252,43 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
             const parsedExplicitHeight = hasExplicitHeight ? parseFloat(explicitHeight) : undefined;
             const explicitHeightIsValid = Number.isFinite(parsedExplicitHeight) && parsedExplicitHeight > 0;
 
+            const textWidthMode = typeof nodeData.textWidthMode === 'string' ? nodeData.textWidthMode.trim().toLowerCase() : '';
+            const textHeightMode = typeof nodeData.textHeightMode === 'string' ? nodeData.textHeightMode.trim().toLowerCase() : '';
+            const widthIsFixed = textWidthMode === 'fixed';
+            const heightIsFixed = textHeightMode === 'fixed';
+
+            const calibrationZoomRaw = parseFloat(nodeData.calloutDimensionZoom);
+            const hasCalibrationZoom = Number.isFinite(calibrationZoomRaw) && calibrationZoomRaw > 0;
+            const viewportZoomRaw = this.cy && typeof this.cy.zoom === 'function'
+                ? this.cy.zoom()
+                : 1;
+            const viewportZoom = Number.isFinite(viewportZoomRaw) && viewportZoomRaw > 0 ? viewportZoomRaw : 1;
+            const expectedSource = 'text-callout';
+            const calibrationSource = typeof nodeData.calloutDimensionSource === 'string'
+                ? nodeData.calloutDimensionSource.trim().toLowerCase()
+                : '';
+            const hasCalibrationSource = calibrationSource === expectedSource;
+            const shouldApplyCalibration = hasCalibrationZoom && hasCalibrationSource;
+            const calibrationScale = shouldApplyCalibration ? (viewportZoom / calibrationZoomRaw) : 1;
+
+            let normalizedExplicitWidth = parsedExplicitWidth;
+            let normalizedExplicitHeight = parsedExplicitHeight;
+            if (shouldApplyCalibration) {
+                if (explicitWidthIsValid && !widthIsFixed) {
+                    normalizedExplicitWidth = parsedExplicitWidth * calibrationScale;
+                }
+                if (explicitHeightIsValid && !heightIsFixed) {
+                    normalizedExplicitHeight = parsedExplicitHeight * calibrationScale;
+                }
+            }
+
+            const normalizedWidthIsValid = Number.isFinite(normalizedExplicitWidth) && normalizedExplicitWidth > 0;
+            const normalizedHeightIsValid = Number.isFinite(normalizedExplicitHeight) && normalizedExplicitHeight > 0;
+
             const fallbackWidth = layoutSizing?.nodeSize || 100;
-            const widthForMeasurement = explicitWidthIsValid ? parsedExplicitWidth : fallbackWidth;
+            const widthForMeasurement = normalizedWidthIsValid ? normalizedExplicitWidth : fallbackWidth;
             const textSource = trimmedInfo || nodeData.label || '';
-            const requiresMeasurement = !preserveExplicitDimensions || !explicitWidthIsValid || !explicitHeightIsValid;
+            const requiresMeasurement = !preserveExplicitDimensions || !normalizedWidthIsValid || !normalizedHeightIsValid;
             const measuredDims = requiresMeasurement
                 ? this.calculateTextDimensions(
                     textSource,
@@ -13254,13 +13297,13 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
                     widthForMeasurement
                 )
                 : null;
-            const shouldPreserveWidth = preserveExplicitDimensions && explicitWidthIsValid;
-            const shouldPreserveHeight = preserveExplicitDimensions && explicitHeightIsValid;
+            const shouldPreserveWidth = preserveExplicitDimensions && normalizedWidthIsValid;
+            const shouldPreserveHeight = preserveExplicitDimensions && normalizedHeightIsValid;
             const finalWidth = shouldPreserveWidth
-                ? parsedExplicitWidth
-                : (explicitWidthIsValid ? parsedExplicitWidth : measuredDims.width);
+                ? normalizedExplicitWidth
+                : (normalizedWidthIsValid ? normalizedExplicitWidth : measuredDims.width);
             const finalHeight = shouldPreserveHeight
-                ? parsedExplicitHeight
+                ? normalizedExplicitHeight
                 : measuredDims.height;
             nodeData.width = finalWidth;
             nodeData.height = finalHeight;
@@ -13268,8 +13311,16 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
             if (nodeData.preserveAspectRatio === undefined) {
                 nodeData.preserveAspectRatio = true;
             }
-            if (!nodeData.aspectRatio && finalHeight > 0) {
+            if (shouldApplyCalibration
+                && (!widthIsFixed || !heightIsFixed)
+                && Number.isFinite(finalWidth) && finalWidth > 0
+                && Number.isFinite(finalHeight) && finalHeight > 0) {
                 nodeData.aspectRatio = finalWidth / finalHeight;
+            } else if (!nodeData.aspectRatio && finalHeight > 0) {
+                nodeData.aspectRatio = finalWidth / finalHeight;
+            }
+            if (shouldApplyCalibration) {
+                nodeData.calloutDimensionZoom = viewportZoom;
             }
             nodeData.borderColor = nodeData.borderColor || typeSettings.borderColor || '#000000';
             nodeData.borderWidth = nodeData.borderWidth || typeSettings.borderWidth || 1;
