@@ -13288,7 +13288,9 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
             const fallbackWidth = layoutSizing?.nodeSize || 100;
             const widthForMeasurement = normalizedWidthIsValid ? normalizedExplicitWidth : fallbackWidth;
             const textSource = trimmedInfo || nodeData.label || '';
-            const requiresMeasurement = !preserveExplicitDimensions || !normalizedWidthIsValid || !normalizedHeightIsValid;
+            const hasValidExplicitDimensions = normalizedWidthIsValid && normalizedHeightIsValid;
+            const shouldPreserveDimensions = preserveExplicitDimensions && hasValidExplicitDimensions;
+            const requiresMeasurement = !hasValidExplicitDimensions;
             const measuredDims = requiresMeasurement
                 ? this.calculateTextDimensions(
                     textSource,
@@ -13297,12 +13299,10 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
                     widthForMeasurement
                 )
                 : null;
-            const shouldPreserveWidth = preserveExplicitDimensions && normalizedWidthIsValid;
-            const shouldPreserveHeight = preserveExplicitDimensions && normalizedHeightIsValid;
-            const finalWidth = shouldPreserveWidth
+            const finalWidth = shouldPreserveDimensions || normalizedWidthIsValid
                 ? normalizedExplicitWidth
-                : (normalizedWidthIsValid ? normalizedExplicitWidth : measuredDims.width);
-            const finalHeight = shouldPreserveHeight
+                : measuredDims.width;
+            const finalHeight = shouldPreserveDimensions || normalizedHeightIsValid
                 ? normalizedExplicitHeight
                 : measuredDims.height;
             nodeData.width = finalWidth;
@@ -13803,7 +13803,33 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
     normalizeAllNodeData: function() {
         if (!this.cy) return;
 
-        this.normalizeNodeCollection(this.cy.nodes());
+        const nodes = this.cy.nodes();
+
+        if (nodes && typeof nodes.forEach === 'function') {
+            const isValidDimension = (value) => {
+                if (value === null || value === undefined || value === '') {
+                    return false;
+                }
+                const parsed = typeof value === 'number' ? value : parseFloat(value);
+                return Number.isFinite(parsed) && parsed > 0;
+            };
+
+            nodes.forEach(node => {
+                if (!node || typeof node.data !== 'function') {
+                    return;
+                }
+
+                const width = node.data('width');
+                const height = node.data('height');
+                const hasValidPersistedDimensions = isValidDimension(width) && isValidDimension(height);
+                this.normalizeNodeData(
+                    { data: node.data() },
+                    { preserveExplicitDimensions: hasValidPersistedDimensions }
+                );
+            });
+        }
+
+        this.normalizeNodeCollection(nodes);
 
     },
 
