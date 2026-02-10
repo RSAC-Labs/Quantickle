@@ -4693,7 +4693,7 @@ class FileManagerModule {
             try {
                 const pngOptions = normalizedCaptureMode === 'fullGraph'
                     ? { full: true, scale: attemptedScale, bg: backgroundColor }
-                    : { scale: attemptedScale, bg: backgroundColor };
+                    : { full: true, scale: attemptedScale, bg: backgroundColor };
                 const candidate = this.cy.png(pngOptions);
 
                 if (!candidate || (typeof candidate === 'string' && !candidate.trim())) {
@@ -4729,6 +4729,15 @@ class FileManagerModule {
             );
         }
 
+        if (normalizedCaptureMode === 'viewport') {
+            pngDataUrl = await this.cropSnapshotToViewport(pngDataUrl, {
+                viewportWidth: boundsWidth,
+                viewportHeight: boundsHeight,
+                renderedBounds,
+                exportScale: scaleUsed
+            }) || pngDataUrl;
+        }
+
         const composedDataUrl = await this.composeSnapshotWithContainerBackground(
             pngDataUrl,
             container,
@@ -4752,6 +4761,56 @@ class FileManagerModule {
             captureMode: normalizedCaptureMode,
             isBlankSnapshot: false
         };
+    }
+
+
+    async cropSnapshotToViewport(snapshotDataUrl, options = {}) {
+        if (!snapshotDataUrl || typeof document === 'undefined') {
+            return snapshotDataUrl;
+        }
+
+        const viewportWidth = Number.isFinite(options.viewportWidth) ? options.viewportWidth : 0;
+        const viewportHeight = Number.isFinite(options.viewportHeight) ? options.viewportHeight : 0;
+        if (!(viewportWidth > 0) || !(viewportHeight > 0)) {
+            return snapshotDataUrl;
+        }
+
+        const renderedBounds = options.renderedBounds || null;
+        const boundsX = renderedBounds && Number.isFinite(renderedBounds.x1) ? renderedBounds.x1 : 0;
+        const boundsY = renderedBounds && Number.isFinite(renderedBounds.y1) ? renderedBounds.y1 : 0;
+        const exportScale = Number.isFinite(options.exportScale) && options.exportScale > 0 ? options.exportScale : 1;
+
+        const baseImage = await this.loadImageForExport(snapshotDataUrl);
+        if (!baseImage) {
+            return snapshotDataUrl;
+        }
+
+        const targetWidth = Math.max(1, Math.round(viewportWidth * exportScale));
+        const targetHeight = Math.max(1, Math.round(viewportHeight * exportScale));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+
+        const context = canvas.getContext('2d');
+        if (!context) {
+            return snapshotDataUrl;
+        }
+
+        const drawOffsetX = Math.round(boundsX * exportScale);
+        const drawOffsetY = Math.round(boundsY * exportScale);
+
+        context.clearRect(0, 0, targetWidth, targetHeight);
+        context.drawImage(baseImage, drawOffsetX, drawOffsetY);
+
+        try {
+            return canvas.toDataURL('image/png');
+        } catch (error) {
+            if (this.isCanvasExportSecurityError(error)) {
+                return snapshotDataUrl;
+            }
+            throw error;
+        }
     }
 
     async composeSnapshotWithContainerBackground(snapshotDataUrl, container, options = {}) {
