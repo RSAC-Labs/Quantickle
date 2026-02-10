@@ -4776,7 +4776,7 @@ class FileManagerModule {
         if (backgroundImageUrls.length) {
             for (let index = backgroundImageUrls.length - 1; index >= 0; index -= 1) {
                 const backgroundImage = await this.loadImageForExport(backgroundImageUrls[index]);
-                if (backgroundImage) {
+                if (backgroundImage && this.isImageSafeForCanvasExport(backgroundImage)) {
                     this.drawContainerBackgroundImageForExport(context, backgroundImage, {
                         canvasWidth: canvas.width,
                         canvasHeight: canvas.height,
@@ -4784,6 +4784,13 @@ class FileManagerModule {
                         backgroundPosition: computed.backgroundPosition,
                         backgroundRepeat: computed.backgroundRepeat
                     });
+                } else if (backgroundImage) {
+                    if (this.notifications && typeof this.notifications.show === 'function') {
+                        this.notifications.show(
+                            'One background image could not be included in export because the browser blocked canvas readback for that asset.',
+                            'warning'
+                        );
+                    }
                 }
             }
         }
@@ -4818,6 +4825,32 @@ class FileManagerModule {
 
         const message = typeof error.message === 'string' ? error.message : '';
         return error.name === 'SecurityError' || /tainted canvases may not be exported/i.test(message);
+    }
+
+    isImageSafeForCanvasExport(image) {
+        if (!image || typeof document === 'undefined') {
+            return false;
+        }
+
+        const width = Math.max(1, image.naturalWidth || image.width || 1);
+        const height = Math.max(1, image.naturalHeight || image.height || 1);
+
+        const probeCanvas = document.createElement('canvas');
+        probeCanvas.width = width;
+        probeCanvas.height = height;
+
+        const probeContext = probeCanvas.getContext('2d');
+        if (!probeContext) {
+            return false;
+        }
+
+        try {
+            probeContext.drawImage(image, 0, 0, width, height);
+            probeCanvas.toDataURL('image/png');
+            return true;
+        } catch (error) {
+            return false;
+        }
     }
 
     resolveExportBackgroundHost(container) {
@@ -4902,7 +4935,7 @@ class FileManagerModule {
 
         for (const callout of callouts) {
             const calloutImage = await this.renderElementToImageForExport(callout);
-            if (!calloutImage) {
+            if (!calloutImage || !this.isImageSafeForCanvasExport(calloutImage)) {
                 continue;
             }
 
