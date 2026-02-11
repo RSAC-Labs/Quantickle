@@ -10,6 +10,8 @@
     const DIMENSION_SOURCE = 'text-callout';
     const PREVIOUS_TYPE_KEY = '_calloutPrevType';
     const PREVIOUS_STYLE_KEY = '_calloutPrevStyle';
+    const CALLOUT_SCALE_MIN = 0.1;
+    const CALLOUT_SCALE_MAX = 6;
 
     const DEFAULT_TEXT_TOKENS = {
         fontFamily: 'Arial, sans-serif',
@@ -757,7 +759,7 @@
 
         const rawCalloutScale = parseFloat(node.data('calloutScale'));
         const calloutScale = Number.isFinite(rawCalloutScale) && rawCalloutScale > 0
-            ? Math.max(0.5, Math.min(2, rawCalloutScale))
+            ? Math.max(CALLOUT_SCALE_MIN, Math.min(CALLOUT_SCALE_MAX, rawCalloutScale))
             : 1;
 
         const rawScaleFactor = zoom * nodeScale * calloutScale;
