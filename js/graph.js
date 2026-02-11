@@ -9174,6 +9174,11 @@ window.GraphRenderer = {
             payload.preserveAspectRatio = node.data('preserveAspectRatio');
         }
 
+        const calloutScale = numericFromData('calloutScale');
+        if (Number.isFinite(calloutScale) && calloutScale > 0) {
+            payload.calloutScale = Math.max(0.1, Math.min(6, calloutScale));
+        }
+
         const calloutDimensionZoom = numericFromData('calloutDimensionZoom');
         if (Number.isFinite(calloutDimensionZoom) && calloutDimensionZoom > 0) {
             payload.calloutDimensionZoom = calloutDimensionZoom;
@@ -13256,6 +13261,13 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
             const textHeightMode = typeof nodeData.textHeightMode === 'string' ? nodeData.textHeightMode.trim().toLowerCase() : '';
             const widthIsFixed = textWidthMode === 'fixed';
             const heightIsFixed = textHeightMode === 'fixed';
+
+            const rawCalloutScale = parseFloat(nodeData.calloutScale);
+            if (Number.isFinite(rawCalloutScale) && rawCalloutScale > 0) {
+                nodeData.calloutScale = Math.max(0.1, Math.min(6, rawCalloutScale));
+            } else {
+                nodeData.calloutScale = 1;
+            }
 
             const calibrationZoomRaw = parseFloat(nodeData.calloutDimensionZoom);
             const hasCalibrationZoom = Number.isFinite(calibrationZoomRaw) && calibrationZoomRaw > 0;

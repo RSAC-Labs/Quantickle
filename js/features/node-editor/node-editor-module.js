@@ -82,6 +82,16 @@ if (typeof window !== 'undefined' && !window.normalizeColorInput) {
     window.normalizeColorInput = normalizeColorInput;
 }
 
+const CALLOUT_SCALE_MIN = 0.1;
+const CALLOUT_SCALE_MAX = 6;
+
+function clampCalloutScale(value, fallback = 1) {
+    const numeric = Number(value);
+    const resolved = Number.isFinite(numeric) ? numeric : fallback;
+    if (!Number.isFinite(resolved)) return fallback;
+    return Math.max(CALLOUT_SCALE_MIN, Math.min(CALLOUT_SCALE_MAX, resolved));
+}
+
 function resolveBackgroundFitValue(value, fallback = 'contain') {
     if (typeof value === 'string') {
         const trimmed = value.trim();
@@ -443,7 +453,7 @@ class NodeEditorModule {
                         ? Number(node?.data('calloutScale'))
                         : defaultScale);
                 const normalizedScale = Number.isFinite(scaleValue)
-                    ? Math.max(0.5, Math.min(2, scaleValue))
+                    ? clampCalloutScale(scaleValue)
                     : defaultScale;
                 scaleField.value = normalizedScale.toFixed(2);
                 if (scaleValueField) {
@@ -559,8 +569,8 @@ class NodeEditorModule {
         const fontColorInput = fontColorField ? fontColorField.value : '';
         const calloutScaleInput = scaleField ? Number(scaleField.value) : NaN;
         const appliedCalloutScale = Number.isFinite(calloutScaleInput)
-            ? Math.max(0.5, Math.min(2, calloutScaleInput))
-            : (Number.isFinite(Number(existingData.calloutScale)) ? Number(existingData.calloutScale) : 1);
+            ? clampCalloutScale(calloutScaleInput)
+            : clampCalloutScale(Number(existingData.calloutScale), 1);
         const appliedBackgroundColor = normalizeColorInput(backgroundColorInput, resolvedBackgroundColor);
         const appliedFontColor = normalizeColorInput(fontColorInput, resolvedFontColor);
 
@@ -1123,7 +1133,7 @@ class NodeEditorModule {
                     </div>
                     <div class="attribute-group">
                         <label>Callout Scale:</label>
-                        <input type="range" id="node-scale" min="0.5" max="2" step="0.05" value="1">
+                        <input type="range" id="node-scale" min="0.1" max="6" step="0.05" value="1">
                         <span id="scale-value">100%</span>
                     </div>
                     <div class="attribute-group">
@@ -1264,7 +1274,7 @@ class NodeEditorModule {
                     </div>
                     <div class="attribute-group">
                         <label>Callout Scale:</label>
-                        <input type="range" id="bulk-node-scale" min="0.5" max="2" step="0.05" value="1">
+                        <input type="range" id="bulk-node-scale" min="0.1" max="6" step="0.05" value="1">
                         <span id="bulk-scale-value">100%</span>
                     </div>
                     <div class="attribute-group">
@@ -1326,7 +1336,7 @@ class NodeEditorModule {
                 </div>
                 <div class="attribute-group">
                     <label>Scale:</label>
-                    <input type="range" id="text-node-scale" data-modal-input="true" min="0.5" max="2" step="0.05" value="1">
+                    <input type="range" id="text-node-scale" data-modal-input="true" min="0.1" max="6" step="0.05" value="1">
                     <span id="text-node-scale-value">100%</span>
                 </div>
                 <div class="attribute-group">
@@ -1858,7 +1868,7 @@ class NodeEditorModule {
             set('node-font-color', data.fontColor || '#333333');
             const calloutScale = Number(data.calloutScale);
             const normalizedScale = Number.isFinite(calloutScale)
-                ? Math.max(0.5, Math.min(2, calloutScale))
+                ? clampCalloutScale(calloutScale)
                 : 1;
             set('node-scale', normalizedScale.toFixed(2));
             const scaleDisplay = document.getElementById(`${prefix}scale-value`);
@@ -1880,7 +1890,7 @@ class NodeEditorModule {
         if (calloutScaleDisplay) {
             const currentScale = Number(data.calloutScale);
             const normalizedScale = Number.isFinite(currentScale)
-                ? Math.max(0.5, Math.min(2, currentScale))
+                ? clampCalloutScale(currentScale)
                 : 1;
             calloutScaleDisplay.textContent = `${Math.round(normalizedScale * 100)}%`;
         }
@@ -3518,8 +3528,8 @@ class NodeEditorModule {
                 || currentData.fontColor
                 || '#333333';
             baseUpdates.calloutScale = (!Number.isNaN(baseUpdates.calloutScale) && baseUpdates.calloutScale !== undefined)
-                ? Math.max(0.5, Math.min(2, baseUpdates.calloutScale))
-                : ((Number.isFinite(Number(currentData.calloutScale)) ? Number(currentData.calloutScale) : 1));
+                ? clampCalloutScale(baseUpdates.calloutScale)
+                : clampCalloutScale(Number(currentData.calloutScale), 1);
             baseUpdates.bold = baseUpdates.bold !== undefined
                 ? baseUpdates.bold
                 : (currentData.bold || false);
