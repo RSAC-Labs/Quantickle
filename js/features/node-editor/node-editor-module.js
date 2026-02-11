@@ -573,7 +573,7 @@ class NodeEditorModule {
             color: resolvedColor,
             shape: resolvedShape,
             fontFamily: resolvedFontFamily,
-            fontSize: resolvedFontSize,
+            fontSize: appliedFontSize,
             fontColor: appliedFontColor,
             bold: resolvedBold,
             italic: resolvedItalic,
