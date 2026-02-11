@@ -403,12 +403,17 @@ class NodeEditorModule {
             if (bodyField) bodyField.value = conversionBody !== undefined
                 ? conversionBody
                 : resolvedDefaultBody;
+            const existingWidthMode = isExistingTextNode ? node?.data('textWidthMode') : undefined;
+            const existingHeightMode = isExistingTextNode ? node?.data('textHeightMode') : undefined;
+            const widthIsFixed = existingWidthMode === 'fixed';
+            const heightIsFixed = existingHeightMode === 'fixed';
+
             if (widthField) {
                 if (conversionWidth !== undefined) {
                     widthField.value = conversionWidth;
-                } else if (isExistingTextNode && node && node.data('width') !== undefined) {
+                } else if (isExistingTextNode && widthIsFixed && node && node.data('width') !== undefined) {
                     widthField.value = node.data('width');
-                } else if (textDefaults.width !== undefined) {
+                } else if (!isExistingTextNode && textDefaults.width !== undefined) {
                     widthField.value = textDefaults.width;
                 } else {
                     widthField.value = '';
@@ -417,9 +422,9 @@ class NodeEditorModule {
             if (heightField) {
                 if (conversionHeight !== undefined) {
                     heightField.value = conversionHeight;
-                } else if (isExistingTextNode && node && node.data('height') !== undefined) {
+                } else if (isExistingTextNode && heightIsFixed && node && node.data('height') !== undefined) {
                     heightField.value = node.data('height');
-                } else if (textDefaults.height !== undefined) {
+                } else if (!isExistingTextNode && textDefaults.height !== undefined) {
                     heightField.value = textDefaults.height;
                 } else {
                     heightField.value = '';

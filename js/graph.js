@@ -13271,17 +13271,15 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
 
             const calibrationZoomRaw = parseFloat(nodeData.calloutDimensionZoom);
             const hasCalibrationZoom = Number.isFinite(calibrationZoomRaw) && calibrationZoomRaw > 0;
-            const viewportZoomRaw = this.cy && typeof this.cy.zoom === 'function'
-                ? this.cy.zoom()
-                : 1;
-            const viewportZoom = Number.isFinite(viewportZoomRaw) && viewportZoomRaw > 0 ? viewportZoomRaw : 1;
             const expectedSource = 'text-callout';
             const calibrationSource = typeof nodeData.calloutDimensionSource === 'string'
                 ? nodeData.calloutDimensionSource.trim().toLowerCase()
                 : '';
             const hasCalibrationSource = calibrationSource === expectedSource;
             const shouldApplyCalibration = hasCalibrationZoom && hasCalibrationSource;
-            const calibrationScale = shouldApplyCalibration ? (viewportZoom / calibrationZoomRaw) : 1;
+            // Legacy callout dimensions were persisted in rendered pixels at save-time zoom.
+            // Convert back to graph-space units so reloaded callouts are independent of save zoom.
+            const calibrationScale = shouldApplyCalibration ? (1 / calibrationZoomRaw) : 1;
 
             let normalizedExplicitWidth = parsedExplicitWidth;
             let normalizedExplicitHeight = parsedExplicitHeight;
@@ -13332,7 +13330,9 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
                 nodeData.aspectRatio = finalWidth / finalHeight;
             }
             if (shouldApplyCalibration) {
-                nodeData.calloutDimensionZoom = viewportZoom;
+                // Mark dimensions as normalized graph-space values so they are not recalibrated again.
+                nodeData.calloutDimensionZoom = 1;
+                nodeData.calloutDimensionSource = 'text-callout-normalized';
             }
             nodeData.borderColor = nodeData.borderColor || typeSettings.borderColor || '#000000';
             nodeData.borderWidth = nodeData.borderWidth || typeSettings.borderWidth || 1;
