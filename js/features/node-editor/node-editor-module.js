@@ -330,6 +330,8 @@ class NodeEditorModule {
             const ratioField = document.getElementById('text-node-preserve-ratio');
             const backgroundColorField = document.getElementById('text-node-background-color');
             const fontColorField = document.getElementById('text-node-font-color');
+            const fontSizeField = document.getElementById('text-node-font-size');
+            const fontSizeValueField = document.getElementById('text-node-font-size-value');
             const backgroundImageField = document.getElementById('text-node-background-image');
             const isExistingTextNode = node?.data('type') === 'text';
             const textDefaults = this.getTextNodeDefaults();
@@ -367,6 +369,9 @@ class NodeEditorModule {
                 : undefined;
             const conversionFontColor = conversion && conversion.fontColor !== undefined
                 ? conversion.fontColor
+                : undefined;
+            const conversionFontSize = conversion && conversion.fontSize !== undefined
+                ? conversion.fontSize
                 : undefined;
             const conversionTitle = conversion && conversion.title !== undefined
                 ? conversion.title
@@ -428,6 +433,23 @@ class NodeEditorModule {
                         : fallbackFontColor);
                 fontColorField.value = normalizeColorInput(fontColorValue, fallbackFontColor);
             }
+            if (fontSizeField) {
+                const fallbackFontSize = Number.isFinite(Number(textDefaults.fontSize))
+                    ? Number(textDefaults.fontSize)
+                    : 14;
+                const fontSizeValue = conversionFontSize !== undefined
+                    ? Number(conversionFontSize)
+                    : (isExistingTextNode
+                        ? Number(node?.data('fontSize'))
+                        : fallbackFontSize);
+                const normalizedFontSize = Number.isFinite(fontSizeValue)
+                    ? Math.max(8, Math.min(72, Math.round(fontSizeValue)))
+                    : fallbackFontSize;
+                fontSizeField.value = normalizedFontSize;
+                if (fontSizeValueField) {
+                    fontSizeValueField.textContent = `${normalizedFontSize}px`;
+                }
+            }
             if (ratioField) {
                 const defaultRatio = textDefaults.preserveAspectRatio !== undefined
                     ? textDefaults.preserveAspectRatio !== false
@@ -473,6 +495,7 @@ class NodeEditorModule {
         const ratioField = document.getElementById('text-node-preserve-ratio');
         const backgroundColorField = document.getElementById('text-node-background-color');
         const fontColorField = document.getElementById('text-node-font-color');
+        const fontSizeField = document.getElementById('text-node-font-size');
         const backgroundImageField = document.getElementById('text-node-background-image');
         const rawTitle = titleField ? titleField.value.trim() : '';
         const rawBody = bodyField ? bodyField.value : '';
@@ -534,6 +557,10 @@ class NodeEditorModule {
 
         const backgroundColorInput = backgroundColorField ? backgroundColorField.value : '';
         const fontColorInput = fontColorField ? fontColorField.value : '';
+        const fontSizeInput = fontSizeField ? Number(fontSizeField.value) : NaN;
+        const appliedFontSize = Number.isFinite(fontSizeInput)
+            ? Math.max(8, Math.min(72, Math.round(fontSizeInput)))
+            : resolvedFontSize;
         const appliedBackgroundColor = normalizeColorInput(backgroundColorInput, resolvedBackgroundColor);
         const appliedFontColor = normalizeColorInput(fontColorInput, resolvedFontColor);
 
@@ -546,7 +573,7 @@ class NodeEditorModule {
             color: resolvedColor,
             shape: resolvedShape,
             fontFamily: resolvedFontFamily,
-            fontSize: resolvedFontSize,
+            fontSize: appliedFontSize,
             fontColor: appliedFontColor,
             bold: resolvedBold,
             italic: resolvedItalic,
@@ -1287,6 +1314,11 @@ class NodeEditorModule {
                     <input type="color" id="text-node-font-color" data-modal-input="true" value="#333333">
                 </div>
                 <div class="attribute-group">
+                    <label>Font Size:</label>
+                    <input type="range" id="text-node-font-size" data-modal-input="true" min="8" max="72" step="1" value="14">
+                    <span id="text-node-font-size-value">14px</span>
+                </div>
+                <div class="attribute-group">
                     <label>Width:</label>
                     <input type="number" id="text-node-width" data-modal-input="true" min="20" placeholder="auto">
                 </div>
@@ -1643,6 +1675,13 @@ class NodeEditorModule {
         setupFor('bulk-', this.bulkModal);
         if (this.textModal) {
             this.textModal.addEventListener('click', (e) => e.stopPropagation());
+            const textFontSizeSlider = document.getElementById('text-node-font-size');
+            const textFontSizeDisplay = document.getElementById('text-node-font-size-value');
+            if (textFontSizeSlider && textFontSizeDisplay) {
+                textFontSizeSlider.addEventListener('input', (e) => {
+                    textFontSizeDisplay.textContent = `${e.target.value}px`;
+                });
+            }
         }
 
         // Keyboard handling for inputs
