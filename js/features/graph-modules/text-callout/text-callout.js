@@ -755,7 +755,12 @@
             nodeScale = computeNodeScale();
         }
 
-        const rawScaleFactor = zoom * nodeScale;
+        const rawCalloutScale = parseFloat(node.data('calloutScale'));
+        const calloutScale = Number.isFinite(rawCalloutScale) && rawCalloutScale > 0
+            ? Math.max(0.5, Math.min(2, rawCalloutScale))
+            : 1;
+
+        const rawScaleFactor = zoom * nodeScale * calloutScale;
         const scaleFactor = Number.isFinite(rawScaleFactor)
             ? Math.max(rawScaleFactor, 0)
             : 1;

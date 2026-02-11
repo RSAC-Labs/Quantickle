@@ -330,6 +330,8 @@ class NodeEditorModule {
             const ratioField = document.getElementById('text-node-preserve-ratio');
             const backgroundColorField = document.getElementById('text-node-background-color');
             const fontColorField = document.getElementById('text-node-font-color');
+            const scaleField = document.getElementById('text-node-scale');
+            const scaleValueField = document.getElementById('text-node-scale-value');
             const backgroundImageField = document.getElementById('text-node-background-image');
             const isExistingTextNode = node?.data('type') === 'text';
             const textDefaults = this.getTextNodeDefaults();
@@ -367,6 +369,9 @@ class NodeEditorModule {
                 : undefined;
             const conversionFontColor = conversion && conversion.fontColor !== undefined
                 ? conversion.fontColor
+                : undefined;
+            const conversionCalloutScale = conversion && conversion.calloutScale !== undefined
+                ? conversion.calloutScale
                 : undefined;
             const conversionTitle = conversion && conversion.title !== undefined
                 ? conversion.title
@@ -428,6 +433,23 @@ class NodeEditorModule {
                         : fallbackFontColor);
                 fontColorField.value = normalizeColorInput(fontColorValue, fallbackFontColor);
             }
+            if (scaleField) {
+                const defaultScale = Number.isFinite(Number(textDefaults.calloutScale))
+                    ? Number(textDefaults.calloutScale)
+                    : 1;
+                const scaleValue = conversionCalloutScale !== undefined
+                    ? Number(conversionCalloutScale)
+                    : (isExistingTextNode
+                        ? Number(node?.data('calloutScale'))
+                        : defaultScale);
+                const normalizedScale = Number.isFinite(scaleValue)
+                    ? Math.max(0.5, Math.min(2, scaleValue))
+                    : defaultScale;
+                scaleField.value = normalizedScale.toFixed(2);
+                if (scaleValueField) {
+                    scaleValueField.textContent = `${Math.round(normalizedScale * 100)}%`;
+                }
+            }
             if (ratioField) {
                 const defaultRatio = textDefaults.preserveAspectRatio !== undefined
                     ? textDefaults.preserveAspectRatio !== false
@@ -473,6 +495,7 @@ class NodeEditorModule {
         const ratioField = document.getElementById('text-node-preserve-ratio');
         const backgroundColorField = document.getElementById('text-node-background-color');
         const fontColorField = document.getElementById('text-node-font-color');
+        const scaleField = document.getElementById('text-node-scale');
         const backgroundImageField = document.getElementById('text-node-background-image');
         const rawTitle = titleField ? titleField.value.trim() : '';
         const rawBody = bodyField ? bodyField.value : '';
@@ -534,6 +557,10 @@ class NodeEditorModule {
 
         const backgroundColorInput = backgroundColorField ? backgroundColorField.value : '';
         const fontColorInput = fontColorField ? fontColorField.value : '';
+        const calloutScaleInput = scaleField ? Number(scaleField.value) : NaN;
+        const appliedCalloutScale = Number.isFinite(calloutScaleInput)
+            ? Math.max(0.5, Math.min(2, calloutScaleInput))
+            : (Number.isFinite(Number(existingData.calloutScale)) ? Number(existingData.calloutScale) : 1);
         const appliedBackgroundColor = normalizeColorInput(backgroundColorInput, resolvedBackgroundColor);
         const appliedFontColor = normalizeColorInput(fontColorInput, resolvedFontColor);
 
@@ -553,7 +580,8 @@ class NodeEditorModule {
             borderColor: resolvedBorderColor,
             borderWidth: resolvedBorderWidth,
             opacity: resolvedOpacity,
-            backgroundColor: appliedBackgroundColor
+            backgroundColor: appliedBackgroundColor,
+            calloutScale: appliedCalloutScale
         };
 
         const calloutUtils = window.QuantickleUtils || {};
@@ -1094,6 +1122,11 @@ class NodeEditorModule {
                         <input type="color" id="node-font-color">
                     </div>
                     <div class="attribute-group">
+                        <label>Callout Scale:</label>
+                        <input type="range" id="node-scale" min="0.5" max="2" step="0.05" value="1">
+                        <span id="scale-value">100%</span>
+                    </div>
+                    <div class="attribute-group">
                         <label>Style:</label>
                         <label><input type="checkbox" id="node-font-bold"> Bold</label>
                         <label><input type="checkbox" id="node-font-italic"> Italic</label>
@@ -1230,6 +1263,11 @@ class NodeEditorModule {
                         <input type="color" id="bulk-node-font-color">
                     </div>
                     <div class="attribute-group">
+                        <label>Callout Scale:</label>
+                        <input type="range" id="bulk-node-scale" min="0.5" max="2" step="0.05" value="1">
+                        <span id="bulk-scale-value">100%</span>
+                    </div>
+                    <div class="attribute-group">
                         <label>Style:</label>
                         <label><input type="checkbox" id="bulk-node-font-bold"> Bold</label>
                         <label><input type="checkbox" id="bulk-node-font-italic"> Italic</label>
@@ -1285,6 +1323,11 @@ class NodeEditorModule {
                 <div class="attribute-group">
                     <label>Text Color:</label>
                     <input type="color" id="text-node-font-color" data-modal-input="true" value="#333333">
+                </div>
+                <div class="attribute-group">
+                    <label>Scale:</label>
+                    <input type="range" id="text-node-scale" data-modal-input="true" min="0.5" max="2" step="0.05" value="1">
+                    <span id="text-node-scale-value">100%</span>
                 </div>
                 <div class="attribute-group">
                     <label>Width:</label>
@@ -1425,6 +1468,19 @@ class NodeEditorModule {
                 });
             }
 
+            const scaleSlider = document.getElementById(`${prefix}node-scale`);
+            const scaleValue = document.getElementById(`${prefix}scale-value`);
+            if (scaleSlider && scaleValue) {
+                scaleSlider.addEventListener('input', (e) => {
+                    const nextScale = Number(e.target.value);
+                    scaleValue.textContent = Number.isFinite(nextScale)
+                        ? `${Math.round(nextScale * 100)}%`
+                        : '100%';
+                    markUserChanged(scaleSlider);
+                    this.saveChanges();
+                });
+            }
+
             const fieldList = prefix ? [
                 'node-color',
                 'node-weight',
@@ -1439,6 +1495,7 @@ class NodeEditorModule {
                 'node-font-family',
                 'node-font-size',
                 'node-font-color',
+                'node-scale',
                 'node-font-bold',
                 'node-font-italic'
             ] : [
@@ -1457,6 +1514,7 @@ class NodeEditorModule {
                 'node-font-family',
                 'node-font-size',
                 'node-font-color',
+                'node-scale',
                 'node-font-bold',
                 'node-font-italic'
             ];
@@ -1643,6 +1701,16 @@ class NodeEditorModule {
         setupFor('bulk-', this.bulkModal);
         if (this.textModal) {
             this.textModal.addEventListener('click', (e) => e.stopPropagation());
+            const textScaleSlider = document.getElementById('text-node-scale');
+            const textScaleDisplay = document.getElementById('text-node-scale-value');
+            if (textScaleSlider && textScaleDisplay) {
+                textScaleSlider.addEventListener('input', (e) => {
+                    const nextScale = Number(e.target.value);
+                    textScaleDisplay.textContent = Number.isFinite(nextScale)
+                        ? `${Math.round(nextScale * 100)}%`
+                        : '100%';
+                });
+            }
         }
 
         // Keyboard handling for inputs
@@ -1788,6 +1856,13 @@ class NodeEditorModule {
             set('node-font-family', data.fontFamily || 'Arial');
             set('node-font-size', data.fontSize || 14);
             set('node-font-color', data.fontColor || '#333333');
+            const calloutScale = Number(data.calloutScale);
+            const normalizedScale = Number.isFinite(calloutScale)
+                ? Math.max(0.5, Math.min(2, calloutScale))
+                : 1;
+            set('node-scale', normalizedScale.toFixed(2));
+            const scaleDisplay = document.getElementById(`${prefix}scale-value`);
+            if (scaleDisplay) scaleDisplay.textContent = `${Math.round(normalizedScale * 100)}%`;
             const boldEl = document.getElementById(`${prefix}node-font-bold`);
             if (boldEl) boldEl.checked = !!data.bold;
             const italicEl = document.getElementById(`${prefix}node-font-italic`);
@@ -1801,6 +1876,14 @@ class NodeEditorModule {
         if (opacityDisplay) opacityDisplay.textContent = (data.opacity || 1).toFixed(1);
         const iconOpacityDisplay = document.getElementById(`${prefix}icon-opacity-value`);
         if (iconOpacityDisplay) iconOpacityDisplay.textContent = (data.iconOpacity != null ? data.iconOpacity : 1).toFixed(1);
+        const calloutScaleDisplay = document.getElementById(`${prefix}scale-value`);
+        if (calloutScaleDisplay) {
+            const currentScale = Number(data.calloutScale);
+            const normalizedScale = Number.isFinite(currentScale)
+                ? Math.max(0.5, Math.min(2, currentScale))
+                : 1;
+            calloutScaleDisplay.textContent = `${Math.round(normalizedScale * 100)}%`;
+        }
 
         // Mark all inputs as modal inputs for keyboard handling
         const modal = this.isBulkEdit ? this.bulkModal : this.modal;
@@ -3340,6 +3423,7 @@ class NodeEditorModule {
             fontFamily: getFieldValue('node-font-family', v => v),
             fontSize: getFieldValue('node-font-size', v => parseInt(v)),
             fontColor: (() => { const val = getColorValue('node-font-color'); return val !== undefined ? val : undefined; })(),
+            calloutScale: getFieldValue('node-scale', v => parseFloat(v)),
             bold: getFieldValue('node-font-bold', v => !!v),
             italic: getFieldValue('node-font-italic', v => !!v),
             width: getFieldValue('node-width', v => parseInt(v)),
@@ -3353,6 +3437,7 @@ class NodeEditorModule {
             delete baseUpdates.fontFamily;
             delete baseUpdates.fontSize;
             delete baseUpdates.fontColor;
+            delete baseUpdates.calloutScale;
             delete baseUpdates.bold;
             delete baseUpdates.italic;
         }
@@ -3432,6 +3517,9 @@ class NodeEditorModule {
             baseUpdates.fontColor = baseUpdates.fontColor
                 || currentData.fontColor
                 || '#333333';
+            baseUpdates.calloutScale = (!Number.isNaN(baseUpdates.calloutScale) && baseUpdates.calloutScale !== undefined)
+                ? Math.max(0.5, Math.min(2, baseUpdates.calloutScale))
+                : ((Number.isFinite(Number(currentData.calloutScale)) ? Number(currentData.calloutScale) : 1));
             baseUpdates.bold = baseUpdates.bold !== undefined
                 ? baseUpdates.bold
                 : (currentData.bold || false);
