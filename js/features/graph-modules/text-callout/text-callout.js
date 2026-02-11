@@ -1052,8 +1052,9 @@
                 && Number.isFinite(dimensionUpdates.height) && dimensionUpdates.height > 0) {
                 dimensionUpdates.aspectRatio = dimensionUpdates.width / dimensionUpdates.height;
             }
-            dimensionUpdates.calloutDimensionZoom = zoom;
-            dimensionUpdates.calloutDimensionSource = DIMENSION_SOURCE;
+            // Persist normalized graph-space dimensions so save/load is independent of viewport zoom.
+            dimensionUpdates.calloutDimensionZoom = DIMENSION_BASELINE_ZOOM;
+            dimensionUpdates.calloutDimensionSource = `${DIMENSION_SOURCE}-normalized`;
             Object.keys(dimensionUpdates).forEach(key => {
                 const nextValue = dimensionUpdates[key];
                 const currentValue = node.data(key);
