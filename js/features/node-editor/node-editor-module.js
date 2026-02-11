@@ -578,6 +578,9 @@ class NodeEditorModule {
             : clampCalloutScale(Number(existingData.calloutScale), 1);
         const appliedBackgroundColor = normalizeColorInput(backgroundColorInput, resolvedBackgroundColor);
         const appliedFontColor = normalizeColorInput(fontColorInput, resolvedFontColor);
+        const appliedFontSize = Number.isFinite(Number(existingData.fontSize))
+            ? Number(existingData.fontSize)
+            : Number(resolvedFontSize);
 
         const baseUpdates = {
             type: 'text',
