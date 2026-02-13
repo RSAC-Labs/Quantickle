@@ -6,8 +6,15 @@
     let calloutLayerOwner = null;
     let fallbackLayer = null;
     let pendingViewportSync = false;
+    const DIMENSION_BASELINE_ZOOM = 1;
+    const DIMENSION_SOURCE = 'text-callout';
+    const FIXED_TEXT_CALLOUT_WIDTH = 260;
     const PREVIOUS_TYPE_KEY = '_calloutPrevType';
     const PREVIOUS_STYLE_KEY = '_calloutPrevStyle';
+    const CALLOUT_SCALE_MIN = 0.1;
+    const CALLOUT_SCALE_MAX = 6;
+    const CALLOUT_FONT_MULTIPLIER = 1;
+    const TARGET_CALL_OUT_CHARS_PER_LINE = 32;
 
     const DEFAULT_TEXT_TOKENS = {
         fontFamily: 'Arial, sans-serif',
@@ -493,6 +500,31 @@
         return Number.isFinite(numeric) ? numeric : fallback;
     }
 
+    function resolveNodeLabelFontSize(node, fallback = 14) {
+        const fromData = parseFloat(node && typeof node.data === 'function' ? node.data('fontSize') : NaN);
+        if (Number.isFinite(fromData) && fromData > 0) {
+            return fromData;
+        }
+
+        let fromStyle = NaN;
+        if (node && typeof node.style === 'function') {
+            fromStyle = parseFloat(node.style('font-size'));
+        }
+        if ((!Number.isFinite(fromStyle) || fromStyle <= 0) && node && typeof node.renderedStyle === 'function') {
+            const rendered = parseFloat(node.renderedStyle('font-size'));
+            const zoom = cy && typeof cy.zoom === 'function' ? cy.zoom() : 1;
+            if (Number.isFinite(rendered) && rendered > 0 && Number.isFinite(zoom) && zoom > 0) {
+                fromStyle = rendered / zoom;
+            }
+        }
+
+        if (Number.isFinite(fromStyle) && fromStyle > 0) {
+            return fromStyle;
+        }
+
+        return parseFontSize(fallback, 14);
+    }
+
     function clampSize(value, limit, fallback) {
         if (!Number.isFinite(value) || value <= 0) {
             value = fallback;
@@ -671,7 +703,6 @@
         ensureSharedTokenVariables(sharedTokens);
 
         const calloutContent = buildCalloutContent(node);
-        const preserveAspectRatio = node.data('preserveAspectRatio') !== false;
 
         if (data.lastContentSignature !== calloutContent.signature) {
             div.innerHTML = calloutContent.html;
@@ -686,79 +717,29 @@
             div.querySelectorAll('*').forEach(el => {
                 delete el.dataset.baseFontSize;
             });
-            if (preserveAspectRatio) {
-                data.baseWidth = undefined;
-                data.baseHeight = undefined;
-            }
             data.needsLayout = true;
             data.layoutRetryCount = 0;
         }
 
         const zoom = cy.zoom();
 
-        const nodeFontSize = parseFontSize(node.data('fontSize'), data.baseFontSize || sharedTokens.fontSize);
+        const nodeFontSize = resolveNodeLabelFontSize(node, data.baseFontSize || sharedTokens.fontSize);
         if (nodeFontSize !== data.baseFontSize) {
             data.baseFontSize = nodeFontSize;
         }
 
-        const baseFontSize = data.baseFontSize || sharedTokens.fontSize;
+        const appliedNodeLabelFontSize = data.baseFontSize || sharedTokens.fontSize;
+        const calloutBaseFontSize = appliedNodeLabelFontSize * CALLOUT_FONT_MULTIPLIER;
 
-        const widthMode = node.data('textWidthMode');
-        const heightMode = node.data('textHeightMode');
-        const userWidth = widthMode === 'fixed' ? parseFloat(node.data('width')) : NaN;
-        const userHeight = heightMode === 'fixed' ? parseFloat(node.data('height')) : NaN;
+        const rawCalloutScale = parseFloat(node.data('calloutScale'));
+        const calloutScale = Number.isFinite(rawCalloutScale) && rawCalloutScale > 0
+            ? Math.max(CALLOUT_SCALE_MIN, Math.min(CALLOUT_SCALE_MAX, rawCalloutScale))
+            : 1;
 
-        const finiteBaseline = value => Number.isFinite(value) && value > 0;
-        let baselineChanged = false;
-
-        if (preserveAspectRatio) {
-            if (Number.isFinite(userWidth) && finiteBaseline(data.baseWidth)) {
-                const widthDelta = Math.abs(userWidth - data.baseWidth);
-                if (widthDelta > 0.5) {
-                    data.baseWidth = userWidth;
-                    baselineChanged = true;
-                }
-            }
-
-            if (Number.isFinite(userHeight) && finiteBaseline(data.baseHeight)) {
-                const heightDelta = Math.abs(userHeight - data.baseHeight);
-                if (heightDelta > 0.5) {
-                    data.baseHeight = userHeight;
-                    baselineChanged = true;
-                }
-            }
-        }
-
-        if (baselineChanged) {
-            delete div.dataset.baseFontSize;
-            div.querySelectorAll('*').forEach(el => {
-                delete el.dataset.baseFontSize;
-            });
-        }
-
-        const computeNodeScale = () => {
-            let widthScale = 1;
-            let heightScale = 1;
-            if (finiteBaseline(data.baseWidth) && Number.isFinite(userWidth)) {
-                widthScale = userWidth / data.baseWidth;
-            }
-            if (finiteBaseline(data.baseHeight) && Number.isFinite(userHeight)) {
-                heightScale = userHeight / data.baseHeight;
-            }
-            return Math.min(widthScale, heightScale);
-        };
-
-        let nodeScale = preserveAspectRatio ? computeNodeScale() : 1;
-        if (baselineChanged) {
-            nodeScale = computeNodeScale();
-        }
-
-        const rawScaleFactor = zoom * nodeScale;
+        const rawScaleFactor = zoom * calloutScale;
         const scaleFactor = Number.isFinite(rawScaleFactor)
             ? Math.max(rawScaleFactor, 0)
             : 1;
-
-        scaleInnerFonts(div, scaleFactor);
 
         // Allow box to grow to fit the content before measuring
         div.style.whiteSpace = 'pre-wrap';
@@ -783,7 +764,7 @@
         div.style.setProperty('--text-callout-padding-block', scaledPaddingBlock + 'px');
         div.style.lineHeight = String(sharedTokens.lineHeight);
 
-        // Use any user-defined dimensions if present
+        // Resolve container dimensions for clamping/positioning
         let containerEl = cy && typeof cy.container === 'function' ? cy.container() : null;
         let wrapperEl = layer && layer.isConnected ? layer : null;
         if (!wrapperEl || wrapperEl === containerEl) {
@@ -833,10 +814,9 @@
         const maxWidth = fallbackWidthLimit > 0 ? fallbackWidthLimit * 0.9 : Infinity;
         const maxHeight = fallbackHeightLimit > 0 ? fallbackHeightLimit * 0.9 : Infinity;
 
-        const approxSize = approximateContentSize(div, baseFontSize, sharedTokens);
+        const approxSize = approximateContentSize(div, calloutBaseFontSize, sharedTokens);
 
         div.style.fontFamily = node.data('fontFamily') || sharedTokens.fontFamily;
-        div.style.fontSize = (data.baseFontSize * scaleFactor) + 'px';
         div.style.fontWeight = node.data('bold') ? 'bold' : 'normal';
         div.style.fontStyle = node.data('italic') ? 'italic' : 'normal';
 
@@ -916,69 +896,28 @@
         }
 
         let measuredWidth, measuredHeight;
-        let rawWidth = NaN;
         let rawHeight = NaN;
-        let shouldEnforceAspectRatio = false;
-        let resolvedAspectRatio = NaN;
+        const targetLineWidth = (calloutBaseFontSize * scaleFactor * 0.55 * TARGET_CALL_OUT_CHARS_PER_LINE) + (scaledPaddingInline * 2);
+        const preferredWidth = Math.max(FIXED_TEXT_CALLOUT_WIDTH * scaleFactor, Math.round(targetLineWidth));
+        measuredWidth = clampSize(preferredWidth, maxWidth, preferredWidth);
+        div.style.width = measuredWidth + 'px';
 
-        if (!isNaN(userWidth)) {
-            // Width is locked by the user
-            measuredWidth = clampSize(userWidth * zoom, maxWidth, approxSize.width);
-            div.style.width = measuredWidth + 'px';
+        const widthScaleFactorRaw = measuredWidth / FIXED_TEXT_CALLOUT_WIDTH;
+        const widthScaleFactor = Number.isFinite(widthScaleFactorRaw) && widthScaleFactorRaw > 0
+            ? widthScaleFactorRaw
+            : scaleFactor;
+        div.style.fontSize = (calloutBaseFontSize * widthScaleFactor) + 'px';
+        scaleInnerFonts(div, widthScaleFactor);
 
-            if (!isNaN(userHeight)) {
-                // Height also locked
-                measuredHeight = clampSize(userHeight * zoom, maxHeight, approxSize.height);
-                div.style.height = measuredHeight + 'px';
-                shouldEnforceAspectRatio = preserveAspectRatio;
-                resolvedAspectRatio = parseFloat(node.data('aspectRatio'));
-                if (!Number.isFinite(resolvedAspectRatio) || resolvedAspectRatio <= 0) {
-                    resolvedAspectRatio = userWidth / userHeight;
-                }
-            } else {
-                // Height should adapt to content within fixed width
-                div.style.height = 'auto';
-                rawHeight = div.offsetHeight || div.scrollHeight || (div.getBoundingClientRect().height || 0);
-                measuredHeight = clampSize(rawHeight, maxHeight, approxSize.height);
-                div.style.height = measuredHeight + 'px';
-            }
-        } else {
-            // No user-defined width/height - auto measure both
-            div.style.width = 'auto';
-            div.style.height = 'auto';
-            rawWidth = div.offsetWidth || div.scrollWidth || (div.getBoundingClientRect().width || 0);
-            rawHeight = div.offsetHeight || div.scrollHeight || (div.getBoundingClientRect().height || 0);
-            measuredWidth = clampSize(rawWidth, maxWidth, approxSize.width);
-            measuredHeight = clampSize(rawHeight, maxHeight, approxSize.height);
-            div.style.width = measuredWidth + 'px';
-            div.style.height = measuredHeight + 'px';
-        }
-
-        if (shouldEnforceAspectRatio && Number.isFinite(resolvedAspectRatio) && resolvedAspectRatio > 0
-            && Number.isFinite(measuredWidth) && measuredWidth > 0
-            && Number.isFinite(measuredHeight) && measuredHeight > 0) {
-            const widthFromHeight = measuredHeight * resolvedAspectRatio;
-            const heightFromWidth = measuredWidth / resolvedAspectRatio;
-            const widthDelta = Math.abs(widthFromHeight - measuredWidth);
-            const heightDelta = Math.abs(heightFromWidth - measuredHeight);
-            if (widthDelta < heightDelta) {
-                measuredWidth = widthFromHeight;
-            } else {
-                measuredHeight = heightFromWidth;
-            }
-            div.style.width = measuredWidth + 'px';
-            div.style.height = measuredHeight + 'px';
-        }
+        div.style.height = 'auto';
+        rawHeight = div.offsetHeight || div.scrollHeight || (div.getBoundingClientRect().height || 0);
+        measuredHeight = clampSize(rawHeight, maxHeight, approxSize.height);
+        div.style.height = measuredHeight + 'px';
 
         let measurementValid = Number.isFinite(measuredWidth) && measuredWidth > 0
             && Number.isFinite(measuredHeight) && measuredHeight > 0;
 
-        if (isNaN(userWidth)) {
-            measurementValid = measurementValid && Number.isFinite(rawWidth) && rawWidth > 0;
-        }
-        if (isNaN(userHeight)) {
-            measurementValid = measurementValid && Number.isFinite(rawHeight) && rawHeight > 0;
-        }
+        measurementValid = measurementValid && Number.isFinite(rawHeight) && rawHeight > 0;
 
         if (!measurementValid) {
             const fallbackMeasuredWidth = measuredWidth;
@@ -1015,19 +954,51 @@
             div.style.maxHeight = '';
         }
 
-        // Update node style dimensions (don't overwrite user data)
+        // Update node style dimensions using graph-space values.
         const width = measuredWidth / zoom;
         const height = contentHeight / zoom;
         node.style({ width, height });
 
-        if (preserveAspectRatio) {
-            if ((data.baseWidth == null || data.baseWidth <= 0) && Number.isFinite(width) && width > 0) {
-                data.baseWidth = width;
-            }
-            if ((data.baseHeight == null || data.baseHeight <= 0) && Number.isFinite(height) && height > 0) {
-                data.baseHeight = height;
-            }
+        // Persist dimensions in a stable baseline space with calibration metadata
+        // so load-time normalization can recover graph-space sizes regardless of save zoom.
+        const dimensionUpdates = {};
+        const baselineWidth = FIXED_TEXT_CALLOUT_WIDTH / DIMENSION_BASELINE_ZOOM;
+        const baselineHeight = contentHeight / DIMENSION_BASELINE_ZOOM;
+
+        if (Number.isFinite(baselineWidth) && baselineWidth > 0) {
+            dimensionUpdates.width = baselineWidth;
         }
+        if (Number.isFinite(baselineHeight) && baselineHeight > 0) {
+            dimensionUpdates.height = baselineHeight;
+        }
+        if (Number.isFinite(dimensionUpdates.width) || Number.isFinite(dimensionUpdates.height)) {
+            if (Number.isFinite(dimensionUpdates.width) && Number.isFinite(dimensionUpdates.height)) {
+                dimensionUpdates.size = Math.max(dimensionUpdates.width, dimensionUpdates.height);
+            }
+            // Persist normalized graph-space dimensions so save/load is independent of viewport zoom.
+            dimensionUpdates.calloutDimensionZoom = DIMENSION_BASELINE_ZOOM;
+            dimensionUpdates.calloutDimensionSource = `${DIMENSION_SOURCE}-normalized`;
+            Object.keys(dimensionUpdates).forEach(key => {
+                const nextValue = dimensionUpdates[key];
+                const currentValue = node.data(key);
+                if (typeof nextValue === 'number' && Number.isFinite(nextValue)) {
+                    const currentNumeric = typeof currentValue === 'number' ? currentValue : parseFloat(currentValue);
+                    if (!Number.isFinite(currentNumeric) || Math.abs(currentNumeric - nextValue) > 0.001) {
+                        node.data(key, nextValue);
+                    }
+                    return;
+                }
+                if (currentValue !== nextValue) {
+                    node.data(key, nextValue);
+                }
+            });
+        }
+
+        ['textWidthMode', 'textHeightMode', 'preserveAspectRatio', 'aspectRatio'].forEach(key => {
+            if (node.data(key) !== undefined) {
+                node.removeData(key);
+            }
+        });
 
         const pos = node.renderedPosition();
         const rect = containerRect || { left: 0, top: 0 };
@@ -1203,7 +1174,7 @@
             node.scratch('_callout', {
                 div,
                 layer,
-                baseFontSize: parseFontSize(node.data('fontSize'), 14),
+                baseFontSize: resolveNodeLabelFontSize(node, 14),
                 lastContentSignature: null,
                 lastPlainText: '',
                 lastContentMode: null,
@@ -1316,7 +1287,7 @@
             const sharedTokens = getSharedTextTokens();
             ensureSharedTokenVariables(sharedTokens);
             const fallbackBorderWidth = toNumber(node.data('borderWidth'));
-            const fallbackFontSize = toNumber(node.data('fontSize'));
+            const fallbackFontSize = resolveNodeLabelFontSize(node, sharedTokens.fontSize);
             const fallbackBorderRadius = toNumber(node.data('borderRadius'));
             const fallbackBorderColor = node.data('borderColor');
             const fallbackFontColor = node.data('fontColor');
@@ -1335,7 +1306,9 @@
                 'border-color': fallbackBorderColor && fallbackBorderColor !== 'rgba(0,0,0,0)'
                     ? fallbackBorderColor
                     : sharedTokens.borderColor,
-                'font-size': Number.isFinite(fallbackFontSize) ? fallbackFontSize : sharedTokens.fontSize,
+                'font-size': Number.isFinite(fallbackFontSize)
+                    ? fallbackFontSize * CALLOUT_FONT_MULTIPLIER
+                    : sharedTokens.fontSize * CALLOUT_FONT_MULTIPLIER,
                 'font-family': node.data('fontFamily') || sharedTokens.fontFamily,
                 'font-weight': node.data('bold') ? 'bold' : 'normal',
                 'font-style': node.data('italic') ? 'italic' : 'normal',

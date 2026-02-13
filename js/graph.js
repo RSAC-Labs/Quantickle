@@ -6304,7 +6304,7 @@ window.GraphRenderer = {
             }
         });
 
-        // Resize container and text nodes with shift-drag on edges
+        // Resize container and image nodes with shift-drag on edges
         this.nodeResizeHoverNode = null;
         this.cy.on('mousedown', (evt) => {
             const shiftKey = Boolean(evt.originalEvent && evt.originalEvent.shiftKey);
@@ -6317,7 +6317,7 @@ window.GraphRenderer = {
             if (evt.target && evt.target.isNode && evt.target.isNode()) {
                 node = evt.target;
             } else if (pos) {
-                node = this.cy.$('node.container, node[type="text"], node[type="image"]').filter(n => {
+                node = this.cy.$('node.container, node[type="image"]').filter(n => {
                     const bb = this.getNodeInteractionBoundingBox(n);
                     if (!bb) {
                         return false;
@@ -6329,16 +6329,15 @@ window.GraphRenderer = {
             if (!node || !pos) return;
 
             const nodeType = typeof node.data === 'function' ? node.data('type') : undefined;
-            const isTextNode = nodeType === 'text';
             const isImageNode = nodeType === 'image';
             const isContainerNode = typeof node.hasClass === 'function' && node.hasClass('container');
-            const requiresModifier = !isTextNode && !isImageNode;
+            const requiresModifier = !isImageNode;
 
             if (!shiftKey && requiresModifier) {
                 return;
             }
 
-            if (!isContainerNode && !isTextNode && !isImageNode) {
+            if (!isContainerNode && !isImageNode) {
                 return;
             }
 
@@ -6359,8 +6358,8 @@ window.GraphRenderer = {
                 startY: evt.originalEvent ? evt.originalEvent.clientY : 0,
                 startWidth: parseFloat(node.data('width')) || bb.w,
                 startHeight: parseFloat(node.data('height')) || bb.h,
-                preserveAspectRatio: isTextNode || isImageNode,
-                nodePreserveAspectRatio: (isTextNode || isImageNode)
+                preserveAspectRatio: isImageNode,
+                nodePreserveAspectRatio: isImageNode
                     ? node.data('preserveAspectRatio') !== false
                     : false,
                 aspectRatio: (() => {
@@ -6373,9 +6372,7 @@ window.GraphRenderer = {
                     }
                     return 1;
                 })(),
-                isTextNode,
                 isImageNode,
-                textHeightLocked: isTextNode && Boolean(evt.originalEvent && evt.originalEvent.altKey),
                 prevBoxSelection,
                 moveHandler: null,
                 upHandler: null
@@ -6399,17 +6396,7 @@ window.GraphRenderer = {
                 state.node.data('width', newWidth);
                 state.node.data('height', newHeight);
                 state.node.data('size', Math.max(newWidth, newHeight));
-                if (state.isTextNode) {
-                    state.node.data('textWidthMode', 'fixed');
-                    if (state.textHeightLocked) {
-                        state.node.data('textHeightMode', 'fixed');
-                    } else {
-                        state.node.removeData('textHeightMode');
-                    }
-                    if (shouldPreserveAspectRatio && newHeight > 0) {
-                        state.node.data('aspectRatio', newWidth / newHeight);
-                    }
-                } else if (state.isImageNode) {
+                if (state.isImageNode) {
                     state.node.data('imageRequestedWidth', newWidth);
                     if (shouldPreserveAspectRatio && newHeight > 0) {
                         state.node.data('aspectRatio', newWidth / newHeight);
@@ -6425,30 +6412,6 @@ window.GraphRenderer = {
                 this.cy.boxSelectionEnabled(state.prevBoxSelection);
                 state.node.grabify();
                 state.node.unlock();
-                if (state.isTextNode && window.TextCallout && typeof window.TextCallout.refresh === 'function') {
-                    window.TextCallout.refresh(state.node);
-                }
-                if (state.isTextNode && !state.textHeightLocked) {
-                    const fontFamily = state.node.data('fontFamily') || 'Arial';
-                    const fontSize = parseFloat(state.node.data('fontSize')) || 14;
-                    const width = parseFloat(state.node.data('width')) || state.startWidth;
-                    const info = typeof state.node.data('info') === 'string' ? state.node.data('info') : '';
-                    const label = typeof state.node.data('label') === 'string' ? state.node.data('label') : '';
-                    const textSource = info.trim() || label || '';
-                    const measured = this.calculateTextDimensions(textSource, fontFamily, fontSize, width);
-                    const currentHeight = parseFloat(state.node.data('height')) || state.startHeight;
-                    const minSize = 20;
-                    if (measured && measured.height && measured.height < currentHeight * 0.9) {
-                        const clampedHeight = Math.max(minSize, measured.height);
-                        state.node.data('height', clampedHeight);
-                        state.node.data('size', Math.max(width, clampedHeight));
-                        state.node.style('height', clampedHeight);
-                        if (state.preserveAspectRatio && state.nodePreserveAspectRatio && clampedHeight > 0) {
-                            state.node.data('aspectRatio', width / clampedHeight);
-                        }
-                        state.node.removeData('textHeightMode');
-                    }
-                }
                 this._persistNodeDimensionData(state.node);
                 this.nodeResizeState = null;
                 this.cy.container().style.cursor = this.editingMode ? 'crosshair' : 'default';
@@ -6473,7 +6436,7 @@ window.GraphRenderer = {
         this.nodeResizeHoverPrevBoxSelection = undefined;
         this.nodeResizeHoverOnEdge = false;
 
-        this.cy.on('mousemove', 'node.container, node[type="text"], node[type="image"]', (evt) => {
+        this.cy.on('mousemove', 'node.container, node[type="image"]', (evt) => {
             const defaultCursor = this.editingMode ? 'crosshair' : 'default';
             if (this.nodeResizeState && this.nodeResizeState.node === evt.target) {
                 this.cy.container().style.cursor = 'nwse-resize';
@@ -6501,7 +6464,7 @@ window.GraphRenderer = {
                     this.cy.boxSelectionEnabled(false);
                 }
                 const nodeType = typeof node.data === 'function' ? node.data('type') : undefined;
-                const requiresModifier = nodeType !== 'text' && nodeType !== 'image';
+                const requiresModifier = nodeType !== 'image';
                 const shiftKeyActive = Boolean(evt.originalEvent && evt.originalEvent.shiftKey);
                 const allowResize = shiftKeyActive || !requiresModifier;
                 this.cy.container().style.cursor = allowResize ? 'nwse-resize' : defaultCursor;
@@ -6514,7 +6477,7 @@ window.GraphRenderer = {
             }
         });
 
-        this.cy.on('mouseout', 'node.container, node[type="text"], node[type="image"]', () => {
+        this.cy.on('mouseout', 'node.container, node[type="image"]', () => {
             this.nodeResizeHoverOnEdge = false;
             this.nodeResizeHoverNode = null;
 
@@ -6537,8 +6500,7 @@ window.GraphRenderer = {
             if (e.key === 'Shift' && !this.nodeResizeState) {
                 const defaultCursor = this.editingMode ? 'crosshair' : 'default';
                 const requiresModifier = this.nodeResizeHoverNode
-                    ? (this.nodeResizeHoverNode.data('type') !== 'text'
-                        && this.nodeResizeHoverNode.data('type') !== 'image')
+                    ? (this.nodeResizeHoverNode.data('type') !== 'image')
                     : true;
                 const showResizeCursor = this.nodeResizeHoverOnEdge && !requiresModifier;
                 this.cy.container().style.cursor = showResizeCursor ? 'nwse-resize' : defaultCursor;
@@ -9155,23 +9117,40 @@ window.GraphRenderer = {
             }
         }
 
-        const aspectRatio = numericFromData('aspectRatio');
-        if (Number.isFinite(aspectRatio) && aspectRatio > 0) {
-            payload.aspectRatio = aspectRatio;
+        if (nodeType !== 'text') {
+            const aspectRatio = numericFromData('aspectRatio');
+            if (Number.isFinite(aspectRatio) && aspectRatio > 0) {
+                payload.aspectRatio = aspectRatio;
+            }
+
+            const textWidthMode = node.data('textWidthMode');
+            if (typeof textWidthMode === 'string' && textWidthMode.trim()) {
+                payload.textWidthMode = textWidthMode;
+            }
+
+            const textHeightMode = node.data('textHeightMode');
+            if (typeof textHeightMode === 'string' && textHeightMode.trim()) {
+                payload.textHeightMode = textHeightMode;
+            }
+
+            if (node.data('preserveAspectRatio') !== undefined) {
+                payload.preserveAspectRatio = node.data('preserveAspectRatio');
+            }
         }
 
-        const textWidthMode = node.data('textWidthMode');
-        if (typeof textWidthMode === 'string' && textWidthMode.trim()) {
-            payload.textWidthMode = textWidthMode;
+        const calloutScale = numericFromData('calloutScale');
+        if (Number.isFinite(calloutScale) && calloutScale > 0) {
+            payload.calloutScale = Math.max(0.1, Math.min(6, calloutScale));
         }
 
-        const textHeightMode = node.data('textHeightMode');
-        if (typeof textHeightMode === 'string' && textHeightMode.trim()) {
-            payload.textHeightMode = textHeightMode;
+        const calloutDimensionZoom = numericFromData('calloutDimensionZoom');
+        if (Number.isFinite(calloutDimensionZoom) && calloutDimensionZoom > 0) {
+            payload.calloutDimensionZoom = calloutDimensionZoom;
         }
 
-        if (node.data('preserveAspectRatio') !== undefined) {
-            payload.preserveAspectRatio = node.data('preserveAspectRatio');
+        const calloutDimensionSource = node.data('calloutDimensionSource');
+        if (typeof calloutDimensionSource === 'string' && calloutDimensionSource.trim()) {
+            payload.calloutDimensionSource = calloutDimensionSource;
         }
 
         if (nodeType === 'image') {
@@ -13242,10 +13221,51 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
             const parsedExplicitHeight = hasExplicitHeight ? parseFloat(explicitHeight) : undefined;
             const explicitHeightIsValid = Number.isFinite(parsedExplicitHeight) && parsedExplicitHeight > 0;
 
-            const fallbackWidth = layoutSizing?.nodeSize || 100;
-            const widthForMeasurement = explicitWidthIsValid ? parsedExplicitWidth : fallbackWidth;
+            const legacyTextSizingKeys = ['textWidthMode', 'textHeightMode', 'preserveAspectRatio', 'aspectRatio'];
+            legacyTextSizingKeys.forEach(key => {
+                if (nodeData[key] !== undefined) {
+                    delete nodeData[key];
+                }
+            });
+
+            const rawCalloutScale = parseFloat(nodeData.calloutScale);
+            if (Number.isFinite(rawCalloutScale) && rawCalloutScale > 0) {
+                nodeData.calloutScale = Math.max(0.1, Math.min(6, rawCalloutScale));
+            } else {
+                nodeData.calloutScale = 1;
+            }
+
+            const calibrationZoomRaw = parseFloat(nodeData.calloutDimensionZoom);
+            const hasCalibrationZoom = Number.isFinite(calibrationZoomRaw) && calibrationZoomRaw > 0;
+            const expectedSource = 'text-callout';
+            const calibrationSource = typeof nodeData.calloutDimensionSource === 'string'
+                ? nodeData.calloutDimensionSource.trim().toLowerCase()
+                : '';
+            const hasCalibrationSource = calibrationSource === expectedSource;
+            const shouldApplyCalibration = hasCalibrationZoom && hasCalibrationSource;
+            // Legacy callout dimensions were persisted in rendered pixels at save-time zoom.
+            // Convert back to graph-space units so reloaded callouts are independent of save zoom.
+            const calibrationScale = shouldApplyCalibration ? (1 / calibrationZoomRaw) : 1;
+
+            let normalizedExplicitWidth = parsedExplicitWidth;
+            let normalizedExplicitHeight = parsedExplicitHeight;
+            if (shouldApplyCalibration) {
+                if (explicitWidthIsValid) {
+                    normalizedExplicitWidth = parsedExplicitWidth * calibrationScale;
+                }
+                if (explicitHeightIsValid) {
+                    normalizedExplicitHeight = parsedExplicitHeight * calibrationScale;
+                }
+            }
+
+            const normalizedWidthIsValid = Number.isFinite(normalizedExplicitWidth) && normalizedExplicitWidth > 0;
+            const normalizedHeightIsValid = Number.isFinite(normalizedExplicitHeight) && normalizedExplicitHeight > 0;
+
+            const fallbackWidth = 260;
+            const widthForMeasurement = fallbackWidth;
             const textSource = trimmedInfo || nodeData.label || '';
-            const requiresMeasurement = !preserveExplicitDimensions || !explicitWidthIsValid || !explicitHeightIsValid;
+            const hasValidExplicitDimensions = normalizedWidthIsValid && normalizedHeightIsValid;
+            const requiresMeasurement = !hasValidExplicitDimensions;
             const measuredDims = requiresMeasurement
                 ? this.calculateTextDimensions(
                     textSource,
@@ -13254,22 +13274,21 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
                     widthForMeasurement
                 )
                 : null;
-            const shouldPreserveWidth = preserveExplicitDimensions && explicitWidthIsValid;
-            const shouldPreserveHeight = preserveExplicitDimensions && explicitHeightIsValid;
-            const finalWidth = shouldPreserveWidth
-                ? parsedExplicitWidth
-                : (explicitWidthIsValid ? parsedExplicitWidth : measuredDims.width);
-            const finalHeight = shouldPreserveHeight
-                ? parsedExplicitHeight
-                : measuredDims.height;
+            const measuredHeight = measuredDims && Number.isFinite(measuredDims.height) && measuredDims.height > 0
+                ? measuredDims.height
+                : NaN;
+            const finalWidth = fallbackWidth;
+            const finalHeight = Number.isFinite(measuredHeight)
+                ? measuredHeight
+                : (normalizedHeightIsValid ? normalizedExplicitHeight : (layoutSizing?.nodeSize || 100));
             nodeData.width = finalWidth;
             nodeData.height = finalHeight;
             nodeData.size = Math.max(finalWidth, finalHeight);
-            if (nodeData.preserveAspectRatio === undefined) {
-                nodeData.preserveAspectRatio = true;
-            }
-            if (!nodeData.aspectRatio && finalHeight > 0) {
-                nodeData.aspectRatio = finalWidth / finalHeight;
+
+            if (shouldApplyCalibration) {
+                // Mark dimensions as normalized graph-space values so they are not recalibrated again.
+                nodeData.calloutDimensionZoom = 1;
+                nodeData.calloutDimensionSource = 'text-callout-normalized';
             }
             nodeData.borderColor = nodeData.borderColor || typeSettings.borderColor || '#000000';
             nodeData.borderWidth = nodeData.borderWidth || typeSettings.borderWidth || 1;
@@ -13752,7 +13771,33 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
     normalizeAllNodeData: function() {
         if (!this.cy) return;
 
-        this.normalizeNodeCollection(this.cy.nodes());
+        const nodes = this.cy.nodes();
+
+        if (nodes && typeof nodes.forEach === 'function') {
+            const isValidDimension = (value) => {
+                if (value === null || value === undefined || value === '') {
+                    return false;
+                }
+                const parsed = typeof value === 'number' ? value : parseFloat(value);
+                return Number.isFinite(parsed) && parsed > 0;
+            };
+
+            nodes.forEach(node => {
+                if (!node || typeof node.data !== 'function') {
+                    return;
+                }
+
+                const width = node.data('width');
+                const height = node.data('height');
+                const hasValidPersistedDimensions = isValidDimension(width) && isValidDimension(height);
+                this.normalizeNodeData(
+                    { data: node.data() },
+                    { preserveExplicitDimensions: hasValidPersistedDimensions }
+                );
+            });
+        }
+
+        this.normalizeNodeCollection(nodes);
 
     },
 
