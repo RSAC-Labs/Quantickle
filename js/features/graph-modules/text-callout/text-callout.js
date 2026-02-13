@@ -500,6 +500,31 @@
         return Number.isFinite(numeric) ? numeric : fallback;
     }
 
+    function resolveNodeLabelFontSize(node, fallback = 14) {
+        const fromData = parseFloat(node && typeof node.data === 'function' ? node.data('fontSize') : NaN);
+        if (Number.isFinite(fromData) && fromData > 0) {
+            return fromData;
+        }
+
+        let fromStyle = NaN;
+        if (node && typeof node.style === 'function') {
+            fromStyle = parseFloat(node.style('font-size'));
+        }
+        if ((!Number.isFinite(fromStyle) || fromStyle <= 0) && node && typeof node.renderedStyle === 'function') {
+            const rendered = parseFloat(node.renderedStyle('font-size'));
+            const zoom = cy && typeof cy.zoom === 'function' ? cy.zoom() : 1;
+            if (Number.isFinite(rendered) && rendered > 0 && Number.isFinite(zoom) && zoom > 0) {
+                fromStyle = rendered / zoom;
+            }
+        }
+
+        if (Number.isFinite(fromStyle) && fromStyle > 0) {
+            return fromStyle;
+        }
+
+        return parseFontSize(fallback, 14);
+    }
+
     function clampSize(value, limit, fallback) {
         if (!Number.isFinite(value) || value <= 0) {
             value = fallback;
@@ -698,7 +723,7 @@
 
         const zoom = cy.zoom();
 
-        const nodeFontSize = parseFontSize(node.data('fontSize'), data.baseFontSize || sharedTokens.fontSize);
+        const nodeFontSize = resolveNodeLabelFontSize(node, data.baseFontSize || sharedTokens.fontSize);
         if (nodeFontSize !== data.baseFontSize) {
             data.baseFontSize = nodeFontSize;
         }
@@ -1144,7 +1169,7 @@
             node.scratch('_callout', {
                 div,
                 layer,
-                baseFontSize: parseFontSize(node.data('fontSize'), 14),
+                baseFontSize: resolveNodeLabelFontSize(node, 14),
                 lastContentSignature: null,
                 lastPlainText: '',
                 lastContentMode: null,
@@ -1257,6 +1282,7 @@
             const sharedTokens = getSharedTextTokens();
             ensureSharedTokenVariables(sharedTokens);
             const fallbackBorderWidth = toNumber(node.data('borderWidth'));
+            const fallbackFontSize = resolveNodeLabelFontSize(node, sharedTokens.fontSize);
             const fallbackBorderRadius = toNumber(node.data('borderRadius'));
             const fallbackBorderColor = node.data('borderColor');
             const fallbackFontColor = node.data('fontColor');
