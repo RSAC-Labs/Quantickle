@@ -741,8 +741,6 @@
             ? Math.max(rawScaleFactor, 0)
             : 1;
 
-        scaleInnerFonts(div, scaleFactor);
-
         // Allow box to grow to fit the content before measuring
         div.style.whiteSpace = 'pre-wrap';
         div.style.wordBreak = 'break-word';
@@ -819,7 +817,6 @@
         const approxSize = approximateContentSize(div, calloutBaseFontSize, sharedTokens);
 
         div.style.fontFamily = node.data('fontFamily') || sharedTokens.fontFamily;
-        div.style.fontSize = (calloutBaseFontSize * scaleFactor) + 'px';
         div.style.fontWeight = node.data('bold') ? 'bold' : 'normal';
         div.style.fontStyle = node.data('italic') ? 'italic' : 'normal';
 
@@ -904,6 +901,14 @@
         const preferredWidth = Math.max(FIXED_TEXT_CALLOUT_WIDTH * scaleFactor, Math.round(targetLineWidth));
         measuredWidth = clampSize(preferredWidth, maxWidth, preferredWidth);
         div.style.width = measuredWidth + 'px';
+
+        const widthScaleFactorRaw = measuredWidth / FIXED_TEXT_CALLOUT_WIDTH;
+        const widthScaleFactor = Number.isFinite(widthScaleFactorRaw) && widthScaleFactorRaw > 0
+            ? widthScaleFactorRaw
+            : scaleFactor;
+        div.style.fontSize = (calloutBaseFontSize * widthScaleFactor) + 'px';
+        scaleInnerFonts(div, widthScaleFactor);
+
         div.style.height = 'auto';
         rawHeight = div.offsetHeight || div.scrollHeight || (div.getBoundingClientRect().height || 0);
         measuredHeight = clampSize(rawHeight, maxHeight, approxSize.height);
