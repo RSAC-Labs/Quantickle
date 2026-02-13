@@ -13,7 +13,7 @@
     const PREVIOUS_STYLE_KEY = '_calloutPrevStyle';
     const CALLOUT_SCALE_MIN = 0.1;
     const CALLOUT_SCALE_MAX = 6;
-    const CALLOUT_FONT_MULTIPLIER = 2;
+    const CALLOUT_FONT_MULTIPLIER = 1;
     const TARGET_CALL_OUT_CHARS_PER_LINE = 32;
 
     const DEFAULT_TEXT_TOKENS = {
