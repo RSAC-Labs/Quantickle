@@ -13,6 +13,8 @@
     const PREVIOUS_STYLE_KEY = '_calloutPrevStyle';
     const CALLOUT_SCALE_MIN = 0.1;
     const CALLOUT_SCALE_MAX = 6;
+    const CALLOUT_FONT_MULTIPLIER = 2;
+    const TARGET_CALL_OUT_CHARS_PER_LINE = 32;
 
     const DEFAULT_TEXT_TOKENS = {
         fontFamily: 'Arial, sans-serif',
@@ -701,16 +703,15 @@
             data.baseFontSize = nodeFontSize;
         }
 
-        const baseFontSize = data.baseFontSize || sharedTokens.fontSize;
-
-        const nodeScale = 1;
+        const appliedNodeLabelFontSize = data.baseFontSize || sharedTokens.fontSize;
+        const calloutBaseFontSize = appliedNodeLabelFontSize * CALLOUT_FONT_MULTIPLIER;
 
         const rawCalloutScale = parseFloat(node.data('calloutScale'));
         const calloutScale = Number.isFinite(rawCalloutScale) && rawCalloutScale > 0
             ? Math.max(CALLOUT_SCALE_MIN, Math.min(CALLOUT_SCALE_MAX, rawCalloutScale))
             : 1;
 
-        const rawScaleFactor = zoom * nodeScale * calloutScale;
+        const rawScaleFactor = zoom * calloutScale;
         const scaleFactor = Number.isFinite(rawScaleFactor)
             ? Math.max(rawScaleFactor, 0)
             : 1;
@@ -790,10 +791,10 @@
         const maxWidth = fallbackWidthLimit > 0 ? fallbackWidthLimit * 0.9 : Infinity;
         const maxHeight = fallbackHeightLimit > 0 ? fallbackHeightLimit * 0.9 : Infinity;
 
-        const approxSize = approximateContentSize(div, baseFontSize, sharedTokens);
+        const approxSize = approximateContentSize(div, calloutBaseFontSize, sharedTokens);
 
         div.style.fontFamily = node.data('fontFamily') || sharedTokens.fontFamily;
-        div.style.fontSize = (data.baseFontSize * scaleFactor) + 'px';
+        div.style.fontSize = (calloutBaseFontSize * scaleFactor) + 'px';
         div.style.fontWeight = node.data('bold') ? 'bold' : 'normal';
         div.style.fontStyle = node.data('italic') ? 'italic' : 'normal';
 
@@ -874,7 +875,9 @@
 
         let measuredWidth, measuredHeight;
         let rawHeight = NaN;
-        measuredWidth = clampSize(FIXED_TEXT_CALLOUT_WIDTH * zoom, maxWidth, FIXED_TEXT_CALLOUT_WIDTH * zoom);
+        const targetLineWidth = (calloutBaseFontSize * scaleFactor * 0.55 * TARGET_CALL_OUT_CHARS_PER_LINE) + (scaledPaddingInline * 2);
+        const preferredWidth = Math.max(FIXED_TEXT_CALLOUT_WIDTH * scaleFactor, Math.round(targetLineWidth));
+        measuredWidth = clampSize(preferredWidth, maxWidth, preferredWidth);
         div.style.width = measuredWidth + 'px';
         div.style.height = 'auto';
         rawHeight = div.offsetHeight || div.scrollHeight || (div.getBoundingClientRect().height || 0);
@@ -1273,7 +1276,9 @@
                 'border-color': fallbackBorderColor && fallbackBorderColor !== 'rgba(0,0,0,0)'
                     ? fallbackBorderColor
                     : sharedTokens.borderColor,
-                'font-size': Number.isFinite(fallbackFontSize) ? fallbackFontSize : sharedTokens.fontSize,
+                'font-size': Number.isFinite(fallbackFontSize)
+                    ? fallbackFontSize * CALLOUT_FONT_MULTIPLIER
+                    : sharedTokens.fontSize * CALLOUT_FONT_MULTIPLIER,
                 'font-family': node.data('fontFamily') || sharedTokens.fontFamily,
                 'font-weight': node.data('bold') ? 'bold' : 'normal',
                 'font-style': node.data('italic') ? 'italic' : 'normal',
