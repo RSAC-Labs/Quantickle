@@ -1257,7 +1257,6 @@
             const sharedTokens = getSharedTextTokens();
             ensureSharedTokenVariables(sharedTokens);
             const fallbackBorderWidth = toNumber(node.data('borderWidth'));
-            const fallbackFontSize = toNumber(node.data('fontSize'));
             const fallbackBorderRadius = toNumber(node.data('borderRadius'));
             const fallbackBorderColor = node.data('borderColor');
             const fallbackFontColor = node.data('fontColor');
