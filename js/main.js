@@ -174,7 +174,14 @@ window.QuantickleApp = {
                         undefined,
                         body
                     );
-                    node.data('backgroundColor', '#ffffff');
+                    if (node) {
+                        const textDefaults = (window.NodeTypes && window.NodeTypes.text) || {};
+                        const defaultFontSize = parseFloat(textDefaults.fontSize);
+                        if (!Number.isFinite(parseFloat(node.data('fontSize')))) {
+                            node.data('fontSize', Number.isFinite(defaultFontSize) && defaultFontSize > 0 ? defaultFontSize : 14);
+                        }
+                        node.data('backgroundColor', '#ffffff');
+                    }
                     return { success: Boolean(node) };
                 },
                 createGraphLinkNodeAtPosition: async (x, y) => {
