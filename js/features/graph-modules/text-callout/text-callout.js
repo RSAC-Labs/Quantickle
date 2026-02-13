@@ -14,6 +14,7 @@
     const CALLOUT_SCALE_MIN = 0.1;
     const CALLOUT_SCALE_MAX = 6;
     const CALLOUT_FONT_MULTIPLIER = 2;
+    const TARGET_CALL_OUT_CHARS_PER_LINE = 32;
 
     const DEFAULT_TEXT_TOKENS = {
         fontFamily: 'Arial, sans-serif',
@@ -702,17 +703,15 @@
             data.baseFontSize = nodeFontSize;
         }
 
-        const baseFontSize = data.baseFontSize || sharedTokens.fontSize;
-        const calloutBaseFontSize = baseFontSize * CALLOUT_FONT_MULTIPLIER;
-
-        const nodeScale = 1;
+        const defaultNodeLabelFontSize = sharedTokens.fontSize;
+        const calloutBaseFontSize = defaultNodeLabelFontSize * CALLOUT_FONT_MULTIPLIER;
 
         const rawCalloutScale = parseFloat(node.data('calloutScale'));
         const calloutScale = Number.isFinite(rawCalloutScale) && rawCalloutScale > 0
             ? Math.max(CALLOUT_SCALE_MIN, Math.min(CALLOUT_SCALE_MAX, rawCalloutScale))
             : 1;
 
-        const rawScaleFactor = zoom * nodeScale * calloutScale;
+        const rawScaleFactor = calloutScale;
         const scaleFactor = Number.isFinite(rawScaleFactor)
             ? Math.max(rawScaleFactor, 0)
             : 1;
@@ -876,7 +875,9 @@
 
         let measuredWidth, measuredHeight;
         let rawHeight = NaN;
-        measuredWidth = clampSize(FIXED_TEXT_CALLOUT_WIDTH * zoom, maxWidth, FIXED_TEXT_CALLOUT_WIDTH * zoom);
+        const targetLineWidth = (calloutBaseFontSize * 0.55 * TARGET_CALL_OUT_CHARS_PER_LINE) + (scaledPaddingInline * 2);
+        const preferredWidth = Math.max(FIXED_TEXT_CALLOUT_WIDTH, Math.round(targetLineWidth));
+        measuredWidth = clampSize(preferredWidth, maxWidth, preferredWidth);
         div.style.width = measuredWidth + 'px';
         div.style.height = 'auto';
         rawHeight = div.offsetHeight || div.scrollHeight || (div.getBoundingClientRect().height || 0);
@@ -1256,7 +1257,6 @@
             const sharedTokens = getSharedTextTokens();
             ensureSharedTokenVariables(sharedTokens);
             const fallbackBorderWidth = toNumber(node.data('borderWidth'));
-            const fallbackFontSize = toNumber(node.data('fontSize'));
             const fallbackBorderRadius = toNumber(node.data('borderRadius'));
             const fallbackBorderColor = node.data('borderColor');
             const fallbackFontColor = node.data('fontColor');
@@ -1275,9 +1275,7 @@
                 'border-color': fallbackBorderColor && fallbackBorderColor !== 'rgba(0,0,0,0)'
                     ? fallbackBorderColor
                     : sharedTokens.borderColor,
-                'font-size': Number.isFinite(fallbackFontSize)
-                    ? fallbackFontSize * CALLOUT_FONT_MULTIPLIER
-                    : sharedTokens.fontSize * CALLOUT_FONT_MULTIPLIER,
+                'font-size': sharedTokens.fontSize * CALLOUT_FONT_MULTIPLIER,
                 'font-family': node.data('fontFamily') || sharedTokens.fontFamily,
                 'font-weight': node.data('bold') ? 'bold' : 'normal',
                 'font-style': node.data('italic') ? 'italic' : 'normal',
