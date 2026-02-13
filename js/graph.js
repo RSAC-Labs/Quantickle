@@ -13265,7 +13265,6 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
             const widthForMeasurement = fallbackWidth;
             const textSource = trimmedInfo || nodeData.label || '';
             const hasValidExplicitDimensions = normalizedWidthIsValid && normalizedHeightIsValid;
-            const shouldPreserveDimensions = preserveExplicitDimensions && hasValidExplicitDimensions;
             const requiresMeasurement = !hasValidExplicitDimensions;
             const measuredDims = requiresMeasurement
                 ? this.calculateTextDimensions(
@@ -13275,9 +13274,12 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
                     widthForMeasurement
                 )
                 : null;
-            const finalWidth = fallbackWidth;
-            const finalHeight = (Number.isFinite(measuredDims.height) && measuredDims.height > 0)
+            const measuredHeight = measuredDims && Number.isFinite(measuredDims.height) && measuredDims.height > 0
                 ? measuredDims.height
+                : NaN;
+            const finalWidth = fallbackWidth;
+            const finalHeight = Number.isFinite(measuredHeight)
+                ? measuredHeight
                 : (normalizedHeightIsValid ? normalizedExplicitHeight : (layoutSizing?.nodeSize || 100));
             nodeData.width = finalWidth;
             nodeData.height = finalHeight;
