@@ -703,15 +703,15 @@
             data.baseFontSize = nodeFontSize;
         }
 
-        const defaultNodeLabelFontSize = sharedTokens.fontSize;
-        const calloutBaseFontSize = defaultNodeLabelFontSize * CALLOUT_FONT_MULTIPLIER;
+        const appliedNodeLabelFontSize = data.baseFontSize || sharedTokens.fontSize;
+        const calloutBaseFontSize = appliedNodeLabelFontSize * CALLOUT_FONT_MULTIPLIER;
 
         const rawCalloutScale = parseFloat(node.data('calloutScale'));
         const calloutScale = Number.isFinite(rawCalloutScale) && rawCalloutScale > 0
             ? Math.max(CALLOUT_SCALE_MIN, Math.min(CALLOUT_SCALE_MAX, rawCalloutScale))
             : 1;
 
-        const rawScaleFactor = calloutScale;
+        const rawScaleFactor = zoom * calloutScale;
         const scaleFactor = Number.isFinite(rawScaleFactor)
             ? Math.max(rawScaleFactor, 0)
             : 1;
@@ -875,8 +875,8 @@
 
         let measuredWidth, measuredHeight;
         let rawHeight = NaN;
-        const targetLineWidth = (calloutBaseFontSize * 0.55 * TARGET_CALL_OUT_CHARS_PER_LINE) + (scaledPaddingInline * 2);
-        const preferredWidth = Math.max(FIXED_TEXT_CALLOUT_WIDTH, Math.round(targetLineWidth));
+        const targetLineWidth = (calloutBaseFontSize * scaleFactor * 0.55 * TARGET_CALL_OUT_CHARS_PER_LINE) + (scaledPaddingInline * 2);
+        const preferredWidth = Math.max(FIXED_TEXT_CALLOUT_WIDTH * scaleFactor, Math.round(targetLineWidth));
         measuredWidth = clampSize(preferredWidth, maxWidth, preferredWidth);
         div.style.width = measuredWidth + 'px';
         div.style.height = 'auto';
@@ -1275,7 +1275,9 @@
                 'border-color': fallbackBorderColor && fallbackBorderColor !== 'rgba(0,0,0,0)'
                     ? fallbackBorderColor
                     : sharedTokens.borderColor,
-                'font-size': sharedTokens.fontSize * CALLOUT_FONT_MULTIPLIER,
+                'font-size': Number.isFinite(fallbackFontSize)
+                    ? fallbackFontSize * CALLOUT_FONT_MULTIPLIER
+                    : sharedTokens.fontSize * CALLOUT_FONT_MULTIPLIER,
                 'font-family': node.data('fontFamily') || sharedTokens.fontFamily,
                 'font-weight': node.data('bold') ? 'bold' : 'normal',
                 'font-style': node.data('italic') ? 'italic' : 'normal',
