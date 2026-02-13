@@ -337,7 +337,6 @@ class NodeEditorModule {
             const bodyField = document.getElementById('text-node-body');
             const widthField = document.getElementById('text-node-width');
             const heightField = document.getElementById('text-node-height');
-            const ratioField = document.getElementById('text-node-preserve-ratio');
             const backgroundColorField = document.getElementById('text-node-background-color');
             const fontColorField = document.getElementById('text-node-font-color');
             const scaleField = document.getElementById('text-node-scale');
@@ -367,9 +366,6 @@ class NodeEditorModule {
                 : undefined;
             const conversionHeight = conversion && conversion.height !== undefined
                 ? conversion.height
-                : undefined;
-            const conversionRatio = conversion && conversion.preserveAspectRatio !== undefined
-                ? conversion.preserveAspectRatio
                 : undefined;
             const conversionBackgroundColor = conversion && conversion.backgroundColor !== undefined
                 ? conversion.backgroundColor
@@ -403,32 +399,15 @@ class NodeEditorModule {
             if (bodyField) bodyField.value = conversionBody !== undefined
                 ? conversionBody
                 : resolvedDefaultBody;
-            const existingWidthMode = isExistingTextNode ? node?.data('textWidthMode') : undefined;
-            const existingHeightMode = isExistingTextNode ? node?.data('textHeightMode') : undefined;
-            const widthIsFixed = existingWidthMode === 'fixed';
-            const heightIsFixed = existingHeightMode === 'fixed';
-
             if (widthField) {
-                if (conversionWidth !== undefined) {
-                    widthField.value = conversionWidth;
-                } else if (isExistingTextNode && widthIsFixed && node && node.data('width') !== undefined) {
-                    widthField.value = node.data('width');
-                } else if (!isExistingTextNode && textDefaults.width !== undefined) {
-                    widthField.value = textDefaults.width;
-                } else {
-                    widthField.value = '';
-                }
+                widthField.value = conversionWidth !== undefined ? conversionWidth : '';
+                widthField.disabled = true;
+                widthField.placeholder = 'fixed (260)';
             }
             if (heightField) {
-                if (conversionHeight !== undefined) {
-                    heightField.value = conversionHeight;
-                } else if (isExistingTextNode && heightIsFixed && node && node.data('height') !== undefined) {
-                    heightField.value = node.data('height');
-                } else if (!isExistingTextNode && textDefaults.height !== undefined) {
-                    heightField.value = textDefaults.height;
-                } else {
-                    heightField.value = '';
-                }
+                heightField.value = conversionHeight !== undefined ? conversionHeight : '';
+                heightField.disabled = true;
+                heightField.placeholder = 'auto';
             }
             const fallbackBackground = textDefaults.backgroundColor || textDefaults.color || '#ffffff';
             const fallbackFontColor = textDefaults.fontColor || '#333333';
@@ -465,17 +444,6 @@ class NodeEditorModule {
                     scaleValueField.textContent = `${Math.round(normalizedScale * 100)}%`;
                 }
             }
-            if (ratioField) {
-                const defaultRatio = textDefaults.preserveAspectRatio !== undefined
-                    ? textDefaults.preserveAspectRatio !== false
-                    : true;
-                const preserveAspectRatio = conversionRatio !== undefined
-                    ? conversionRatio
-                    : (isExistingTextNode
-                        ? node?.data('preserveAspectRatio') !== false
-                        : defaultRatio);
-                ratioField.checked = preserveAspectRatio;
-            }
             if (backgroundImageField) {
                 if (conversionBackgroundImage !== undefined) {
                     backgroundImageField.value = conversionBackgroundImage;
@@ -507,7 +475,6 @@ class NodeEditorModule {
         const bodyField = document.getElementById('text-node-body');
         const widthField = document.getElementById('text-node-width');
         const heightField = document.getElementById('text-node-height');
-        const ratioField = document.getElementById('text-node-preserve-ratio');
         const backgroundColorField = document.getElementById('text-node-background-color');
         const fontColorField = document.getElementById('text-node-font-color');
         const scaleField = document.getElementById('text-node-scale');
@@ -641,30 +608,11 @@ class NodeEditorModule {
 
         this.selectedNode.data(baseUpdates);
 
-        const widthVal = widthField ? parseFloat(widthField.value) : NaN;
-        const heightVal = heightField ? parseFloat(heightField.value) : NaN;
-        if (!isNaN(widthVal)) {
-            this.selectedNode.data('width', widthVal);
-            this.selectedNode.data('textWidthMode', 'fixed');
-        } else {
-            this.selectedNode.removeData('width');
-            this.selectedNode.removeData('textWidthMode');
-        }
-        if (!isNaN(heightVal)) {
-            this.selectedNode.data('height', heightVal);
-            this.selectedNode.data('textHeightMode', 'fixed');
-        } else {
-            this.selectedNode.removeData('height');
-            this.selectedNode.removeData('textHeightMode');
-        }
-
-        const preserveAspectRatio = ratioField ? ratioField.checked : true;
-        this.selectedNode.data('preserveAspectRatio', preserveAspectRatio);
-        if (preserveAspectRatio && !isNaN(widthVal) && !isNaN(heightVal) && heightVal > 0) {
-            this.selectedNode.data('aspectRatio', widthVal / heightVal);
-        } else if (!preserveAspectRatio) {
-            this.selectedNode.removeData('aspectRatio');
-        }
+        ['textWidthMode', 'textHeightMode', 'preserveAspectRatio', 'aspectRatio'].forEach(key => {
+            if (this.selectedNode.data(key) !== undefined) {
+                this.selectedNode.removeData(key);
+            }
+        });
         this.applyNodeStyles(this.selectedNode);
         this.selectedNode.style('label', '');
         this.selectedNode.style('text-opacity', 0);
@@ -1349,18 +1297,13 @@ class NodeEditorModule {
                 </div>
                 <div class="attribute-group">
                     <label>Width:</label>
-                    <input type="number" id="text-node-width" data-modal-input="true" min="20" placeholder="auto">
+                    <input type="number" id="text-node-width" data-modal-input="true" min="20" placeholder="fixed (260)" disabled>
+                    <div class="input-hint">Text callout width is fixed for consistent wrapping.</div>
                 </div>
                 <div class="attribute-group">
                     <label>Height:</label>
-                    <input type="number" id="text-node-height" data-modal-input="true" min="20" placeholder="auto">
-                </div>
-                <div class="attribute-group">
-                    <label class="checkbox-inline">
-                        <input type="checkbox" id="text-node-preserve-ratio" data-modal-input="true" checked>
-                        Preserve aspect ratio
-                    </label>
-                    <div class="input-hint">Keep width and height linked when zooming or resizing with the mouse.</div>
+                    <input type="number" id="text-node-height" data-modal-input="true" min="20" placeholder="auto" disabled>
+                    <div class="input-hint">Height is measured from content automatically.</div>
                 </div>
                 <input type="hidden" id="text-node-background-image" data-modal-input="true">
             </div>
@@ -3563,28 +3506,11 @@ class NodeEditorModule {
             }
 
             if (this.selectedNode) {
-                const existingWidthMode = this.selectedNode.data('textWidthMode');
-                if (existingWidthMode) {
-                    baseUpdates.textWidthMode = existingWidthMode;
-                }
-                const existingHeightMode = this.selectedNode.data('textHeightMode');
-                if (existingHeightMode) {
-                    baseUpdates.textHeightMode = existingHeightMode;
-                }
-
-                if (existingWidthMode === 'fixed' && baseUpdates.width === undefined) {
-                    const storedWidth = parseFloat(this.selectedNode.data('width'));
-                    if (Number.isFinite(storedWidth) && storedWidth > 0) {
-                        baseUpdates.width = storedWidth;
+                ['textWidthMode', 'textHeightMode', 'preserveAspectRatio', 'aspectRatio'].forEach(key => {
+                    if (this.selectedNode.data(key) !== undefined) {
+                        this.selectedNode.removeData(key);
                     }
-                }
-
-                if (existingHeightMode === 'fixed' && baseUpdates.height === undefined) {
-                    const storedHeight = parseFloat(this.selectedNode.data('height'));
-                    if (Number.isFinite(storedHeight) && storedHeight > 0) {
-                        baseUpdates.height = storedHeight;
-                    }
-                }
+                });
             }
         }
 
@@ -3949,39 +3875,25 @@ class NodeEditorModule {
                 return Number.isFinite(numeric) && numeric > 0 ? numeric : NaN;
             };
 
-            const widthMode = node.data('textWidthMode') || data.textWidthMode;
-            const heightMode = node.data('textHeightMode') || data.textHeightMode;
-            const storedWidth = parseDimension(data.width);
             const storedHeight = parseDimension(data.height);
-            const manualWidth = widthMode === 'fixed' && Number.isFinite(storedWidth);
-            const manualHeight = heightMode === 'fixed' && Number.isFinite(storedHeight);
-
             const fallbackSize = Number.isFinite(data.size) && data.size > 0 ? data.size : 30;
+            const targetWidth = 260;
             const computeDimensions = () => {
                 if (window.GraphRenderer && typeof window.GraphRenderer.calculateTextDimensions === 'function') {
                     return window.GraphRenderer.calculateTextDimensions(
                         data.info || '',
                         data.fontFamily || 'Arial',
                         data.fontSize || 14,
-                        manualWidth ? storedWidth : undefined
+                        targetWidth
                     );
                 }
-                const fallbackWidth = manualWidth && Number.isFinite(storedWidth)
-                    ? storedWidth
-                    : fallbackSize;
-                const fallbackHeight = manualHeight && Number.isFinite(storedHeight)
-                    ? storedHeight
-                    : fallbackSize;
-                return { width: fallbackWidth, height: fallbackHeight };
+                return { width: targetWidth, height: Number.isFinite(storedHeight) ? storedHeight : fallbackSize };
             };
 
             const dims = computeDimensions() || {};
-            const targetWidth = manualWidth
-                ? storedWidth
-                : (Number.isFinite(dims.width) && dims.width > 0 ? dims.width : fallbackSize);
-            const targetHeight = manualHeight
-                ? storedHeight
-                : (Number.isFinite(dims.height) && dims.height > 0 ? dims.height : fallbackSize);
+            const targetHeight = Number.isFinite(dims.height) && dims.height > 0
+                ? dims.height
+                : (Number.isFinite(storedHeight) && storedHeight > 0 ? storedHeight : fallbackSize);
 
             baseStyles.width = targetWidth;
             baseStyles.height = targetHeight;
@@ -3995,25 +3907,13 @@ class NodeEditorModule {
                 delete baseStyles['text-max-width'];
             }
 
-            if (manualWidth) {
-                node.data('width', storedWidth);
-                node.data('textWidthMode', 'fixed');
-            } else {
-                node.removeData('width');
-                if (widthMode) {
-                    node.removeData('textWidthMode');
+            node.data('width', targetWidth);
+            node.data('height', targetHeight);
+            ['textWidthMode', 'textHeightMode', 'preserveAspectRatio', 'aspectRatio'].forEach(key => {
+                if (node.data(key) !== undefined) {
+                    node.removeData(key);
                 }
-            }
-
-            if (manualHeight) {
-                node.data('height', storedHeight);
-                node.data('textHeightMode', 'fixed');
-            } else {
-                node.removeData('height');
-                if (heightMode) {
-                    node.removeData('textHeightMode');
-                }
-            }
+            });
 
             const computedSize = Math.max(
                 Number.isFinite(targetWidth) && targetWidth > 0 ? targetWidth : fallbackSize,
