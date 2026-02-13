@@ -13,6 +13,7 @@
     const PREVIOUS_STYLE_KEY = '_calloutPrevStyle';
     const CALLOUT_SCALE_MIN = 0.1;
     const CALLOUT_SCALE_MAX = 6;
+    const CALLOUT_FONT_MULTIPLIER = 2;
 
     const DEFAULT_TEXT_TOKENS = {
         fontFamily: 'Arial, sans-serif',
@@ -702,6 +703,7 @@
         }
 
         const baseFontSize = data.baseFontSize || sharedTokens.fontSize;
+        const calloutBaseFontSize = baseFontSize * CALLOUT_FONT_MULTIPLIER;
 
         const nodeScale = 1;
 
@@ -790,10 +792,10 @@
         const maxWidth = fallbackWidthLimit > 0 ? fallbackWidthLimit * 0.9 : Infinity;
         const maxHeight = fallbackHeightLimit > 0 ? fallbackHeightLimit * 0.9 : Infinity;
 
-        const approxSize = approximateContentSize(div, baseFontSize, sharedTokens);
+        const approxSize = approximateContentSize(div, calloutBaseFontSize, sharedTokens);
 
         div.style.fontFamily = node.data('fontFamily') || sharedTokens.fontFamily;
-        div.style.fontSize = (data.baseFontSize * scaleFactor) + 'px';
+        div.style.fontSize = (calloutBaseFontSize * scaleFactor) + 'px';
         div.style.fontWeight = node.data('bold') ? 'bold' : 'normal';
         div.style.fontStyle = node.data('italic') ? 'italic' : 'normal';
 
@@ -1273,7 +1275,9 @@
                 'border-color': fallbackBorderColor && fallbackBorderColor !== 'rgba(0,0,0,0)'
                     ? fallbackBorderColor
                     : sharedTokens.borderColor,
-                'font-size': Number.isFinite(fallbackFontSize) ? fallbackFontSize : sharedTokens.fontSize,
+                'font-size': Number.isFinite(fallbackFontSize)
+                    ? fallbackFontSize * CALLOUT_FONT_MULTIPLIER
+                    : sharedTokens.fontSize * CALLOUT_FONT_MULTIPLIER,
                 'font-family': node.data('fontFamily') || sharedTokens.fontFamily,
                 'font-weight': node.data('bold') ? 'bold' : 'normal',
                 'font-style': node.data('italic') ? 'italic' : 'normal',
