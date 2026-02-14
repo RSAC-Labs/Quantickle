@@ -4971,9 +4971,20 @@ class FileManagerModule {
                 data: {
                     id: containerId,
                     label: '',
-                    color: 'transparent'
+                    color: 'transparent',
+                    width: 1,
+                    height: 1,
+                    opacity: 0
                 },
-                classes: 'container'
+                classes: 'container export-temp-container'
+            });
+
+            const container = this.cy.getElementById(containerId);
+            container.style({
+                'background-opacity': 0,
+                'border-width': 0,
+                'text-opacity': 0,
+                'events': 'no'
             });
 
             candidateChildren.forEach(node => {
