@@ -4633,10 +4633,14 @@ class FileManagerModule {
                 : { width: this.cy.width ? this.cy.width() : 0, height: this.cy.height ? this.cy.height() : 0 };
 
             const elements = typeof this.cy.elements === 'function' ? this.cy.elements() : null;
-            const hasVisibleElements = !!(elements && typeof elements.length === 'number' && elements.length > 0);
-            const renderedBounds = elements && typeof elements.renderedBoundingBox === 'function'
-                ? elements.renderedBoundingBox({ includeOverlays: false, includeEdges: true, includeLabels: true })
+            const exportElements = this.getFilteredExportElements();
+            const hasVisibleElements = !!(exportElements && typeof exportElements.length === 'number' && exportElements.length > 0);
+            const renderedBounds = exportElements && typeof exportElements.renderedBoundingBox === 'function'
+                ? exportElements.renderedBoundingBox({ includeOverlays: false, includeEdges: true, includeLabels: true })
                 : null;
+            const fullRenderedBounds = elements && typeof elements.renderedBoundingBox === 'function'
+                ? elements.renderedBoundingBox({ includeOverlays: false, includeEdges: true, includeLabels: true })
+                : renderedBounds;
 
             const hasDrawableBounds = !!(
                 renderedBounds
@@ -4693,7 +4697,16 @@ class FileManagerModule {
                         throw new Error('Failed to capture a valid graph image snapshot.');
                     }
 
-                    pngDataUrl = candidate;
+                    const croppedCandidate = await this.cropSnapshotToBounds({
+                        pngDataUrl: candidate,
+                        fullBounds: fullRenderedBounds,
+                        targetBounds: renderedBounds,
+                        scale: attemptedScale,
+                        fallbackWidth: rect && Number.isFinite(rect.width) ? rect.width : 0,
+                        fallbackHeight: rect && Number.isFinite(rect.height) ? rect.height : 0
+                    });
+
+                    pngDataUrl = croppedCandidate;
                     scaleUsed = attemptedScale;
                     break;
                 } catch (err) {
@@ -4734,6 +4747,139 @@ class FileManagerModule {
                 this.removeTemporaryExportBackgroundContainer(exportBackgroundInfo);
             }
         }
+    }
+
+    getFilteredExportElements() {
+        if (!this.cy || typeof this.cy.elements !== 'function') {
+            return null;
+        }
+
+        const scaffoldIdFragments = [
+            'timeline-anchor',
+            'timeline-bar',
+            'timeline-tick',
+            'timeline-link'
+        ];
+        const temporaryIdPrefixes = ['export-bg-container-', 'export-bg-backdrop-'];
+
+        const shouldExcludeElement = element => {
+            if (!element || typeof element.id !== 'function') {
+                return false;
+            }
+
+            const id = String(element.id() || '');
+            if (!id) {
+                return false;
+            }
+
+            if (temporaryIdPrefixes.some(prefix => id.startsWith(prefix))) {
+                return true;
+            }
+
+            return scaffoldIdFragments.some(fragment => id.includes(fragment));
+        };
+
+        const allElements = this.cy.elements();
+        const filtered = allElements.filter(ele => !shouldExcludeElement(ele));
+
+        if (filtered && typeof filtered.nodes === 'function' && typeof filtered.edges === 'function') {
+            const filteredNodes = filtered.nodes();
+            const filteredNodeIds = new Set(filteredNodes.map(node => node.id()));
+            const connectedEdges = filtered.edges().filter(edge => {
+                if (!edge || typeof edge.source !== 'function' || typeof edge.target !== 'function') {
+                    return false;
+                }
+
+                const source = edge.source();
+                const target = edge.target();
+
+                return !!(
+                    source
+                    && target
+                    && filteredNodeIds.has(source.id())
+                    && filteredNodeIds.has(target.id())
+                );
+            });
+
+            return filteredNodes.union(connectedEdges);
+        }
+
+        return filtered;
+    }
+
+    async cropSnapshotToBounds({ pngDataUrl, fullBounds, targetBounds, scale, fallbackWidth = 0, fallbackHeight = 0 } = {}) {
+        if (typeof document === 'undefined' || !pngDataUrl || typeof pngDataUrl !== 'string') {
+            return pngDataUrl;
+        }
+
+        const hasBounds = bounds => !!(
+            bounds
+            && Number.isFinite(bounds.x1)
+            && Number.isFinite(bounds.y1)
+            && Number.isFinite(bounds.w)
+            && Number.isFinite(bounds.h)
+            && bounds.w > 0
+            && bounds.h > 0
+        );
+
+        if (!hasBounds(fullBounds) || !hasBounds(targetBounds)) {
+            return pngDataUrl;
+        }
+
+        const snapshot = await this.loadImageFromDataUrl(pngDataUrl);
+        if (!snapshot) {
+            return pngDataUrl;
+        }
+
+        const exportScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
+        const cropX = Math.max(0, Math.round((targetBounds.x1 - fullBounds.x1) * exportScale));
+        const cropY = Math.max(0, Math.round((targetBounds.y1 - fullBounds.y1) * exportScale));
+        const cropWidth = Math.max(1, Math.round(targetBounds.w * exportScale));
+        const cropHeight = Math.max(1, Math.round(targetBounds.h * exportScale));
+
+        const clampedWidth = Math.max(1, Math.min(snapshot.width - cropX, cropWidth));
+        const clampedHeight = Math.max(1, Math.min(snapshot.height - cropY, cropHeight));
+
+        const fallbackW = Math.max(1, Math.round((Number.isFinite(fallbackWidth) ? fallbackWidth : 0) * exportScale));
+        const fallbackH = Math.max(1, Math.round((Number.isFinite(fallbackHeight) ? fallbackHeight : 0) * exportScale));
+        const shouldSkipCrop = (
+            cropX === 0
+            && cropY === 0
+            && (Math.abs(clampedWidth - snapshot.width) <= 1 || clampedWidth >= snapshot.width)
+            && (Math.abs(clampedHeight - snapshot.height) <= 1 || clampedHeight >= snapshot.height)
+        ) || (
+            snapshot.width <= fallbackW
+            && snapshot.height <= fallbackH
+        );
+
+        if (shouldSkipCrop) {
+            return pngDataUrl;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = clampedWidth;
+        canvas.height = clampedHeight;
+        const context = canvas.getContext('2d');
+
+        if (!context || typeof context.drawImage !== 'function') {
+            return pngDataUrl;
+        }
+
+        context.drawImage(snapshot, cropX, cropY, clampedWidth, clampedHeight, 0, 0, clampedWidth, clampedHeight);
+        return canvas.toDataURL('image/png');
+    }
+
+    loadImageFromDataUrl(dataUrl) {
+        return new Promise(resolve => {
+            try {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = () => resolve(null);
+                img.src = dataUrl;
+            } catch (_) {
+                resolve(null);
+            }
+        });
     }
 
     async getCurrentBackgroundImageForExport() {
@@ -4826,7 +4972,10 @@ class FileManagerModule {
             ? settings.backgroundColor.trim()
             : '#000000';
 
-        const allNodes = this.cy.nodes();
+        const exportElements = this.getFilteredExportElements();
+        const allNodes = exportElements && typeof exportElements.nodes === 'function'
+            ? exportElements.nodes()
+            : this.cy.nodes();
         const candidateChildren = allNodes.filter(node => {
             const id = typeof node.id === 'function' ? node.id() : '';
             return !id.startsWith('export-bg-container-') && !id.startsWith('export-bg-backdrop-');
@@ -4836,7 +4985,7 @@ class FileManagerModule {
             return null;
         }
 
-        const elements = typeof this.cy.elements === 'function' ? this.cy.elements() : null;
+        const elements = exportElements || (typeof this.cy.elements === 'function' ? this.cy.elements() : null);
         const bounds = elements && typeof elements.boundingBox === 'function'
             ? elements.boundingBox({ includeLabels: true, includeOverlays: false })
             : null;
