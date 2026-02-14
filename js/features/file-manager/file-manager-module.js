@@ -4744,8 +4744,14 @@ class FileManagerModule {
     }
 
 
-    async normalizeSnapshotForPdf(imageSource, onError) {
+    async normalizeSnapshotForPdf(imageSource, onError, options = {}) {
         const markNotifiedError = onError || (message => this.markExportError(message));
+        const {
+            preferredFormat = 'PNG',
+            jpegQuality = 0.85,
+            maxPixelCount = Infinity,
+            maxDimension = Infinity
+        } = options;
 
         const toPdfFormat = (mimeType = '') => {
             const normalized = String(mimeType).toLowerCase();
@@ -4810,21 +4816,46 @@ class FileManagerModule {
                 throw markNotifiedError('Failed to capture a valid image for PDF export.');
             }
 
-            const mimeType = blob.type;
-            const arrayBuffer = await blob.arrayBuffer();
-            const bytes = new Uint8Array(arrayBuffer);
+            const imageBitmap = await createImageBitmap(blob);
+            const sourceWidth = Math.max(1, imageBitmap.width || 1);
+            const sourceHeight = Math.max(1, imageBitmap.height || 1);
 
-            const chunkSize = 0x8000;
-            let binary = '';
-            for (let index = 0; index < bytes.length; index += chunkSize) {
-                const chunk = bytes.subarray(index, index + chunkSize);
-                binary += String.fromCharCode(...chunk);
+            const maxPixels = Number.isFinite(maxPixelCount) && maxPixelCount > 0 ? maxPixelCount : Infinity;
+            const maxEdge = Number.isFinite(maxDimension) && maxDimension > 0 ? maxDimension : Infinity;
+            const pixelRatio = Math.min(1, Math.sqrt(maxPixels / (sourceWidth * sourceHeight)));
+            const dimensionRatio = Math.min(1, maxEdge / sourceWidth, maxEdge / sourceHeight);
+            const resizeRatio = Math.min(pixelRatio, dimensionRatio);
+
+            const targetWidth = Math.max(1, Math.floor(sourceWidth * resizeRatio));
+            const targetHeight = Math.max(1, Math.floor(sourceHeight * resizeRatio));
+
+            const canvas = document.createElement('canvas');
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+
+            const context = canvas.getContext('2d');
+            if (!context) {
+                imageBitmap.close();
+                throw markNotifiedError('Unable to normalize graph snapshot for PDF export.');
             }
 
-            const base64 = btoa(binary);
+            context.fillStyle = '#ffffff';
+            context.fillRect(0, 0, targetWidth, targetHeight);
+            context.drawImage(imageBitmap, 0, 0, targetWidth, targetHeight);
+            imageBitmap.close();
+
+            const useJpeg = String(preferredFormat).toUpperCase() === 'JPEG';
+            const mimeType = useJpeg ? 'image/jpeg' : 'image/png';
+            const dataUrl = useJpeg
+                ? canvas.toDataURL(mimeType, jpegQuality)
+                : canvas.toDataURL(mimeType);
+
             return {
-                dataUrl: `data:${mimeType};base64,${base64}`,
-                format: toPdfFormat(mimeType)
+                dataUrl,
+                format: toPdfFormat(mimeType),
+                width: targetWidth,
+                height: targetHeight,
+                wasResized: targetWidth !== sourceWidth || targetHeight !== sourceHeight
             };
         } catch (error) {
             throw markNotifiedError('Unable to normalize graph snapshot for PDF export.');
@@ -4873,43 +4904,107 @@ class FileManagerModule {
                         return;
                     }
 
-                    const snapshot = await this.captureExportSnapshot({ desiredScale: 2 });
-                    if (snapshot.isBlankSnapshot) {
-                        this.notifications.show('Blank graph has no drawable snapshot; exported empty PDF page instead.', 'warning');
+                    const initialScale = 4;
+                    const minScale = 0.5;
+                    const scaleReductionFactor = 0.75;
+                    let attemptedScale = initialScale;
+                    let attemptedFormat = 'PNG';
+                    let warnedScaleReduction = false;
+                    let warnedFormatFallback = false;
+                    let lastPdfError = null;
+                    let generatedPdfBlob = null;
+
+                    while (attemptedScale >= minScale) {
+                        const snapshot = await this.captureExportSnapshot({ desiredScale: attemptedScale });
+                        if (snapshot.isBlankSnapshot) {
+                            this.notifications.show('Blank graph has no drawable snapshot; exported empty PDF page instead.', 'warning');
+                        }
+
+                        const normalizedImage = await this.normalizeSnapshotForPdf(snapshot.pngDataUrl, null, {
+                            preferredFormat: attemptedFormat,
+                            maxPixelCount: attemptedFormat === 'JPEG' ? 16_000_000 : Infinity,
+                            maxDimension: attemptedFormat === 'JPEG' ? 6000 : Infinity,
+                            jpegQuality: 0.88
+                        });
+
+                        const container = snapshot.rect ? snapshot.rect : this.cy.container();
+                        const containerWidth = container ? container.width || container.clientWidth || 0 : 0;
+                        const containerHeight = container ? container.height || container.clientHeight || 0 : 0;
+                        const containerRatio = containerWidth && containerHeight
+                            ? containerWidth / containerHeight
+                            : 1;
+
+                        const orientation = containerRatio >= 1 ? 'landscape' : 'portrait';
+                        const pdfDoc = new window.jspdf.jsPDF({ orientation });
+                        const pageWidth = pdfDoc.internal.pageSize.getWidth();
+                        const pageHeight = pdfDoc.internal.pageSize.getHeight();
+
+                        const imgWidth = Math.max(1, normalizedImage.width || Math.round(snapshot.boundsWidth * snapshot.scale));
+                        const imgHeight = Math.max(1, normalizedImage.height || Math.round(snapshot.boundsHeight * snapshot.scale));
+                        const imageRatio = imgWidth / imgHeight;
+
+                        let renderWidth = pageWidth;
+                        let renderHeight = renderWidth / imageRatio;
+
+                        if (renderHeight > pageHeight) {
+                            renderHeight = pageHeight;
+                            renderWidth = renderHeight * imageRatio;
+                        }
+
+                        const offsetX = (pageWidth - renderWidth) / 2;
+                        const offsetY = (pageHeight - renderHeight) / 2;
+
+                        try {
+                            pdfDoc.addImage(normalizedImage.dataUrl, normalizedImage.format, offsetX, offsetY, renderWidth, renderHeight);
+                            generatedPdfBlob = pdfDoc.output('blob');
+
+                            if (normalizedImage.wasResized && !warnedScaleReduction) {
+                                this.notifications.show(
+                                    `PDF export image was resized to ${imgWidth}x${imgHeight} for compatibility.`,
+                                    'warning'
+                                );
+                                warnedScaleReduction = true;
+                            }
+                            break;
+                        } catch (error) {
+                            lastPdfError = error;
+                            const message = error && error.message ? error.message : '';
+                            const isSizeRelated = error instanceof RangeError
+                                || /invalid string length|addimage|png|out of memory|too large/i.test(message);
+
+                            if (!isSizeRelated) {
+                                throw error;
+                            }
+
+                            if (attemptedFormat === 'PNG') {
+                                attemptedFormat = 'JPEG';
+                                if (!warnedFormatFallback) {
+                                    this.notifications.show('PDF export fell back to JPEG image encoding to avoid size limits.', 'warning');
+                                    warnedFormatFallback = true;
+                                }
+                                continue;
+                            }
+
+                            const nextScale = attemptedScale * scaleReductionFactor;
+                            if (nextScale < minScale) {
+                                break;
+                            }
+
+                            this.notifications.show(
+                                `PDF export scale reduced from ${attemptedScale.toFixed(2)}x to ${nextScale.toFixed(2)}x due to image size limits.`,
+                                'warning'
+                            );
+                            attemptedScale = nextScale;
+                            attemptedFormat = 'PNG';
+                        }
                     }
-                    const normalizedImage = await this.normalizeSnapshotForPdf(snapshot.pngDataUrl);
 
-                    const container = snapshot.rect ? snapshot.rect : this.cy.container();
-                    const containerWidth = container ? container.width || container.clientWidth || 0 : 0;
-                    const containerHeight = container ? container.height || container.clientHeight || 0 : 0;
-                    const containerRatio = containerWidth && containerHeight
-                        ? containerWidth / containerHeight
-                        : 1;
-
-                    const orientation = containerRatio >= 1 ? 'landscape' : 'portrait';
-                    const pdfDoc = new window.jspdf.jsPDF({ orientation });
-
-                    const pageWidth = pdfDoc.internal.pageSize.getWidth();
-                    const pageHeight = pdfDoc.internal.pageSize.getHeight();
-
-                    const imgWidth = Math.max(1, Math.round(snapshot.boundsWidth * snapshot.scale));
-                    const imgHeight = Math.max(1, Math.round(snapshot.boundsHeight * snapshot.scale));
-                    const imageRatio = imgWidth / imgHeight;
-
-                    let renderWidth = pageWidth;
-                    let renderHeight = renderWidth / imageRatio;
-
-                    if (renderHeight > pageHeight) {
-                        renderHeight = pageHeight;
-                        renderWidth = renderHeight * imageRatio;
+                    if (!generatedPdfBlob) {
+                        const message = lastPdfError && lastPdfError.message ? lastPdfError.message : 'Image exceeded PDF export limits.';
+                        throw new Error(`Unable to export PDF after reducing scale to ${attemptedScale.toFixed(2)}x and trying PNG/JPEG. ${message}`);
                     }
 
-                    const offsetX = (pageWidth - renderWidth) / 2;
-                    const offsetY = (pageHeight - renderHeight) / 2;
-
-                    pdfDoc.addImage(normalizedImage.dataUrl, normalizedImage.format, offsetX, offsetY, renderWidth, renderHeight);
-
-                    data = pdfDoc.output('blob');
+                    data = generatedPdfBlob;
                     filename = `graph-export-${Date.now()}.pdf`;
                     mimeType = 'application/pdf';
                     break;
