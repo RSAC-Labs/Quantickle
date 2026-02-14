@@ -4548,7 +4548,7 @@ class FileManagerModule {
             }
 
             const cached = this._imagePreloadCache.get(url);
-            if (cached && (cached.loaded || cached.failed)) {
+            if (cached && cached.loaded) {
                 return;
             }
 
@@ -4580,7 +4580,7 @@ class FileManagerModule {
                 img.src = url;
             });
 
-            this._imagePreloadCache.set(url, { loaded: false, promise });
+            this._imagePreloadCache.set(url, { loaded: false, failed: false, promise });
             promises.push(promise);
         });
 
@@ -4604,6 +4604,33 @@ class FileManagerModule {
         }
     }
 
+    async waitForCytoscapeRender(timeoutMs = 350) {
+        if (!this.cy || typeof this.cy.one !== 'function') {
+            return;
+        }
+
+        await new Promise(resolve => {
+            let settled = false;
+            const finalize = () => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                clearTimeout(timeoutId);
+                resolve();
+            };
+
+            const timeoutId = setTimeout(finalize, timeoutMs);
+            this.cy.one('render', finalize);
+
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(finalize);
+                });
+            }
+        });
+    }
+
     async captureExportSnapshot({ desiredScale = 2, backgroundColor = '#ffffff', onError } = {}) {
         const markNotifiedError = onError || (message => this.markExportError(message));
 
@@ -4620,9 +4647,11 @@ class FileManagerModule {
         const scaleReductionFactor = 0.75;
 
         const exportBackgroundInfo = await this.createTemporaryExportBackgroundContainer();
+        await this.waitForCytoscapeRender();
 
         try {
             await this.preloadBackgroundImagesForExport();
+            await this.waitForCytoscapeRender();
 
             const container = typeof this.cy.container === 'function' ? this.cy.container() : null;
             if (!container) {
