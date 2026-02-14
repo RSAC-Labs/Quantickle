@@ -4659,17 +4659,9 @@ class FileManagerModule {
                 };
             }
 
-            const boundsWidth = rect && Number.isFinite(rect.width) && rect.width > 0
-                ? rect.width
-                : (this.cy.width ? this.cy.width() : 0);
-
-            const boundsHeight = rect && Number.isFinite(rect.height) && rect.height > 0
-                ? rect.height
-                : (this.cy.height ? this.cy.height() : 0);
-
-            if (!boundsWidth || !boundsHeight) {
-                throw markNotifiedError('Unable to determine graph dimensions for export.');
-            }
+            const boundsWidth = renderedBounds.w;
+            const boundsHeight = renderedBounds.h;
+            const restoreExcludedElements = this.prepareExcludedElementsForExport(exportElements);
 
             const originalZoom = typeof this.cy.zoom === 'function' ? this.cy.zoom() : null;
             const originalPan = typeof this.cy.pan === 'function' ? this.cy.pan() : null;
@@ -4680,13 +4672,9 @@ class FileManagerModule {
             let lastError = null;
 
             try {
-                if (typeof this.cy.fit === 'function') {
-                    this.cy.fit(exportElements, 40);
-                }
-
                 while (attemptedScale >= minScale) {
                     try {
-                        const candidate = this.cy.png({ full: false, scale: attemptedScale, bg: backgroundColor });
+                        const candidate = this.cy.png({ full: true, scale: attemptedScale, bg: backgroundColor });
 
                         if (!candidate || (typeof candidate === 'string' && !candidate.trim())) {
                             throw new Error('Failed to capture graph snapshot.');
@@ -4709,9 +4697,8 @@ class FileManagerModule {
                     }
                 }
             } finally {
-                if (Number.isFinite(originalZoom) && originalPan && Number.isFinite(originalPan.x) && Number.isFinite(originalPan.y)) {
-                    this.cy.zoom(originalZoom);
-                    this.cy.pan({ x: originalPan.x, y: originalPan.y });
+                if (typeof restoreExcludedElements === 'function') {
+                    restoreExcludedElements();
                 }
             }
 
@@ -4801,6 +4788,53 @@ class FileManagerModule {
         }
 
         return filtered;
+    }
+
+    prepareExcludedElementsForExport(exportElements) {
+        if (!this.cy || typeof this.cy.elements !== 'function' || !exportElements) {
+            return () => {};
+        }
+
+        const preservePrefix = 'export-bg-';
+        const includedIds = new Set();
+        if (typeof exportElements.forEach === 'function') {
+            exportElements.forEach(ele => {
+                if (ele && typeof ele.id === 'function') {
+                    includedIds.add(ele.id());
+                }
+            });
+        }
+
+        const excludedElements = this.cy.elements().filter(ele => {
+            if (!ele || typeof ele.id !== 'function') {
+                return false;
+            }
+
+            const id = String(ele.id() || '');
+            if (!id) {
+                return false;
+            }
+
+            if (id.startsWith(preservePrefix)) {
+                return false;
+            }
+
+            return !includedIds.has(id);
+        });
+
+        if (!excludedElements || !excludedElements.length) {
+            return () => {};
+        }
+
+        this.cy.batch(() => {
+            excludedElements.style('display', 'none');
+        });
+
+        return () => {
+            this.cy.batch(() => {
+                excludedElements.removeStyle('display');
+            });
+        };
     }
 
     async getCurrentBackgroundImageForExport() {
@@ -4915,7 +4949,7 @@ class FileManagerModule {
             return null;
         }
 
-        const padding = 40;
+        const padding = 0;
         const width = Math.max(1, (bounds.x2 - bounds.x1) + (padding * 2));
         const height = Math.max(1, (bounds.y2 - bounds.y1) + (padding * 2));
         const centerX = ((bounds.x1 + bounds.x2) / 2);
