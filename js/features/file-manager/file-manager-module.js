@@ -4632,16 +4632,11 @@ class FileManagerModule {
                 ? container.getBoundingClientRect()
                 : { width: this.cy.width ? this.cy.width() : 0, height: this.cy.height ? this.cy.height() : 0 };
 
-            const elements = typeof this.cy.elements === 'function' ? this.cy.elements() : null;
             const exportElements = this.getFilteredExportElements();
             const hasVisibleElements = !!(exportElements && typeof exportElements.length === 'number' && exportElements.length > 0);
             const renderedBounds = exportElements && typeof exportElements.renderedBoundingBox === 'function'
                 ? exportElements.renderedBoundingBox({ includeOverlays: false, includeEdges: true, includeLabels: true })
                 : null;
-            const fullRenderedBounds = elements && typeof elements.renderedBoundingBox === 'function'
-                ? elements.renderedBoundingBox({ includeOverlays: false, includeEdges: true, includeLabels: true })
-                : renderedBounds;
-
             const hasDrawableBounds = !!(
                 renderedBounds
                 && Number.isFinite(renderedBounds.w)
@@ -4664,58 +4659,59 @@ class FileManagerModule {
                 };
             }
 
-            const boundsWidth = renderedBounds && Number.isFinite(renderedBounds.w) && renderedBounds.w > 0
-                ? renderedBounds.w
-                : rect && Number.isFinite(rect.width) && rect.width > 0
-                    ? rect.width
-                    : (this.cy.width ? this.cy.width() : 0);
+            const boundsWidth = rect && Number.isFinite(rect.width) && rect.width > 0
+                ? rect.width
+                : (this.cy.width ? this.cy.width() : 0);
 
-            const boundsHeight = renderedBounds && Number.isFinite(renderedBounds.h) && renderedBounds.h > 0
-                ? renderedBounds.h
-                : rect && Number.isFinite(rect.height) && rect.height > 0
-                    ? rect.height
-                    : (this.cy.height ? this.cy.height() : 0);
+            const boundsHeight = rect && Number.isFinite(rect.height) && rect.height > 0
+                ? rect.height
+                : (this.cy.height ? this.cy.height() : 0);
 
             if (!boundsWidth || !boundsHeight) {
                 throw markNotifiedError('Unable to determine graph dimensions for export.');
             }
+
+            const originalZoom = typeof this.cy.zoom === 'function' ? this.cy.zoom() : null;
+            const originalPan = typeof this.cy.pan === 'function' ? this.cy.pan() : null;
 
             let pngDataUrl;
             let attemptedScale = scale;
             let scaleUsed = scale;
             let lastError = null;
 
-            while (attemptedScale >= minScale) {
-                try {
-                    const candidate = this.cy.png({ full: true, scale: attemptedScale, bg: backgroundColor });
+            try {
+                if (typeof this.cy.fit === 'function') {
+                    this.cy.fit(exportElements, 40);
+                }
 
-                    if (!candidate || (typeof candidate === 'string' && !candidate.trim())) {
-                        throw new Error('Failed to capture graph snapshot.');
-                    }
+                while (attemptedScale >= minScale) {
+                    try {
+                        const candidate = this.cy.png({ full: false, scale: attemptedScale, bg: backgroundColor });
 
-                    if (typeof candidate !== 'string' || !candidate.startsWith('data:image/')) {
-                        throw new Error('Failed to capture a valid graph image snapshot.');
-                    }
+                        if (!candidate || (typeof candidate === 'string' && !candidate.trim())) {
+                            throw new Error('Failed to capture graph snapshot.');
+                        }
 
-                    const croppedCandidate = await this.cropSnapshotToBounds({
-                        pngDataUrl: candidate,
-                        fullBounds: fullRenderedBounds,
-                        targetBounds: renderedBounds,
-                        scale: attemptedScale,
-                        fallbackWidth: rect && Number.isFinite(rect.width) ? rect.width : 0,
-                        fallbackHeight: rect && Number.isFinite(rect.height) ? rect.height : 0
-                    });
+                        if (typeof candidate !== 'string' || !candidate.startsWith('data:image/')) {
+                            throw new Error('Failed to capture a valid graph image snapshot.');
+                        }
 
-                    pngDataUrl = croppedCandidate;
-                    scaleUsed = attemptedScale;
-                    break;
-                } catch (err) {
-                    lastError = err;
-                    const nextScale = attemptedScale * scaleReductionFactor;
-                    if (nextScale < minScale) {
+                        pngDataUrl = candidate;
+                        scaleUsed = attemptedScale;
                         break;
+                    } catch (err) {
+                        lastError = err;
+                        const nextScale = attemptedScale * scaleReductionFactor;
+                        if (nextScale < minScale) {
+                            break;
+                        }
+                        attemptedScale = nextScale;
                     }
-                    attemptedScale = nextScale;
+                }
+            } finally {
+                if (Number.isFinite(originalZoom) && originalPan && Number.isFinite(originalPan.x) && Number.isFinite(originalPan.y)) {
+                    this.cy.zoom(originalZoom);
+                    this.cy.pan({ x: originalPan.x, y: originalPan.y });
                 }
             }
 
@@ -4738,8 +4734,8 @@ class FileManagerModule {
                 rect,
                 boundsWidth,
                 boundsHeight,
-                originX: renderedBounds && Number.isFinite(renderedBounds.x1) ? renderedBounds.x1 : 0,
-                originY: renderedBounds && Number.isFinite(renderedBounds.y1) ? renderedBounds.y1 : 0,
+                originX: 0,
+                originY: 0,
                 isBlankSnapshot: false
             };
         } finally {
@@ -4805,81 +4801,6 @@ class FileManagerModule {
         }
 
         return filtered;
-    }
-
-    async cropSnapshotToBounds({ pngDataUrl, fullBounds, targetBounds, scale, fallbackWidth = 0, fallbackHeight = 0 } = {}) {
-        if (typeof document === 'undefined' || !pngDataUrl || typeof pngDataUrl !== 'string') {
-            return pngDataUrl;
-        }
-
-        const hasBounds = bounds => !!(
-            bounds
-            && Number.isFinite(bounds.x1)
-            && Number.isFinite(bounds.y1)
-            && Number.isFinite(bounds.w)
-            && Number.isFinite(bounds.h)
-            && bounds.w > 0
-            && bounds.h > 0
-        );
-
-        if (!hasBounds(fullBounds) || !hasBounds(targetBounds)) {
-            return pngDataUrl;
-        }
-
-        const snapshot = await this.loadImageFromDataUrl(pngDataUrl);
-        if (!snapshot) {
-            return pngDataUrl;
-        }
-
-        const exportScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
-        const cropX = Math.max(0, Math.round((targetBounds.x1 - fullBounds.x1) * exportScale));
-        const cropY = Math.max(0, Math.round((targetBounds.y1 - fullBounds.y1) * exportScale));
-        const cropWidth = Math.max(1, Math.round(targetBounds.w * exportScale));
-        const cropHeight = Math.max(1, Math.round(targetBounds.h * exportScale));
-
-        const clampedWidth = Math.max(1, Math.min(snapshot.width - cropX, cropWidth));
-        const clampedHeight = Math.max(1, Math.min(snapshot.height - cropY, cropHeight));
-
-        const fallbackW = Math.max(1, Math.round((Number.isFinite(fallbackWidth) ? fallbackWidth : 0) * exportScale));
-        const fallbackH = Math.max(1, Math.round((Number.isFinite(fallbackHeight) ? fallbackHeight : 0) * exportScale));
-        const shouldSkipCrop = (
-            cropX === 0
-            && cropY === 0
-            && (Math.abs(clampedWidth - snapshot.width) <= 1 || clampedWidth >= snapshot.width)
-            && (Math.abs(clampedHeight - snapshot.height) <= 1 || clampedHeight >= snapshot.height)
-        ) || (
-            snapshot.width <= fallbackW
-            && snapshot.height <= fallbackH
-        );
-
-        if (shouldSkipCrop) {
-            return pngDataUrl;
-        }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = clampedWidth;
-        canvas.height = clampedHeight;
-        const context = canvas.getContext('2d');
-
-        if (!context || typeof context.drawImage !== 'function') {
-            return pngDataUrl;
-        }
-
-        context.drawImage(snapshot, cropX, cropY, clampedWidth, clampedHeight, 0, 0, clampedWidth, clampedHeight);
-        return canvas.toDataURL('image/png');
-    }
-
-    loadImageFromDataUrl(dataUrl) {
-        return new Promise(resolve => {
-            try {
-                const img = new Image();
-                img.onload = () => resolve(img);
-                img.onerror = () => resolve(null);
-                img.src = dataUrl;
-            } catch (_) {
-                resolve(null);
-            }
-        });
     }
 
     async getCurrentBackgroundImageForExport() {
