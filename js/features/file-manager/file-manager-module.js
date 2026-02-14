@@ -4631,6 +4631,273 @@ class FileManagerModule {
         });
     }
 
+    cloneNodeWithInlineStyles(node, doc) {
+        if (!node || !doc) {
+            return null;
+        }
+
+        if (node.nodeType === Node.TEXT_NODE) {
+            return doc.createTextNode(node.nodeValue || '');
+        }
+
+        if (node.nodeType !== Node.ELEMENT_NODE) {
+            return null;
+        }
+
+        const clone = doc.createElement(node.tagName.toLowerCase());
+
+        if (node.attributes && node.attributes.length) {
+            Array.from(node.attributes).forEach(attr => {
+                if (!attr || !attr.name) {
+                    return;
+                }
+                clone.setAttribute(attr.name, attr.value || '');
+            });
+        }
+
+        const computedStyle = window.getComputedStyle(node);
+        if (computedStyle) {
+            const styleText = Array.from(computedStyle)
+                .map(propertyName => `${propertyName}: ${computedStyle.getPropertyValue(propertyName)};`)
+                .join(' ');
+            if (styleText) {
+                clone.setAttribute('style', styleText);
+            }
+        }
+
+        Array.from(node.childNodes || []).forEach(child => {
+            const childClone = this.cloneNodeWithInlineStyles(child, doc);
+            if (childClone) {
+                clone.appendChild(childClone);
+            }
+        });
+
+        return clone;
+    }
+
+    async renderElementToCanvas(element, width, height, offsetX = 0, offsetY = 0) {
+        if (!element || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+            return null;
+        }
+
+        const tempDocument = document.implementation.createHTMLDocument('export-callout-layer');
+        const clonedElement = this.cloneNodeWithInlineStyles(element, tempDocument);
+        if (!clonedElement) {
+            return null;
+        }
+
+        clonedElement.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+        if (Number.isFinite(offsetX) || Number.isFinite(offsetY)) {
+            const translateX = Number.isFinite(offsetX) ? offsetX : 0;
+            const translateY = Number.isFinite(offsetY) ? offsetY : 0;
+            const existingTransform = clonedElement.style.transform || '';
+            clonedElement.style.transformOrigin = 'top left';
+            clonedElement.style.transform = `translate(${translateX}px, ${translateY}px) ${existingTransform}`.trim();
+        }
+
+        const wrapper = tempDocument.createElement('div');
+        wrapper.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+        wrapper.style.width = `${width}px`;
+        wrapper.style.height = `${height}px`;
+        wrapper.style.overflow = 'hidden';
+        wrapper.style.position = 'relative';
+        wrapper.appendChild(clonedElement);
+
+        const serializedDom = new XMLSerializer().serializeToString(wrapper);
+        const svgMarkup = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <foreignObject width="100%" height="100%">${serializedDom}</foreignObject>
+</svg>`;
+
+        const blob = new Blob([svgMarkup], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+
+        try {
+            const image = await new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = () => reject(new Error('Unable to load callout overlay SVG.'));
+                img.src = url;
+            });
+
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(width));
+            canvas.height = Math.max(1, Math.round(height));
+
+            const context = canvas.getContext('2d');
+            if (!context) {
+                return null;
+            }
+
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+            return canvas;
+        } finally {
+            URL.revokeObjectURL(url);
+        }
+    }
+
+    getCalloutLayerRenderRect(layer) {
+        if (!layer || typeof layer.getBoundingClientRect !== 'function') {
+            return null;
+        }
+
+        const layerRect = layer.getBoundingClientRect();
+        const childRects = Array.from(layer.children || [])
+            .map(child => (typeof child.getBoundingClientRect === 'function' ? child.getBoundingClientRect() : null))
+            .filter(rect => rect && rect.width > 0 && rect.height > 0);
+
+        if (layerRect && layerRect.width > 0 && layerRect.height > 0) {
+            return {
+                left: layerRect.left,
+                top: layerRect.top,
+                width: layerRect.width,
+                height: layerRect.height,
+                layerRect
+            };
+        }
+
+        if (!childRects.length) {
+            return null;
+        }
+
+        const left = Math.min(...childRects.map(rect => rect.left));
+        const top = Math.min(...childRects.map(rect => rect.top));
+        const right = Math.max(...childRects.map(rect => rect.right));
+        const bottom = Math.max(...childRects.map(rect => rect.bottom));
+
+        return {
+            left,
+            top,
+            width: Math.max(1, right - left),
+            height: Math.max(1, bottom - top),
+            layerRect
+        };
+    }
+
+    findActiveCalloutLayer(container) {
+        if (!container || typeof container.querySelector !== 'function') {
+            return null;
+        }
+
+        const owner = container.parentElement || container;
+        const ownerCandidates = owner && typeof owner.querySelectorAll === 'function'
+            ? Array.from(owner.querySelectorAll('.text-callout-layer'))
+            : [];
+
+        const isRenderableLayer = layer => {
+            if (!layer || !layer.isConnected) {
+                return false;
+            }
+
+            if (!(layer.childElementCount > 0 || (layer.textContent && layer.textContent.trim()))) {
+                return false;
+            }
+
+            return !!this.getCalloutLayerRenderRect(layer);
+        };
+
+        const ownerLayer = ownerCandidates.find(isRenderableLayer);
+        if (ownerLayer) {
+            return ownerLayer;
+        }
+
+        const doc = container.ownerDocument || document;
+        const fallbackLayer = doc.querySelector('.text-callout-layer[data-callout-fallback="true"]');
+        if (isRenderableLayer(fallbackLayer)) {
+            return fallbackLayer;
+        }
+
+        return null;
+    }
+
+    async composeSnapshotWithCalloutLayer(basePngDataUrl, options = {}) {
+        const {
+            container,
+            scaleX = 1,
+            scaleY = 1,
+            onWarning
+        } = options;
+
+        if (!basePngDataUrl || !container) {
+            return basePngDataUrl;
+        }
+
+        const notifyWarning = typeof onWarning === 'function'
+            ? onWarning
+            : message => this.notifications.show(message, 'warning');
+
+        try {
+            const calloutLayer = this.findActiveCalloutLayer(container);
+            if (!calloutLayer) {
+                return basePngDataUrl;
+            }
+
+            const containerRect = container.getBoundingClientRect();
+            const renderRect = this.getCalloutLayerRenderRect(calloutLayer);
+            if (!(containerRect.width > 0 && containerRect.height > 0 && renderRect && renderRect.width > 0 && renderRect.height > 0)) {
+                return basePngDataUrl;
+            }
+
+            const layerRect = renderRect.layerRect || calloutLayer.getBoundingClientRect();
+            const offsetInLayerX = -(renderRect.left - layerRect.left);
+            const offsetInLayerY = -(renderRect.top - layerRect.top);
+
+            const renderedCalloutCanvas = await this.renderElementToCanvas(
+                calloutLayer,
+                renderRect.width,
+                renderRect.height,
+                offsetInLayerX,
+                offsetInLayerY
+            );
+
+            if (!renderedCalloutCanvas) {
+                throw new Error('Unable to render callout overlay canvas.');
+            }
+
+            const baseImage = await new Promise((resolve, reject) => {
+                const image = new Image();
+                image.onload = () => resolve(image);
+                image.onerror = () => reject(new Error('Unable to load graph snapshot image for composition.'));
+                image.src = basePngDataUrl;
+            });
+
+            const outputCanvas = document.createElement('canvas');
+            outputCanvas.width = Math.max(1, baseImage.naturalWidth || baseImage.width || 1);
+            outputCanvas.height = Math.max(1, baseImage.naturalHeight || baseImage.height || 1);
+
+            const context = outputCanvas.getContext('2d');
+            if (!context) {
+                throw new Error('Unable to create snapshot composition canvas context.');
+            }
+
+            context.drawImage(baseImage, 0, 0, outputCanvas.width, outputCanvas.height);
+
+            const offsetX = (renderRect.left - containerRect.left) * scaleX;
+            const offsetY = (renderRect.top - containerRect.top) * scaleY;
+            const targetWidth = renderRect.width * scaleX;
+            const targetHeight = renderRect.height * scaleY;
+
+            context.drawImage(
+                renderedCalloutCanvas,
+                0,
+                0,
+                renderedCalloutCanvas.width,
+                renderedCalloutCanvas.height,
+                offsetX,
+                offsetY,
+                targetWidth,
+                targetHeight
+            );
+
+            return outputCanvas.toDataURL('image/png');
+        } catch (error) {
+            notifyWarning('Callout overlay could not be rendered for export. The exported file includes only the base graph.');
+            return basePngDataUrl;
+        }
+    }
+
     async captureExportSnapshot({ desiredScale = 2, backgroundColor = '#ffffff', onError } = {}) {
         const markNotifiedError = onError || (message => this.markExportError(message));
 
@@ -4744,8 +5011,16 @@ class FileManagerModule {
                 );
             }
 
+            const scaleX = rect && rect.width > 0 ? (1 / rect.width) * (Math.max(1, Math.round(rect.width * scaleUsed))) : scaleUsed;
+            const scaleY = rect && rect.height > 0 ? (1 / rect.height) * (Math.max(1, Math.round(rect.height * scaleUsed))) : scaleUsed;
+            const composedPngDataUrl = await this.composeSnapshotWithCalloutLayer(pngDataUrl, {
+                container,
+                scaleX,
+                scaleY
+            });
+
             return {
-                pngDataUrl,
+                pngDataUrl: composedPngDataUrl,
                 scale: scaleUsed,
                 renderedBounds,
                 rect,
