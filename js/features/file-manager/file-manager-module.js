@@ -4749,8 +4749,8 @@ class FileManagerModule {
         const {
             preferredFormat = 'PNG',
             jpegQuality = 0.85,
-            maxPixelCount = 8_000_000,
-            maxDimension = 4096
+            maxPixelCount = Infinity,
+            maxDimension = Infinity
         } = options;
 
         const toPdfFormat = (mimeType = '') => {
@@ -4820,8 +4820,8 @@ class FileManagerModule {
             const sourceWidth = Math.max(1, imageBitmap.width || 1);
             const sourceHeight = Math.max(1, imageBitmap.height || 1);
 
-            const maxPixels = Number.isFinite(maxPixelCount) && maxPixelCount > 0 ? maxPixelCount : 8_000_000;
-            const maxEdge = Number.isFinite(maxDimension) && maxDimension > 0 ? maxDimension : 4096;
+            const maxPixels = Number.isFinite(maxPixelCount) && maxPixelCount > 0 ? maxPixelCount : Infinity;
+            const maxEdge = Number.isFinite(maxDimension) && maxDimension > 0 ? maxDimension : Infinity;
             const pixelRatio = Math.min(1, Math.sqrt(maxPixels / (sourceWidth * sourceHeight)));
             const dimensionRatio = Math.min(1, maxEdge / sourceWidth, maxEdge / sourceHeight);
             const resizeRatio = Math.min(pixelRatio, dimensionRatio);
@@ -4904,7 +4904,7 @@ class FileManagerModule {
                         return;
                     }
 
-                    const initialScale = 2;
+                    const initialScale = 4;
                     const minScale = 0.5;
                     const scaleReductionFactor = 0.75;
                     let attemptedScale = initialScale;
@@ -4922,9 +4922,9 @@ class FileManagerModule {
 
                         const normalizedImage = await this.normalizeSnapshotForPdf(snapshot.pngDataUrl, null, {
                             preferredFormat: attemptedFormat,
-                            maxPixelCount: attemptedFormat === 'JPEG' ? 10_000_000 : 8_000_000,
-                            maxDimension: attemptedFormat === 'JPEG' ? 5000 : 4096,
-                            jpegQuality: 0.82
+                            maxPixelCount: attemptedFormat === 'JPEG' ? 16_000_000 : Infinity,
+                            maxDimension: attemptedFormat === 'JPEG' ? 6000 : Infinity,
+                            jpegQuality: 0.88
                         });
 
                         const container = snapshot.rect ? snapshot.rect : this.cy.container();
