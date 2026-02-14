@@ -4738,6 +4738,237 @@ class FileManagerModule {
         }
     }
 
+
+    canvasHasVisiblePixels(canvas, alphaThreshold = 1) {
+        if (!canvas || typeof canvas.getContext !== 'function') {
+            return false;
+        }
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) {
+            return false;
+        }
+        const width = Math.max(1, Math.round(canvas.width || 0));
+        const height = Math.max(1, Math.round(canvas.height || 0));
+        if (!(width > 0 && height > 0)) {
+            return false;
+        }
+        try {
+            const imageData = context.getImageData(0, 0, width, height);
+            const data = imageData && imageData.data ? imageData.data : null;
+            if (!data || !data.length) {
+                return false;
+            }
+            const threshold = Number.isFinite(alphaThreshold) ? Math.max(0, alphaThreshold) : 1;
+            for (let i = 3; i < data.length; i += 4) {
+                if (data[i] > threshold) {
+                    return true;
+                }
+            }
+        } catch (error) {
+            return false;
+        }
+        return false;
+    }
+
+    parsePixelValue(value, fallback = 0) {
+        if (typeof value === 'number' && Number.isFinite(value)) {
+            return value;
+        }
+        if (typeof value === 'string') {
+            const parsed = parseFloat(value);
+            if (Number.isFinite(parsed)) {
+                return parsed;
+            }
+        }
+        return fallback;
+    }
+
+    parseCssColor(value, fallback = 'rgba(0,0,0,0)') {
+        if (typeof value !== 'string') {
+            return fallback;
+        }
+        const trimmed = value.trim();
+        return trimmed || fallback;
+    }
+
+    drawRoundedRectPath(context, x, y, width, height, radius = 0) {
+        const safeWidth = Math.max(0, width);
+        const safeHeight = Math.max(0, height);
+        const maxRadius = Math.min(safeWidth / 2, safeHeight / 2);
+        const r = Math.max(0, Math.min(radius, maxRadius));
+
+        context.beginPath();
+        context.moveTo(x + r, y);
+        context.lineTo(x + safeWidth - r, y);
+        context.quadraticCurveTo(x + safeWidth, y, x + safeWidth, y + r);
+        context.lineTo(x + safeWidth, y + safeHeight - r);
+        context.quadraticCurveTo(x + safeWidth, y + safeHeight, x + safeWidth - r, y + safeHeight);
+        context.lineTo(x + r, y + safeHeight);
+        context.quadraticCurveTo(x, y + safeHeight, x, y + safeHeight - r);
+        context.lineTo(x, y + r);
+        context.quadraticCurveTo(x, y, x + r, y);
+        context.closePath();
+    }
+
+    drawWrappedCanvasText(context, text, options = {}) {
+        if (!context || typeof text !== 'string' || !text.trim()) {
+            return 0;
+        }
+
+        const {
+            x = 0,
+            y = 0,
+            maxWidth = 100,
+            lineHeight = 16,
+            maxLines = 200
+        } = options;
+
+        const hardLines = text.replace(/\r\n?/g, '\n').split('\n');
+        const lines = [];
+
+        hardLines.forEach(hardLine => {
+            const words = hardLine.split(/\s+/).filter(Boolean);
+            if (!words.length) {
+                lines.push('');
+                return;
+            }
+
+            let currentLine = words.shift() || '';
+            words.forEach(word => {
+                const trial = `${currentLine} ${word}`.trim();
+                const trialWidth = context.measureText(trial).width;
+                if (trialWidth <= maxWidth || !currentLine) {
+                    currentLine = trial;
+                } else {
+                    lines.push(currentLine);
+                    currentLine = word;
+                }
+            });
+            lines.push(currentLine);
+        });
+
+        const truncatedLines = lines.slice(0, Math.max(1, maxLines));
+        truncatedLines.forEach((line, index) => {
+            const drawY = y + (index * lineHeight);
+            context.fillText(line, x, drawY);
+        });
+
+        return truncatedLines.length * lineHeight;
+    }
+
+    renderCalloutsByCanvasPainting(layer, renderRect, layerRect) {
+        if (!layer || !renderRect || !layerRect) {
+            return null;
+        }
+
+        const callouts = Array.from(layer.querySelectorAll('.text-callout'));
+        if (!callouts.length) {
+            return null;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(renderRect.width));
+        canvas.height = Math.max(1, Math.round(renderRect.height));
+        const context = canvas.getContext('2d');
+        if (!context) {
+            return null;
+        }
+
+        context.clearRect(0, 0, canvas.width, canvas.height);
+
+        const offsetInLayerX = renderRect.left - layerRect.left;
+        const offsetInLayerY = renderRect.top - layerRect.top;
+
+        callouts.forEach(callout => {
+            if (!callout || typeof callout.getBoundingClientRect !== 'function') {
+                return;
+            }
+
+            const rect = callout.getBoundingClientRect();
+            if (!(rect.width > 0 && rect.height > 0)) {
+                return;
+            }
+
+            const style = window.getComputedStyle(callout);
+            const titleEl = callout.querySelector('.text-callout__title');
+            const bodyEl = callout.querySelector('.text-callout__body');
+            const titleStyle = titleEl ? window.getComputedStyle(titleEl) : null;
+            const bodyStyle = bodyEl ? window.getComputedStyle(bodyEl) : null;
+
+            const drawX = rect.left - layerRect.left - offsetInLayerX;
+            const drawY = rect.top - layerRect.top - offsetInLayerY;
+
+            const borderRadius = this.parsePixelValue(style.borderRadius, 0);
+            const borderWidth = this.parsePixelValue(style.borderTopWidth, 0);
+            const bgColor = this.parseCssColor(style.backgroundColor, 'rgba(255,255,255,1)');
+            const borderColor = this.parseCssColor(style.borderTopColor, 'rgba(0,0,0,0)');
+
+            context.save();
+            this.drawRoundedRectPath(context, drawX, drawY, rect.width, rect.height, borderRadius);
+            context.fillStyle = bgColor;
+            context.fill();
+            if (borderWidth > 0) {
+                context.strokeStyle = borderColor;
+                context.lineWidth = borderWidth;
+                context.stroke();
+            }
+            context.restore();
+
+            const paddingLeft = this.parsePixelValue(style.paddingLeft, 0);
+            const paddingRight = this.parsePixelValue(style.paddingRight, 0);
+            const paddingTop = this.parsePixelValue(style.paddingTop, 0);
+
+            const contentX = drawX + paddingLeft;
+            let contentY = drawY + paddingTop;
+            const textMaxWidth = Math.max(10, rect.width - paddingLeft - paddingRight);
+
+            if (titleEl && titleStyle) {
+                const titleText = (titleEl.textContent || '').trim();
+                if (titleText) {
+                    const titleFontSize = this.parsePixelValue(titleStyle.fontSize, 14);
+                    const titleLineHeight = this.parsePixelValue(titleStyle.lineHeight, titleFontSize * 1.2);
+                    const titleWeight = titleStyle.fontWeight || '600';
+                    const titleFamily = titleStyle.fontFamily || style.fontFamily || 'sans-serif';
+                    context.save();
+                    context.fillStyle = this.parseCssColor(titleStyle.color, '#1f2937');
+                    context.font = `${titleWeight} ${titleFontSize}px ${titleFamily}`;
+                    const usedHeight = this.drawWrappedCanvasText(context, titleText, {
+                        x: contentX,
+                        y: contentY + titleLineHeight,
+                        maxWidth: textMaxWidth,
+                        lineHeight: titleLineHeight,
+                        maxLines: 10
+                    });
+                    context.restore();
+                    contentY += usedHeight + Math.max(2, this.parsePixelValue(titleStyle.marginBottom, 6));
+                }
+            }
+
+            if (bodyEl && bodyStyle) {
+                const bodyText = (bodyEl.textContent || '').trim();
+                if (bodyText) {
+                    const bodyFontSize = this.parsePixelValue(bodyStyle.fontSize, 12);
+                    const bodyLineHeight = this.parsePixelValue(bodyStyle.lineHeight, bodyFontSize * 1.4);
+                    const bodyWeight = bodyStyle.fontWeight || style.fontWeight || '400';
+                    const bodyFamily = bodyStyle.fontFamily || style.fontFamily || 'sans-serif';
+                    context.save();
+                    context.fillStyle = this.parseCssColor(bodyStyle.color, style.color || '#111827');
+                    context.font = `${bodyWeight} ${bodyFontSize}px ${bodyFamily}`;
+                    this.drawWrappedCanvasText(context, bodyText, {
+                        x: contentX,
+                        y: contentY + bodyLineHeight,
+                        maxWidth: textMaxWidth,
+                        lineHeight: bodyLineHeight,
+                        maxLines: 200
+                    });
+                    context.restore();
+                }
+            }
+        });
+
+        return canvas;
+    }
+
     getCalloutLayerRenderRect(layer) {
         if (!layer || typeof layer.getBoundingClientRect !== 'function') {
             return null;
@@ -4840,6 +5071,8 @@ class FileManagerModule {
             container,
             scaleX = 1,
             scaleY = 1,
+            renderedOriginX = 0,
+            renderedOriginY = 0,
             onWarning
         } = options;
 
@@ -4881,13 +5114,21 @@ class FileManagerModule {
             const offsetInLayerX = -(renderRect.left - layerRect.left);
             const offsetInLayerY = -(renderRect.top - layerRect.top);
 
-            const renderedCalloutCanvas = await this.renderElementToCanvas(
+            let renderedCalloutCanvas = await this.renderElementToCanvas(
                 calloutLayer,
                 renderRect.width,
                 renderRect.height,
                 offsetInLayerX,
                 offsetInLayerY
             );
+
+            if (renderedCalloutCanvas && !this.canvasHasVisiblePixels(renderedCalloutCanvas)) {
+                renderedCalloutCanvas = null;
+            }
+
+            if (!renderedCalloutCanvas) {
+                renderedCalloutCanvas = this.renderCalloutsByCanvasPainting(calloutLayer, renderRect, layerRect);
+            }
 
             if (!renderedCalloutCanvas) {
                 throw new Error('Unable to render callout overlay canvas.');
@@ -4917,8 +5158,10 @@ class FileManagerModule {
             const layerOffsetY = sharedTransform
                 ? sharedTransform.layerToContainerOffsetY
                 : (layerRect.top - containerRect.top);
-            const offsetX = (layerOffsetX + (renderRect.left - layerRect.left)) * scaleX;
-            const offsetY = (layerOffsetY + (renderRect.top - layerRect.top)) * scaleY;
+            const viewportOffsetX = layerOffsetX + (renderRect.left - layerRect.left);
+            const viewportOffsetY = layerOffsetY + (renderRect.top - layerRect.top);
+            const offsetX = (viewportOffsetX - renderedOriginX) * scaleX;
+            const offsetY = (viewportOffsetY - renderedOriginY) * scaleY;
             const targetWidth = renderRect.width * scaleX;
             const targetHeight = renderRect.height * scaleY;
 
@@ -5065,12 +5308,16 @@ class FileManagerModule {
                 );
             }
 
-            const scaleX = rect && rect.width > 0 ? (1 / rect.width) * (Math.max(1, Math.round(rect.width * scaleUsed))) : scaleUsed;
-            const scaleY = rect && rect.height > 0 ? (1 / rect.height) * (Math.max(1, Math.round(rect.height * scaleUsed))) : scaleUsed;
+            const scaleX = scaleUsed;
+            const scaleY = scaleUsed;
+            const renderedOriginX = renderedBounds && Number.isFinite(renderedBounds.x1) ? renderedBounds.x1 : 0;
+            const renderedOriginY = renderedBounds && Number.isFinite(renderedBounds.y1) ? renderedBounds.y1 : 0;
             const composedSnapshot = await this.composeSnapshotWithCalloutLayer(pngDataUrl, {
                 container,
                 scaleX,
                 scaleY,
+                renderedOriginX,
+                renderedOriginY,
                 onWarning: () => {}
             });
             const composedPngDataUrl = composedSnapshot && composedSnapshot.pngDataUrl
