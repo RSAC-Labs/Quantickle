@@ -4675,7 +4675,7 @@ class FileManagerModule {
         return clone;
     }
 
-    async renderElementToCanvas(element, width, height, offsetX = 0, offsetY = 0) {
+    async renderElementToCanvas(element, width, height, offsetX = 0, offsetY = 0, rasterScaleX = 1, rasterScaleY = 1) {
         if (!element || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
             return null;
         }
@@ -4704,8 +4704,12 @@ class FileManagerModule {
         wrapper.appendChild(clonedElement);
 
         const serializedDom = new XMLSerializer().serializeToString(wrapper);
+        const safeRasterScaleX = Number.isFinite(rasterScaleX) && rasterScaleX > 0 ? rasterScaleX : 1;
+        const safeRasterScaleY = Number.isFinite(rasterScaleY) && rasterScaleY > 0 ? rasterScaleY : 1;
+        const rasterWidth = Math.max(1, Math.round(width * safeRasterScaleX));
+        const rasterHeight = Math.max(1, Math.round(height * safeRasterScaleY));
         const svgMarkup = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+<svg xmlns="http://www.w3.org/2000/svg" width="${rasterWidth}" height="${rasterHeight}" viewBox="0 0 ${width} ${height}">
   <foreignObject width="100%" height="100%">${serializedDom}</foreignObject>
 </svg>`;
 
@@ -4721,8 +4725,8 @@ class FileManagerModule {
             });
 
             const canvas = document.createElement('canvas');
-            canvas.width = Math.max(1, Math.round(width));
-            canvas.height = Math.max(1, Math.round(height));
+            canvas.width = rasterWidth;
+            canvas.height = rasterHeight;
 
             const context = canvas.getContext('2d');
             if (!context) {
@@ -4856,7 +4860,7 @@ class FileManagerModule {
         return truncatedLines.length * lineHeight;
     }
 
-    renderCalloutsByCanvasPainting(layer, renderRect, layerRect) {
+    renderCalloutsByCanvasPainting(layer, renderRect, layerRect, rasterScaleX = 1, rasterScaleY = 1) {
         if (!layer || !renderRect || !layerRect) {
             return null;
         }
@@ -4866,15 +4870,18 @@ class FileManagerModule {
             return null;
         }
 
+        const safeRasterScaleX = Number.isFinite(rasterScaleX) && rasterScaleX > 0 ? rasterScaleX : 1;
+        const safeRasterScaleY = Number.isFinite(rasterScaleY) && rasterScaleY > 0 ? rasterScaleY : 1;
         const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, Math.round(renderRect.width));
-        canvas.height = Math.max(1, Math.round(renderRect.height));
+        canvas.width = Math.max(1, Math.round(renderRect.width * safeRasterScaleX));
+        canvas.height = Math.max(1, Math.round(renderRect.height * safeRasterScaleY));
         const context = canvas.getContext('2d');
         if (!context) {
             return null;
         }
 
         context.clearRect(0, 0, canvas.width, canvas.height);
+        context.setTransform(safeRasterScaleX, 0, 0, safeRasterScaleY, 0, 0);
 
         const offsetInLayerX = renderRect.left - layerRect.left;
         const offsetInLayerY = renderRect.top - layerRect.top;
@@ -5116,26 +5123,6 @@ class FileManagerModule {
             const offsetInLayerX = -(renderRect.left - layerRect.left);
             const offsetInLayerY = -(renderRect.top - layerRect.top);
 
-            let renderedCalloutCanvas = await this.renderElementToCanvas(
-                calloutLayer,
-                renderRect.width,
-                renderRect.height,
-                offsetInLayerX,
-                offsetInLayerY
-            );
-
-            if (renderedCalloutCanvas && !this.canvasHasVisiblePixels(renderedCalloutCanvas)) {
-                renderedCalloutCanvas = null;
-            }
-
-            if (!renderedCalloutCanvas) {
-                renderedCalloutCanvas = this.renderCalloutsByCanvasPainting(calloutLayer, renderRect, layerRect);
-            }
-
-            if (!renderedCalloutCanvas) {
-                throw new Error('Unable to render callout overlay canvas.');
-            }
-
             const baseImage = await new Promise((resolve, reject) => {
                 const image = new Image();
                 image.onload = () => resolve(image);
@@ -5160,6 +5147,34 @@ class FileManagerModule {
             const effectiveScaleY = Number.isFinite(renderedBoundsHeight) && renderedBoundsHeight > 0
                 ? (outputCanvas.height / renderedBoundsHeight)
                 : scaleY;
+
+            let renderedCalloutCanvas = await this.renderElementToCanvas(
+                calloutLayer,
+                renderRect.width,
+                renderRect.height,
+                offsetInLayerX,
+                offsetInLayerY,
+                effectiveScaleX,
+                effectiveScaleY
+            );
+
+            if (renderedCalloutCanvas && !this.canvasHasVisiblePixels(renderedCalloutCanvas)) {
+                renderedCalloutCanvas = null;
+            }
+
+            if (!renderedCalloutCanvas) {
+                renderedCalloutCanvas = this.renderCalloutsByCanvasPainting(
+                    calloutLayer,
+                    renderRect,
+                    layerRect,
+                    effectiveScaleX,
+                    effectiveScaleY
+                );
+            }
+
+            if (!renderedCalloutCanvas) {
+                throw new Error('Unable to render callout overlay canvas.');
+            }
 
             const layerOffsetX = sharedTransform
                 ? sharedTransform.layerToContainerOffsetX
