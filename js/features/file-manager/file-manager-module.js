@@ -5071,6 +5071,8 @@ class FileManagerModule {
             container,
             scaleX = 1,
             scaleY = 1,
+            renderedOriginX = 0,
+            renderedOriginY = 0,
             onWarning
         } = options;
 
@@ -5129,10 +5131,6 @@ class FileManagerModule {
             }
 
             if (!renderedCalloutCanvas) {
-                renderedCalloutCanvas = this.renderCalloutsByCanvasPainting(calloutLayer, renderRect, layerRect);
-            }
-
-            if (!renderedCalloutCanvas) {
                 throw new Error('Unable to render callout overlay canvas.');
             }
 
@@ -5160,8 +5158,10 @@ class FileManagerModule {
             const layerOffsetY = sharedTransform
                 ? sharedTransform.layerToContainerOffsetY
                 : (layerRect.top - containerRect.top);
-            const offsetX = (layerOffsetX + (renderRect.left - layerRect.left)) * scaleX;
-            const offsetY = (layerOffsetY + (renderRect.top - layerRect.top)) * scaleY;
+            const viewportOffsetX = layerOffsetX + (renderRect.left - layerRect.left);
+            const viewportOffsetY = layerOffsetY + (renderRect.top - layerRect.top);
+            const offsetX = (viewportOffsetX - renderedOriginX) * scaleX;
+            const offsetY = (viewportOffsetY - renderedOriginY) * scaleY;
             const targetWidth = renderRect.width * scaleX;
             const targetHeight = renderRect.height * scaleY;
 
@@ -5308,12 +5308,16 @@ class FileManagerModule {
                 );
             }
 
-            const scaleX = rect && rect.width > 0 ? (1 / rect.width) * (Math.max(1, Math.round(rect.width * scaleUsed))) : scaleUsed;
-            const scaleY = rect && rect.height > 0 ? (1 / rect.height) * (Math.max(1, Math.round(rect.height * scaleUsed))) : scaleUsed;
+            const scaleX = scaleUsed;
+            const scaleY = scaleUsed;
+            const renderedOriginX = renderedBounds && Number.isFinite(renderedBounds.x1) ? renderedBounds.x1 : 0;
+            const renderedOriginY = renderedBounds && Number.isFinite(renderedBounds.y1) ? renderedBounds.y1 : 0;
             const composedSnapshot = await this.composeSnapshotWithCalloutLayer(pngDataUrl, {
                 container,
                 scaleX,
                 scaleY,
+                renderedOriginX,
+                renderedOriginY,
                 onWarning: () => {}
             });
             const composedPngDataUrl = composedSnapshot && composedSnapshot.pngDataUrl
