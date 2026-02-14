@@ -5129,6 +5129,10 @@ class FileManagerModule {
             }
 
             if (!renderedCalloutCanvas) {
+                renderedCalloutCanvas = this.renderCalloutsByCanvasPainting(calloutLayer, renderRect, layerRect);
+            }
+
+            if (!renderedCalloutCanvas) {
                 throw new Error('Unable to render callout overlay canvas.');
             }
 
