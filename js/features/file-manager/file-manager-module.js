@@ -4812,6 +4812,29 @@ class FileManagerModule {
         return null;
     }
 
+    getSharedCalloutTransform(container, layer) {
+        const calloutApi = (typeof window !== 'undefined' && window.TextCallout) ? window.TextCallout : null;
+        if (!calloutApi || typeof calloutApi.getRenderedCalloutTransform !== 'function') {
+            return null;
+        }
+        try {
+            return calloutApi.getRenderedCalloutTransform({ container, layer });
+        } catch (error) {
+            return null;
+        }
+    }
+
+    async forceCalloutLayoutRefresh() {
+        const calloutApi = (typeof window !== 'undefined' && window.TextCallout) ? window.TextCallout : null;
+        if (calloutApi && typeof calloutApi.syncViewport === 'function') {
+            calloutApi.syncViewport({ immediate: true });
+        }
+        await this.waitForCytoscapeRender();
+        if (typeof requestAnimationFrame === 'function') {
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        }
+    }
+
     async composeSnapshotWithCalloutLayer(basePngDataUrl, options = {}) {
         const {
             container,
@@ -4839,6 +4862,8 @@ class FileManagerModule {
             if (!(containerRect.width > 0 && containerRect.height > 0 && renderRect && renderRect.width > 0 && renderRect.height > 0)) {
                 return basePngDataUrl;
             }
+
+            const sharedTransform = this.getSharedCalloutTransform(container, calloutLayer);
 
             const layerRect = renderRect.layerRect || calloutLayer.getBoundingClientRect();
             const offsetInLayerX = -(renderRect.left - layerRect.left);
@@ -4874,8 +4899,14 @@ class FileManagerModule {
 
             context.drawImage(baseImage, 0, 0, outputCanvas.width, outputCanvas.height);
 
-            const offsetX = (renderRect.left - containerRect.left) * scaleX;
-            const offsetY = (renderRect.top - containerRect.top) * scaleY;
+            const layerOffsetX = sharedTransform
+                ? sharedTransform.layerToContainerOffsetX
+                : (layerRect.left - containerRect.left);
+            const layerOffsetY = sharedTransform
+                ? sharedTransform.layerToContainerOffsetY
+                : (layerRect.top - containerRect.top);
+            const offsetX = (layerOffsetX + (renderRect.left - layerRect.left)) * scaleX;
+            const offsetY = (layerOffsetY + (renderRect.top - layerRect.top)) * scaleY;
             const targetWidth = renderRect.width * scaleX;
             const targetHeight = renderRect.height * scaleY;
 
@@ -4918,6 +4949,7 @@ class FileManagerModule {
 
         try {
             await this.preloadBackgroundImagesForExport();
+            await this.forceCalloutLayoutRefresh();
             await this.waitForCytoscapeRender();
 
             const container = typeof this.cy.container === 'function' ? this.cy.container() : null;
