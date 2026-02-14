@@ -4738,6 +4738,38 @@ class FileManagerModule {
         }
     }
 
+
+    canvasHasVisiblePixels(canvas, alphaThreshold = 1) {
+        if (!canvas || typeof canvas.getContext !== 'function') {
+            return false;
+        }
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) {
+            return false;
+        }
+        const width = Math.max(1, Math.round(canvas.width || 0));
+        const height = Math.max(1, Math.round(canvas.height || 0));
+        if (!(width > 0 && height > 0)) {
+            return false;
+        }
+        try {
+            const imageData = context.getImageData(0, 0, width, height);
+            const data = imageData && imageData.data ? imageData.data : null;
+            if (!data || !data.length) {
+                return false;
+            }
+            const threshold = Number.isFinite(alphaThreshold) ? Math.max(0, alphaThreshold) : 1;
+            for (let i = 3; i < data.length; i += 4) {
+                if (data[i] > threshold) {
+                    return true;
+                }
+            }
+        } catch (error) {
+            return false;
+        }
+        return false;
+    }
+
     parsePixelValue(value, fallback = 0) {
         if (typeof value === 'number' && Number.isFinite(value)) {
             return value;
@@ -5087,6 +5119,14 @@ class FileManagerModule {
                 offsetInLayerX,
                 offsetInLayerY
             );
+
+            if (renderedCalloutCanvas && !this.canvasHasVisiblePixels(renderedCalloutCanvas)) {
+                renderedCalloutCanvas = null;
+            }
+
+            if (!renderedCalloutCanvas) {
+                renderedCalloutCanvas = this.renderCalloutsByCanvasPainting(calloutLayer, renderRect, layerRect);
+            }
 
             if (!renderedCalloutCanvas) {
                 renderedCalloutCanvas = this.renderCalloutsByCanvasPainting(calloutLayer, renderRect, layerRect);
