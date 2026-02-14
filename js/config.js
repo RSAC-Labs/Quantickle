@@ -424,6 +424,10 @@ window.QuantickleConfig = {
                 rendering: { ...defaultSettings.rendering, ...localSettings.rendering },
                 background: mergedBackground,
                 labels: { ...defaultSettings.labels, ...localSettings.labels },
+                editorSettings:
+                    localSettings.editorSettings && typeof localSettings.editorSettings === 'object'
+                        ? { ...localSettings.editorSettings }
+                        : null,
                 preferredLayout: localSettings.preferredLayout || defaultSettings.preferredLayout,
                 saved: true
             };
@@ -465,6 +469,7 @@ window.QuantickleConfig = {
             // Extract background settings from GraphAreaEditor
             if (window.GraphAreaEditor && window.GraphAreaEditor.getSettings) {
                 const gaSettings = window.GraphAreaEditor.getSettings();
+                settings.editorSettings = { ...gaSettings };
                 settings.background.backgroundColor = gaSettings.backgroundColor;
                 settings.background.backgroundImage = gaSettings.backgroundImage;
 
@@ -523,6 +528,10 @@ window.QuantickleConfig = {
             }
             
             // Apply background settings to GraphAreaEditor
+            if (settings.editorSettings && window.GraphAreaEditor && window.GraphAreaEditor.applySettings) {
+                window.GraphAreaEditor.applySettings(settings.editorSettings, { save: false });
+            }
+
             if (settings.background && window.GraphAreaEditor) {
                 this.applyBackgroundSettings(settings.background);
             }
