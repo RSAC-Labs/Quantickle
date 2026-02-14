@@ -731,10 +731,7 @@
         const appliedNodeLabelFontSize = data.baseFontSize || sharedTokens.fontSize;
         const calloutBaseFontSize = appliedNodeLabelFontSize * CALLOUT_FONT_MULTIPLIER;
 
-        const rawCalloutScale = parseFloat(node.data('calloutScale'));
-        const calloutScale = Number.isFinite(rawCalloutScale) && rawCalloutScale > 0
-            ? Math.max(CALLOUT_SCALE_MIN, Math.min(CALLOUT_SCALE_MAX, rawCalloutScale))
-            : 1;
+        const calloutScale = resolveCalloutScale(node);
 
         const rawScaleFactor = zoom * calloutScale;
         const scaleFactor = Number.isFinite(rawScaleFactor)
@@ -792,9 +789,8 @@
         const wrapperRect = (wrapperEl && typeof wrapperEl.getBoundingClientRect === 'function')
             ? wrapperEl.getBoundingClientRect()
             : null;
-        const containerRect = (containerEl && typeof containerEl.getBoundingClientRect === 'function')
-            ? containerEl.getBoundingClientRect()
-            : null;
+        const transform = getRenderedCalloutTransform({ container: containerEl, layer });
+        const containerRect = transform ? transform.containerRect : null;
         const widthCandidates = [
             wrapperRect ? wrapperRect.width : 0,
             containerRect ? containerRect.width : 0,
@@ -913,6 +909,10 @@
         rawHeight = div.offsetHeight || div.scrollHeight || (div.getBoundingClientRect().height || 0);
         measuredHeight = clampSize(rawHeight, maxHeight, approxSize.height);
         div.style.height = measuredHeight + 'px';
+        div.dataset.calloutScale = String(calloutScale);
+        const dimensionMetadata = resolveCalloutDimensionMetadata(node);
+        div.dataset.calloutDimensionZoom = String(dimensionMetadata.calloutDimensionZoom);
+        div.dataset.calloutDimensionSource = dimensionMetadata.calloutDimensionSource;
 
         let measurementValid = Number.isFinite(measuredWidth) && measuredWidth > 0
             && Number.isFinite(measuredHeight) && measuredHeight > 0;
@@ -1000,12 +1000,18 @@
             }
         });
 
-        const pos = node.renderedPosition();
-        const rect = containerRect || { left: 0, top: 0 };
-        const wrapperLeft = wrapperRect ? wrapperRect.left : 0;
-        const wrapperTop = wrapperRect ? wrapperRect.top : 0;
-        div.style.left = rect.left - wrapperLeft + pos.x - measuredWidth / 2 + 'px';
-        div.style.top  = rect.top  - wrapperTop  + pos.y - measuredHeight / 2 + 'px';
+        const mappedPosition = mapNodeCalloutToLayerPixels(node, measuredWidth, measuredHeight, transform);
+        if (mappedPosition) {
+            div.style.left = mappedPosition.left + 'px';
+            div.style.top = mappedPosition.top + 'px';
+        } else {
+            const pos = node.renderedPosition();
+            const rect = containerRect || { left: 0, top: 0 };
+            const wrapperLeft = wrapperRect ? wrapperRect.left : 0;
+            const wrapperTop = wrapperRect ? wrapperRect.top : 0;
+            div.style.left = rect.left - wrapperLeft + pos.x - measuredWidth / 2 + 'px';
+            div.style.top  = rect.top  - wrapperTop  + pos.y - measuredHeight / 2 + 'px';
+        }
 
         // If the size changed, ensure another update runs after layout settles
         if (data.lastWidth !== measuredWidth || data.lastHeight !== measuredHeight) {
@@ -1024,6 +1030,66 @@
 
     function getCyContainer() {
         return cy && typeof cy.container === 'function' ? cy.container() : null;
+    }
+
+    function parsePositiveNumber(value) {
+        const numeric = typeof value === 'number' ? value : parseFloat(value);
+        return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+    }
+
+    function resolveCalloutScale(node) {
+        if (!node || typeof node.data !== 'function') return 1;
+        const rawCalloutScale = parseFloat(node.data('calloutScale'));
+        if (!Number.isFinite(rawCalloutScale) || rawCalloutScale <= 0) return 1;
+        return Math.max(CALLOUT_SCALE_MIN, Math.min(CALLOUT_SCALE_MAX, rawCalloutScale));
+    }
+
+    function resolveCalloutDimensionMetadata(node) {
+        if (!node || typeof node.data !== 'function') {
+            return {
+                calloutDimensionZoom: DIMENSION_BASELINE_ZOOM,
+                calloutDimensionSource: `${DIMENSION_SOURCE}-normalized`
+            };
+        }
+        const dimensionZoom = parsePositiveNumber(node.data('calloutDimensionZoom')) || DIMENSION_BASELINE_ZOOM;
+        const source = normalizeString(node.data('calloutDimensionSource')).trim() || `${DIMENSION_SOURCE}-normalized`;
+        return {
+            calloutDimensionZoom: dimensionZoom,
+            calloutDimensionSource: source
+        };
+    }
+
+    function getRenderedCalloutTransform(options = {}) {
+        const container = options.container || getCyContainer();
+        const layer = options.layer || ensureCalloutLayerRoot();
+        if (!container || !layer || typeof container.getBoundingClientRect !== 'function' || typeof layer.getBoundingClientRect !== 'function') {
+            return null;
+        }
+        const containerRect = container.getBoundingClientRect();
+        const layerRect = layer.getBoundingClientRect();
+        return {
+            container,
+            layer,
+            containerRect,
+            layerRect,
+            isFallbackLayer: !!(layer.dataset && layer.dataset.calloutFallback === 'true'),
+            zoom: cy && typeof cy.zoom === 'function' ? cy.zoom() : 1,
+            pan: cy && typeof cy.pan === 'function' ? cy.pan() : { x: 0, y: 0 },
+            layerToContainerOffsetX: layerRect.left - containerRect.left,
+            layerToContainerOffsetY: layerRect.top - containerRect.top,
+            containerToLayerOffsetX: containerRect.left - layerRect.left,
+            containerToLayerOffsetY: containerRect.top - layerRect.top
+        };
+    }
+
+    function mapNodeCalloutToLayerPixels(node, measuredWidth, measuredHeight, transform) {
+        if (!node || typeof node.renderedPosition !== 'function' || !transform) return null;
+        const pos = node.renderedPosition();
+        if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) return null;
+        return {
+            left: transform.containerToLayerOffsetX + pos.x - measuredWidth / 2,
+            top: transform.containerToLayerOffsetY + pos.y - measuredHeight / 2
+        };
     }
 
     function getLayerOwner(container) {
@@ -1374,5 +1440,13 @@
         scheduleViewportSync({ immediate: true });
     }
 
-    window.TextCallout = { init, refresh, syncViewport };
+    window.TextCallout = {
+        init,
+        refresh,
+        syncViewport,
+        getRenderedCalloutTransform,
+        mapNodeCalloutToLayerPixels,
+        resolveCalloutScale,
+        resolveCalloutDimensionMetadata
+    };
 })();

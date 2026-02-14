@@ -4631,6 +4631,592 @@ class FileManagerModule {
         });
     }
 
+    cloneNodeWithInlineStyles(node, doc) {
+        if (!node || !doc) {
+            return null;
+        }
+
+        if (node.nodeType === Node.TEXT_NODE) {
+            return doc.createTextNode(node.nodeValue || '');
+        }
+
+        if (node.nodeType !== Node.ELEMENT_NODE) {
+            return null;
+        }
+
+        const clone = doc.createElement(node.tagName.toLowerCase());
+
+        if (node.attributes && node.attributes.length) {
+            Array.from(node.attributes).forEach(attr => {
+                if (!attr || !attr.name) {
+                    return;
+                }
+                clone.setAttribute(attr.name, attr.value || '');
+            });
+        }
+
+        const computedStyle = window.getComputedStyle(node);
+        if (computedStyle) {
+            const styleText = Array.from(computedStyle)
+                .map(propertyName => `${propertyName}: ${computedStyle.getPropertyValue(propertyName)};`)
+                .join(' ');
+            if (styleText) {
+                clone.setAttribute('style', styleText);
+            }
+        }
+
+        Array.from(node.childNodes || []).forEach(child => {
+            const childClone = this.cloneNodeWithInlineStyles(child, doc);
+            if (childClone) {
+                clone.appendChild(childClone);
+            }
+        });
+
+        return clone;
+    }
+
+    async renderElementToCanvas(element, width, height, offsetX = 0, offsetY = 0, rasterScaleX = 1, rasterScaleY = 1) {
+        if (!element || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+            return null;
+        }
+
+        const tempDocument = document.implementation.createHTMLDocument('export-callout-layer');
+        const clonedElement = this.cloneNodeWithInlineStyles(element, tempDocument);
+        if (!clonedElement) {
+            return null;
+        }
+
+        clonedElement.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+        if (Number.isFinite(offsetX) || Number.isFinite(offsetY)) {
+            const translateX = Number.isFinite(offsetX) ? offsetX : 0;
+            const translateY = Number.isFinite(offsetY) ? offsetY : 0;
+            const existingTransform = clonedElement.style.transform || '';
+            clonedElement.style.transformOrigin = 'top left';
+            clonedElement.style.transform = `translate(${translateX}px, ${translateY}px) ${existingTransform}`.trim();
+        }
+
+        const wrapper = tempDocument.createElement('div');
+        wrapper.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+        wrapper.style.width = `${width}px`;
+        wrapper.style.height = `${height}px`;
+        wrapper.style.overflow = 'hidden';
+        wrapper.style.position = 'relative';
+        wrapper.appendChild(clonedElement);
+
+        const serializedDom = new XMLSerializer().serializeToString(wrapper);
+        const safeRasterScaleX = Number.isFinite(rasterScaleX) && rasterScaleX > 0 ? rasterScaleX : 1;
+        const safeRasterScaleY = Number.isFinite(rasterScaleY) && rasterScaleY > 0 ? rasterScaleY : 1;
+        const rasterWidth = Math.max(1, Math.round(width * safeRasterScaleX));
+        const rasterHeight = Math.max(1, Math.round(height * safeRasterScaleY));
+        const svgMarkup = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${rasterWidth}" height="${rasterHeight}" viewBox="0 0 ${width} ${height}">
+  <foreignObject width="100%" height="100%">${serializedDom}</foreignObject>
+</svg>`;
+
+        const blob = new Blob([svgMarkup], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+
+        try {
+            const image = await new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = () => reject(new Error('Unable to load callout overlay SVG.'));
+                img.src = url;
+            });
+
+            const canvas = document.createElement('canvas');
+            canvas.width = rasterWidth;
+            canvas.height = rasterHeight;
+
+            const context = canvas.getContext('2d');
+            if (!context) {
+                return null;
+            }
+
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+            return canvas;
+        } finally {
+            URL.revokeObjectURL(url);
+        }
+    }
+
+
+    canvasHasVisiblePixels(canvas, alphaThreshold = 1) {
+        if (!canvas || typeof canvas.getContext !== 'function') {
+            return false;
+        }
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) {
+            return false;
+        }
+        const width = Math.max(1, Math.round(canvas.width || 0));
+        const height = Math.max(1, Math.round(canvas.height || 0));
+        if (!(width > 0 && height > 0)) {
+            return false;
+        }
+        try {
+            const imageData = context.getImageData(0, 0, width, height);
+            const data = imageData && imageData.data ? imageData.data : null;
+            if (!data || !data.length) {
+                return false;
+            }
+            const threshold = Number.isFinite(alphaThreshold) ? Math.max(0, alphaThreshold) : 1;
+            for (let i = 3; i < data.length; i += 4) {
+                if (data[i] > threshold) {
+                    return true;
+                }
+            }
+        } catch (error) {
+            return false;
+        }
+        return false;
+    }
+
+    parsePixelValue(value, fallback = 0) {
+        if (typeof value === 'number' && Number.isFinite(value)) {
+            return value;
+        }
+        if (typeof value === 'string') {
+            const parsed = parseFloat(value);
+            if (Number.isFinite(parsed)) {
+                return parsed;
+            }
+        }
+        return fallback;
+    }
+
+    parseCssColor(value, fallback = 'rgba(0,0,0,0)') {
+        if (typeof value !== 'string') {
+            return fallback;
+        }
+        const trimmed = value.trim();
+        return trimmed || fallback;
+    }
+
+    drawRoundedRectPath(context, x, y, width, height, radius = 0) {
+        const safeWidth = Math.max(0, width);
+        const safeHeight = Math.max(0, height);
+        const maxRadius = Math.min(safeWidth / 2, safeHeight / 2);
+        const r = Math.max(0, Math.min(radius, maxRadius));
+
+        context.beginPath();
+        context.moveTo(x + r, y);
+        context.lineTo(x + safeWidth - r, y);
+        context.quadraticCurveTo(x + safeWidth, y, x + safeWidth, y + r);
+        context.lineTo(x + safeWidth, y + safeHeight - r);
+        context.quadraticCurveTo(x + safeWidth, y + safeHeight, x + safeWidth - r, y + safeHeight);
+        context.lineTo(x + r, y + safeHeight);
+        context.quadraticCurveTo(x, y + safeHeight, x, y + safeHeight - r);
+        context.lineTo(x, y + r);
+        context.quadraticCurveTo(x, y, x + r, y);
+        context.closePath();
+    }
+
+    drawWrappedCanvasText(context, text, options = {}) {
+        if (!context || typeof text !== 'string' || !text.trim()) {
+            return 0;
+        }
+
+        const {
+            x = 0,
+            y = 0,
+            maxWidth = 100,
+            lineHeight = 16,
+            maxLines = 200
+        } = options;
+
+        const hardLines = text.replace(/\r\n?/g, '\n').split('\n');
+        const lines = [];
+
+        hardLines.forEach(hardLine => {
+            const words = hardLine.split(/\s+/).filter(Boolean);
+            if (!words.length) {
+                lines.push('');
+                return;
+            }
+
+            let currentLine = words.shift() || '';
+            words.forEach(word => {
+                const trial = `${currentLine} ${word}`.trim();
+                const trialWidth = context.measureText(trial).width;
+                if (trialWidth <= maxWidth || !currentLine) {
+                    currentLine = trial;
+                } else {
+                    lines.push(currentLine);
+                    currentLine = word;
+                }
+            });
+            lines.push(currentLine);
+        });
+
+        const truncatedLines = lines.slice(0, Math.max(1, maxLines));
+        truncatedLines.forEach((line, index) => {
+            const drawY = y + (index * lineHeight);
+            context.fillText(line, x, drawY);
+        });
+
+        return truncatedLines.length * lineHeight;
+    }
+
+    renderCalloutsByCanvasPainting(layer, renderRect, layerRect, rasterScaleX = 1, rasterScaleY = 1) {
+        if (!layer || !renderRect || !layerRect) {
+            return null;
+        }
+
+        const callouts = Array.from(layer.querySelectorAll('.text-callout'));
+        if (!callouts.length) {
+            return null;
+        }
+
+        const safeRasterScaleX = Number.isFinite(rasterScaleX) && rasterScaleX > 0 ? rasterScaleX : 1;
+        const safeRasterScaleY = Number.isFinite(rasterScaleY) && rasterScaleY > 0 ? rasterScaleY : 1;
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(renderRect.width * safeRasterScaleX));
+        canvas.height = Math.max(1, Math.round(renderRect.height * safeRasterScaleY));
+        const context = canvas.getContext('2d');
+        if (!context) {
+            return null;
+        }
+
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.setTransform(safeRasterScaleX, 0, 0, safeRasterScaleY, 0, 0);
+
+        const offsetInLayerX = renderRect.left - layerRect.left;
+        const offsetInLayerY = renderRect.top - layerRect.top;
+
+        callouts.forEach(callout => {
+            if (!callout || typeof callout.getBoundingClientRect !== 'function') {
+                return;
+            }
+
+            const rect = callout.getBoundingClientRect();
+            if (!(rect.width > 0 && rect.height > 0)) {
+                return;
+            }
+
+            const style = window.getComputedStyle(callout);
+            const titleEl = callout.querySelector('.text-callout__title');
+            const bodyEl = callout.querySelector('.text-callout__body');
+            const titleStyle = titleEl ? window.getComputedStyle(titleEl) : null;
+            const bodyStyle = bodyEl ? window.getComputedStyle(bodyEl) : null;
+
+            const drawX = rect.left - layerRect.left - offsetInLayerX;
+            const drawY = rect.top - layerRect.top - offsetInLayerY;
+
+            const borderRadius = this.parsePixelValue(style.borderRadius, 0);
+            const borderWidth = this.parsePixelValue(style.borderTopWidth, 0);
+            const bgColor = this.parseCssColor(style.backgroundColor, 'rgba(255,255,255,1)');
+            const borderColor = this.parseCssColor(style.borderTopColor, 'rgba(0,0,0,0)');
+
+            context.save();
+            this.drawRoundedRectPath(context, drawX, drawY, rect.width, rect.height, borderRadius);
+            context.fillStyle = bgColor;
+            context.fill();
+            if (borderWidth > 0) {
+                context.strokeStyle = borderColor;
+                context.lineWidth = borderWidth;
+                context.stroke();
+            }
+            context.restore();
+
+            const paddingLeft = this.parsePixelValue(style.paddingLeft, 0);
+            const paddingRight = this.parsePixelValue(style.paddingRight, 0);
+            const paddingTop = this.parsePixelValue(style.paddingTop, 0);
+
+            const contentX = drawX + paddingLeft;
+            let contentY = drawY + paddingTop;
+            const textMaxWidth = Math.max(10, rect.width - paddingLeft - paddingRight);
+
+            if (titleEl && titleStyle) {
+                const titleText = (titleEl.textContent || '').trim();
+                if (titleText) {
+                    const titleFontSize = this.parsePixelValue(titleStyle.fontSize, 14);
+                    const titleLineHeight = this.parsePixelValue(titleStyle.lineHeight, titleFontSize * 1.2);
+                    const titleWeight = titleStyle.fontWeight || '600';
+                    const titleFamily = titleStyle.fontFamily || style.fontFamily || 'sans-serif';
+                    context.save();
+                    context.fillStyle = this.parseCssColor(titleStyle.color, '#1f2937');
+                    context.font = `${titleWeight} ${titleFontSize}px ${titleFamily}`;
+                    const usedHeight = this.drawWrappedCanvasText(context, titleText, {
+                        x: contentX,
+                        y: contentY + titleLineHeight,
+                        maxWidth: textMaxWidth,
+                        lineHeight: titleLineHeight,
+                        maxLines: 10
+                    });
+                    context.restore();
+                    contentY += usedHeight + Math.max(2, this.parsePixelValue(titleStyle.marginBottom, 6));
+                }
+            }
+
+            if (bodyEl && bodyStyle) {
+                const bodyText = (bodyEl.textContent || '').trim();
+                if (bodyText) {
+                    const bodyFontSize = this.parsePixelValue(bodyStyle.fontSize, 12);
+                    const bodyLineHeight = this.parsePixelValue(bodyStyle.lineHeight, bodyFontSize * 1.4);
+                    const bodyWeight = bodyStyle.fontWeight || style.fontWeight || '400';
+                    const bodyFamily = bodyStyle.fontFamily || style.fontFamily || 'sans-serif';
+                    context.save();
+                    context.fillStyle = this.parseCssColor(bodyStyle.color, style.color || '#111827');
+                    context.font = `${bodyWeight} ${bodyFontSize}px ${bodyFamily}`;
+                    this.drawWrappedCanvasText(context, bodyText, {
+                        x: contentX,
+                        y: contentY + bodyLineHeight,
+                        maxWidth: textMaxWidth,
+                        lineHeight: bodyLineHeight,
+                        maxLines: 200
+                    });
+                    context.restore();
+                }
+            }
+        });
+
+        return canvas;
+    }
+
+    getCalloutLayerRenderRect(layer) {
+        if (!layer || typeof layer.getBoundingClientRect !== 'function') {
+            return null;
+        }
+
+        const layerRect = layer.getBoundingClientRect();
+        const childRects = Array.from(layer.children || [])
+            .map(child => (typeof child.getBoundingClientRect === 'function' ? child.getBoundingClientRect() : null))
+            .filter(rect => rect && rect.width > 0 && rect.height > 0);
+
+        if (layerRect && layerRect.width > 0 && layerRect.height > 0) {
+            return {
+                left: layerRect.left,
+                top: layerRect.top,
+                width: layerRect.width,
+                height: layerRect.height,
+                layerRect
+            };
+        }
+
+        if (!childRects.length) {
+            return null;
+        }
+
+        const left = Math.min(...childRects.map(rect => rect.left));
+        const top = Math.min(...childRects.map(rect => rect.top));
+        const right = Math.max(...childRects.map(rect => rect.right));
+        const bottom = Math.max(...childRects.map(rect => rect.bottom));
+
+        return {
+            left,
+            top,
+            width: Math.max(1, right - left),
+            height: Math.max(1, bottom - top),
+            layerRect
+        };
+    }
+
+    findActiveCalloutLayer(container) {
+        if (!container || typeof container.querySelector !== 'function') {
+            return null;
+        }
+
+        const owner = container.parentElement || container;
+        const ownerCandidates = owner && typeof owner.querySelectorAll === 'function'
+            ? Array.from(owner.querySelectorAll('.text-callout-layer'))
+            : [];
+
+        const isRenderableLayer = layer => {
+            if (!layer || !layer.isConnected) {
+                return false;
+            }
+
+            if (!(layer.childElementCount > 0 || (layer.textContent && layer.textContent.trim()))) {
+                return false;
+            }
+
+            return !!this.getCalloutLayerRenderRect(layer);
+        };
+
+        const ownerLayer = ownerCandidates.find(isRenderableLayer);
+        if (ownerLayer) {
+            return ownerLayer;
+        }
+
+        const doc = container.ownerDocument || document;
+        const fallbackLayer = doc.querySelector('.text-callout-layer[data-callout-fallback="true"]');
+        if (isRenderableLayer(fallbackLayer)) {
+            return fallbackLayer;
+        }
+
+        return null;
+    }
+
+    getSharedCalloutTransform(container, layer) {
+        const calloutApi = (typeof window !== 'undefined' && window.TextCallout) ? window.TextCallout : null;
+        if (!calloutApi || typeof calloutApi.getRenderedCalloutTransform !== 'function') {
+            return null;
+        }
+        try {
+            return calloutApi.getRenderedCalloutTransform({ container, layer });
+        } catch (error) {
+            return null;
+        }
+    }
+
+    async forceCalloutLayoutRefresh() {
+        const calloutApi = (typeof window !== 'undefined' && window.TextCallout) ? window.TextCallout : null;
+        if (calloutApi && typeof calloutApi.syncViewport === 'function') {
+            calloutApi.syncViewport({ immediate: true });
+        }
+        await this.waitForCytoscapeRender();
+        if (typeof requestAnimationFrame === 'function') {
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        }
+    }
+
+    async composeSnapshotWithCalloutLayer(basePngDataUrl, options = {}) {
+        const {
+            container,
+            scaleX = 1,
+            scaleY = 1,
+            renderedOriginX = 0,
+            renderedOriginY = 0,
+            renderedBoundsWidth = null,
+            renderedBoundsHeight = null,
+            onWarning
+        } = options;
+
+        if (!basePngDataUrl || !container) {
+            return {
+                pngDataUrl: basePngDataUrl,
+                hasCalloutOverlay: false,
+                warningMessage: ''
+            };
+        }
+
+        const notifyWarning = typeof onWarning === 'function'
+            ? onWarning
+            : message => this.notifications.show(message, 'warning');
+
+        try {
+            const calloutLayer = this.findActiveCalloutLayer(container);
+            if (!calloutLayer) {
+                return {
+                    pngDataUrl: basePngDataUrl,
+                    hasCalloutOverlay: false,
+                    warningMessage: ''
+                };
+            }
+
+            const containerRect = container.getBoundingClientRect();
+            const renderRect = this.getCalloutLayerRenderRect(calloutLayer);
+            if (!(containerRect.width > 0 && containerRect.height > 0 && renderRect && renderRect.width > 0 && renderRect.height > 0)) {
+                return {
+                    pngDataUrl: basePngDataUrl,
+                    hasCalloutOverlay: false,
+                    warningMessage: ''
+                };
+            }
+
+            const sharedTransform = this.getSharedCalloutTransform(container, calloutLayer);
+
+            const layerRect = renderRect.layerRect || calloutLayer.getBoundingClientRect();
+            const offsetInLayerX = -(renderRect.left - layerRect.left);
+            const offsetInLayerY = -(renderRect.top - layerRect.top);
+
+            const baseImage = await new Promise((resolve, reject) => {
+                const image = new Image();
+                image.onload = () => resolve(image);
+                image.onerror = () => reject(new Error('Unable to load graph snapshot image for composition.'));
+                image.src = basePngDataUrl;
+            });
+
+            const outputCanvas = document.createElement('canvas');
+            outputCanvas.width = Math.max(1, baseImage.naturalWidth || baseImage.width || 1);
+            outputCanvas.height = Math.max(1, baseImage.naturalHeight || baseImage.height || 1);
+
+            const context = outputCanvas.getContext('2d');
+            if (!context) {
+                throw new Error('Unable to create snapshot composition canvas context.');
+            }
+
+            context.drawImage(baseImage, 0, 0, outputCanvas.width, outputCanvas.height);
+
+            const effectiveScaleX = Number.isFinite(renderedBoundsWidth) && renderedBoundsWidth > 0
+                ? (outputCanvas.width / renderedBoundsWidth)
+                : scaleX;
+            const effectiveScaleY = Number.isFinite(renderedBoundsHeight) && renderedBoundsHeight > 0
+                ? (outputCanvas.height / renderedBoundsHeight)
+                : scaleY;
+
+            let renderedCalloutCanvas = await this.renderElementToCanvas(
+                calloutLayer,
+                renderRect.width,
+                renderRect.height,
+                offsetInLayerX,
+                offsetInLayerY,
+                effectiveScaleX,
+                effectiveScaleY
+            );
+
+            if (renderedCalloutCanvas && !this.canvasHasVisiblePixels(renderedCalloutCanvas)) {
+                renderedCalloutCanvas = null;
+            }
+
+            if (!renderedCalloutCanvas) {
+                renderedCalloutCanvas = this.renderCalloutsByCanvasPainting(
+                    calloutLayer,
+                    renderRect,
+                    layerRect,
+                    effectiveScaleX,
+                    effectiveScaleY
+                );
+            }
+
+            if (!renderedCalloutCanvas) {
+                throw new Error('Unable to render callout overlay canvas.');
+            }
+
+            const layerOffsetX = sharedTransform
+                ? sharedTransform.layerToContainerOffsetX
+                : (layerRect.left - containerRect.left);
+            const layerOffsetY = sharedTransform
+                ? sharedTransform.layerToContainerOffsetY
+                : (layerRect.top - containerRect.top);
+            const viewportOffsetX = layerOffsetX + (renderRect.left - layerRect.left);
+            const viewportOffsetY = layerOffsetY + (renderRect.top - layerRect.top);
+            const offsetX = (viewportOffsetX - renderedOriginX) * effectiveScaleX;
+            const offsetY = (viewportOffsetY - renderedOriginY) * effectiveScaleY;
+            const targetWidth = renderRect.width * effectiveScaleX;
+            const targetHeight = renderRect.height * effectiveScaleY;
+
+            context.drawImage(
+                renderedCalloutCanvas,
+                0,
+                0,
+                renderedCalloutCanvas.width,
+                renderedCalloutCanvas.height,
+                offsetX,
+                offsetY,
+                targetWidth,
+                targetHeight
+            );
+
+            return {
+                pngDataUrl: outputCanvas.toDataURL('image/png'),
+                hasCalloutOverlay: true,
+                warningMessage: ''
+            };
+        } catch (error) {
+            const warningMessage = 'Callout overlay could not be rendered for export. The exported file includes only the base graph.';
+            notifyWarning(warningMessage);
+            return {
+                pngDataUrl: basePngDataUrl,
+                hasCalloutOverlay: false,
+                warningMessage
+            };
+        }
+    }
+
     async captureExportSnapshot({ desiredScale = 2, backgroundColor = '#ffffff', onError } = {}) {
         const markNotifiedError = onError || (message => this.markExportError(message));
 
@@ -4651,6 +5237,7 @@ class FileManagerModule {
 
         try {
             await this.preloadBackgroundImagesForExport();
+            await this.forceCalloutLayoutRefresh();
             await this.waitForCytoscapeRender();
 
             const container = typeof this.cy.container === 'function' ? this.cy.container() : null;
@@ -4685,7 +5272,8 @@ class FileManagerModule {
                     boundsHeight: 2,
                     originX: 0,
                     originY: 0,
-                    isBlankSnapshot: true
+                    isBlankSnapshot: true,
+                    partialWarnings: []
                 };
             }
 
@@ -4744,8 +5332,30 @@ class FileManagerModule {
                 );
             }
 
+            const scaleX = scaleUsed;
+            const scaleY = scaleUsed;
+            const renderedOriginX = renderedBounds && Number.isFinite(renderedBounds.x1) ? renderedBounds.x1 : 0;
+            const renderedOriginY = renderedBounds && Number.isFinite(renderedBounds.y1) ? renderedBounds.y1 : 0;
+            const composedSnapshot = await this.composeSnapshotWithCalloutLayer(pngDataUrl, {
+                container,
+                scaleX,
+                scaleY,
+                renderedOriginX,
+                renderedOriginY,
+                renderedBoundsWidth: boundsWidth,
+                renderedBoundsHeight: boundsHeight,
+                onWarning: () => {}
+            });
+            const composedPngDataUrl = composedSnapshot && composedSnapshot.pngDataUrl
+                ? composedSnapshot.pngDataUrl
+                : pngDataUrl;
+            const partialWarnings = [];
+            if (composedSnapshot && composedSnapshot.warningMessage) {
+                partialWarnings.push(composedSnapshot.warningMessage);
+            }
+
             return {
-                pngDataUrl,
+                pngDataUrl: composedPngDataUrl,
                 scale: scaleUsed,
                 renderedBounds,
                 rect,
@@ -4753,7 +5363,8 @@ class FileManagerModule {
                 boundsHeight,
                 originX: 0,
                 originY: 0,
-                isBlankSnapshot: false
+                isBlankSnapshot: false,
+                partialWarnings
             };
         } finally {
             if (exportBackgroundInfo) {
@@ -5129,7 +5740,8 @@ class FileManagerModule {
             preferredFormat = 'PNG',
             jpegQuality = 0.85,
             maxPixelCount = Infinity,
-            maxDimension = Infinity
+            maxDimension = Infinity,
+            maxScaleRatio = 1
         } = options;
 
         const toPdfFormat = (mimeType = '') => {
@@ -5203,7 +5815,10 @@ class FileManagerModule {
             const maxEdge = Number.isFinite(maxDimension) && maxDimension > 0 ? maxDimension : Infinity;
             const pixelRatio = Math.min(1, Math.sqrt(maxPixels / (sourceWidth * sourceHeight)));
             const dimensionRatio = Math.min(1, maxEdge / sourceWidth, maxEdge / sourceHeight);
-            const resizeRatio = Math.min(pixelRatio, dimensionRatio);
+            const boundedScaleRatio = Number.isFinite(maxScaleRatio) && maxScaleRatio > 0
+                ? Math.min(1, maxScaleRatio)
+                : 1;
+            const resizeRatio = Math.min(pixelRatio, dimensionRatio, boundedScaleRatio);
 
             const targetWidth = Math.max(1, Math.floor(sourceWidth * resizeRatio));
             const targetHeight = Math.max(1, Math.floor(sourceHeight * resizeRatio));
@@ -5255,6 +5870,17 @@ class FileManagerModule {
         try {
             let data, filename, mimeType;
 
+            const notifyPartialExportWarnings = snapshot => {
+                if (!snapshot || !Array.isArray(snapshot.partialWarnings) || snapshot.partialWarnings.length === 0) {
+                    return;
+                }
+
+                const uniqueWarnings = [...new Set(snapshot.partialWarnings.filter(message => typeof message === 'string' && message.trim()))];
+                uniqueWarnings.forEach(message => {
+                    this.notifications.show(`Partial export: ${message}`, 'warning');
+                });
+            };
+
             switch (format.toLowerCase()) {
                 case 'json':
                     data = JSON.stringify(this.exportCurrentGraph(), null, 2);
@@ -5270,6 +5896,7 @@ class FileManagerModule {
 
                 case 'png': {
                     const snapshot = await this.captureExportSnapshot({ desiredScale: 4 });
+                    notifyPartialExportWarnings(snapshot);
                     const pngResponse = await fetch(snapshot.pngDataUrl);
                     data = await pngResponse.blob();
                     filename = `graph-export-${Date.now()}.png`;
@@ -5293,16 +5920,20 @@ class FileManagerModule {
                     let lastPdfError = null;
                     let generatedPdfBlob = null;
 
-                    while (attemptedScale >= minScale) {
-                        const snapshot = await this.captureExportSnapshot({ desiredScale: attemptedScale });
-                        if (snapshot.isBlankSnapshot) {
-                            this.notifications.show('Blank graph has no drawable snapshot; exported empty PDF page instead.', 'warning');
-                        }
+                    const snapshot = await this.captureExportSnapshot({ desiredScale: initialScale });
+                    notifyPartialExportWarnings(snapshot);
 
+                    if (snapshot.isBlankSnapshot) {
+                        this.notifications.show('Blank graph has no drawable snapshot; exported empty PDF page instead.', 'warning');
+                    }
+
+                    while (attemptedScale >= minScale) {
+                        const resizeRatio = attemptedScale / initialScale;
                         const normalizedImage = await this.normalizeSnapshotForPdf(snapshot.pngDataUrl, null, {
                             preferredFormat: attemptedFormat,
                             maxPixelCount: attemptedFormat === 'JPEG' ? 16_000_000 : Infinity,
                             maxDimension: attemptedFormat === 'JPEG' ? 6000 : Infinity,
+                            maxScaleRatio: resizeRatio,
                             jpegQuality: 0.88
                         });
 
@@ -5425,6 +6056,10 @@ class FileManagerModule {
         };
 
         const snapshot = await this.captureExportSnapshot({ desiredScale, onError: markNotifiedError });
+        if (Array.isArray(snapshot.partialWarnings) && snapshot.partialWarnings.length > 0) {
+            const uniqueWarnings = [...new Set(snapshot.partialWarnings.filter(message => typeof message === 'string' && message.trim()))];
+            uniqueWarnings.forEach(message => this.notifications.show(`Partial export: ${message}`, 'warning'));
+        }
         const { pngDataUrl, scale, renderedBounds, boundsWidth, boundsHeight, originX, originY } = snapshot;
 
         const graphExport = this.exportCurrentGraph();
