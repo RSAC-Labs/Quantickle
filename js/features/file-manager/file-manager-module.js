@@ -4770,6 +4770,7 @@ class FileManagerModule {
             const built = buildImage(resolvedValue);
             return typeof built === 'string' && built.trim() && built.trim() !== 'none' ? built.trim() : null;
         }
+    }
 
         if (/^url\(/i.test(resolvedValue)) {
             return resolvedValue;
