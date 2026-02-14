@@ -4995,6 +4995,7 @@ class FileManagerModule {
                 group: 'nodes',
                 data: {
                     id: backdropId,
+                    parent: containerId,
                     type: 'image',
                     label: '',
                     color: backgroundColor,
