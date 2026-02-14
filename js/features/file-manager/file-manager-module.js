@@ -4618,114 +4618,306 @@ class FileManagerModule {
         const minScale = 1;
         const scaleReductionFactor = 0.75;
 
-        await this.preloadBackgroundImagesForExport();
+        const exportBackgroundInfo = await this.createTemporaryExportBackgroundContainer();
 
-        const container = typeof this.cy.container === 'function' ? this.cy.container() : null;
-        if (!container) {
-            throw markNotifiedError('Graph container is not available for export.');
-        }
+        try {
+            await this.preloadBackgroundImagesForExport();
 
-        const rect = typeof container.getBoundingClientRect === 'function'
-            ? container.getBoundingClientRect()
-            : { width: this.cy.width ? this.cy.width() : 0, height: this.cy.height ? this.cy.height() : 0 };
+            const container = typeof this.cy.container === 'function' ? this.cy.container() : null;
+            if (!container) {
+                throw markNotifiedError('Graph container is not available for export.');
+            }
 
-        const elements = typeof this.cy.elements === 'function' ? this.cy.elements() : null;
-        const hasVisibleElements = !!(elements && typeof elements.length === 'number' && elements.length > 0);
-        const renderedBounds = elements && typeof elements.renderedBoundingBox === 'function'
-            ? elements.renderedBoundingBox({ includeOverlays: false, includeEdges: true, includeLabels: true })
-            : null;
+            const rect = typeof container.getBoundingClientRect === 'function'
+                ? container.getBoundingClientRect()
+                : { width: this.cy.width ? this.cy.width() : 0, height: this.cy.height ? this.cy.height() : 0 };
 
-        const hasDrawableBounds = !!(
-            renderedBounds
-            && Number.isFinite(renderedBounds.w)
-            && Number.isFinite(renderedBounds.h)
-            && renderedBounds.w > 0
-            && renderedBounds.h > 0
-        );
+            const elements = typeof this.cy.elements === 'function' ? this.cy.elements() : null;
+            const hasVisibleElements = !!(elements && typeof elements.length === 'number' && elements.length > 0);
+            const renderedBounds = elements && typeof elements.renderedBoundingBox === 'function'
+                ? elements.renderedBoundingBox({ includeOverlays: false, includeEdges: true, includeLabels: true })
+                : null;
 
-        if (!hasVisibleElements || !hasDrawableBounds) {
+            const hasDrawableBounds = !!(
+                renderedBounds
+                && Number.isFinite(renderedBounds.w)
+                && Number.isFinite(renderedBounds.h)
+                && renderedBounds.w > 0
+                && renderedBounds.h > 0
+            );
+
+            if (!hasVisibleElements || !hasDrawableBounds) {
+                return {
+                    pngDataUrl: this.createBlankSnapshotDataUrl(),
+                    scale,
+                    renderedBounds,
+                    rect,
+                    boundsWidth: 2,
+                    boundsHeight: 2,
+                    originX: 0,
+                    originY: 0,
+                    isBlankSnapshot: true
+                };
+            }
+
+            const boundsWidth = renderedBounds && Number.isFinite(renderedBounds.w) && renderedBounds.w > 0
+                ? renderedBounds.w
+                : rect && Number.isFinite(rect.width) && rect.width > 0
+                    ? rect.width
+                    : (this.cy.width ? this.cy.width() : 0);
+
+            const boundsHeight = renderedBounds && Number.isFinite(renderedBounds.h) && renderedBounds.h > 0
+                ? renderedBounds.h
+                : rect && Number.isFinite(rect.height) && rect.height > 0
+                    ? rect.height
+                    : (this.cy.height ? this.cy.height() : 0);
+
+            if (!boundsWidth || !boundsHeight) {
+                throw markNotifiedError('Unable to determine graph dimensions for export.');
+            }
+
+            let pngDataUrl;
+            let attemptedScale = scale;
+            let scaleUsed = scale;
+            let lastError = null;
+
+            while (attemptedScale >= minScale) {
+                try {
+                    const candidate = this.cy.png({ full: true, scale: attemptedScale, bg: backgroundColor });
+
+                    if (!candidate || (typeof candidate === 'string' && !candidate.trim())) {
+                        throw new Error('Failed to capture graph snapshot.');
+                    }
+
+                    if (typeof candidate !== 'string' || !candidate.startsWith('data:image/')) {
+                        throw new Error('Failed to capture a valid graph image snapshot.');
+                    }
+
+                    pngDataUrl = candidate;
+                    scaleUsed = attemptedScale;
+                    break;
+                } catch (err) {
+                    lastError = err;
+                    const nextScale = attemptedScale * scaleReductionFactor;
+                    if (nextScale < minScale) {
+                        break;
+                    }
+                    attemptedScale = nextScale;
+                }
+            }
+
+            if (!pngDataUrl) {
+                const originalMessage = lastError && lastError.message ? ` ${lastError.message}` : '';
+                throw markNotifiedError(`Failed to capture graph snapshot at export scales >= ${minScale}.${originalMessage}`);
+            }
+
+            if (scaleUsed < scale) {
+                this.notifications.show(
+                    `Graph export scale was reduced from ${scale.toFixed(2)}x to ${scaleUsed.toFixed(2)}x to complete the snapshot.`,
+                    'warning'
+                );
+            }
+
             return {
-                pngDataUrl: this.createBlankSnapshotDataUrl(),
-                scale,
+                pngDataUrl,
+                scale: scaleUsed,
                 renderedBounds,
                 rect,
-                boundsWidth: 2,
-                boundsHeight: 2,
-                originX: 0,
-                originY: 0,
-                isBlankSnapshot: true
+                boundsWidth,
+                boundsHeight,
+                originX: renderedBounds && Number.isFinite(renderedBounds.x1) ? renderedBounds.x1 : 0,
+                originY: renderedBounds && Number.isFinite(renderedBounds.y1) ? renderedBounds.y1 : 0,
+                isBlankSnapshot: false
             };
+        } finally {
+            if (exportBackgroundInfo) {
+                this.removeTemporaryExportBackgroundContainer(exportBackgroundInfo);
+            }
+        }
+    }
+
+    async getCurrentBackgroundImageForExport() {
+        const settings = window.GraphAreaEditor && typeof window.GraphAreaEditor.getSettings === 'function'
+            ? window.GraphAreaEditor.getSettings()
+            : null;
+
+        const backgroundValue = settings && typeof settings.backgroundImage === 'string'
+            ? settings.backgroundImage.trim()
+            : '';
+
+        if (!backgroundValue || backgroundValue === 'none') {
+            return null;
         }
 
-        const boundsWidth = renderedBounds && Number.isFinite(renderedBounds.w) && renderedBounds.w > 0
-            ? renderedBounds.w
-            : rect && Number.isFinite(rect.width) && rect.width > 0
-                ? rect.width
-                : (this.cy.width ? this.cy.width() : 0);
-
-        const boundsHeight = renderedBounds && Number.isFinite(renderedBounds.h) && renderedBounds.h > 0
-            ? renderedBounds.h
-            : rect && Number.isFinite(rect.height) && rect.height > 0
-                ? rect.height
-                : (this.cy.height ? this.cy.height() : 0);
-
-        if (!boundsWidth || !boundsHeight) {
-            throw markNotifiedError('Unable to determine graph dimensions for export.');
-        }
-
-        let pngDataUrl;
-        let attemptedScale = scale;
-        let scaleUsed = scale;
-        let lastError = null;
-
-        while (attemptedScale >= minScale) {
+        if (window.GraphAreaEditor && typeof window.GraphAreaEditor.resolveBackgroundImageSource === 'function') {
             try {
-                const candidate = this.cy.png({ full: true, scale: attemptedScale, bg: backgroundColor });
-
-                if (!candidate || (typeof candidate === 'string' && !candidate.trim())) {
-                    throw new Error('Failed to capture graph snapshot.');
+                const resolved = await window.GraphAreaEditor.resolveBackgroundImageSource(backgroundValue);
+                if (typeof resolved === 'string' && resolved.trim() && resolved.trim() !== 'none') {
+                    return resolved.trim();
                 }
-
-                if (typeof candidate !== 'string' || !candidate.startsWith('data:image/')) {
-                    throw new Error('Failed to capture a valid graph image snapshot.');
-                }
-
-                pngDataUrl = candidate;
-                scaleUsed = attemptedScale;
-                break;
-            } catch (err) {
-                lastError = err;
-                const nextScale = attemptedScale * scaleReductionFactor;
-                if (nextScale < minScale) {
-                    break;
-                }
-                attemptedScale = nextScale;
+            } catch (error) {
+                console.warn('Failed to resolve graph background image for export, using raw value.', error);
             }
         }
 
-        if (!pngDataUrl) {
-            const originalMessage = lastError && lastError.message ? ` ${lastError.message}` : '';
-            throw markNotifiedError(`Failed to capture graph snapshot at export scales >= ${minScale}.${originalMessage}`);
+        return backgroundValue;
+    }
+
+    getBackgroundFitModeForExport() {
+        const settings = window.GraphAreaEditor && typeof window.GraphAreaEditor.getSettings === 'function'
+            ? window.GraphAreaEditor.getSettings()
+            : null;
+        const mode = settings && typeof settings.backgroundImageMode === 'string'
+            ? settings.backgroundImageMode
+            : 'fit';
+
+        switch (mode) {
+            case 'fill':
+            case 'stretch':
+                return 'cover';
+            case 'center':
+            case 'repeat':
+                return 'none';
+            case 'fit':
+            default:
+                return 'contain';
+        }
+    }
+
+    async createTemporaryExportBackgroundContainer() {
+        if (!this.cy || typeof this.cy.add !== 'function' || typeof this.cy.nodes !== 'function') {
+            return null;
         }
 
-        if (scaleUsed < scale) {
-            this.notifications.show(
-                `Graph export scale was reduced from ${scale.toFixed(2)}x to ${scaleUsed.toFixed(2)}x to complete the snapshot.`,
-                'warning'
-            );
+        const backgroundImage = await this.getCurrentBackgroundImageForExport();
+        if (!backgroundImage) {
+            return null;
         }
+
+        const allNodes = this.cy.nodes();
+        const candidateChildren = allNodes.filter(node => {
+            const id = typeof node.id === 'function' ? node.id() : '';
+            return !id.startsWith('export-bg-container-') && !id.startsWith('export-bg-backdrop-');
+        });
+
+        if (!candidateChildren.length) {
+            return null;
+        }
+
+        const extent = typeof this.cy.extent === 'function' ? this.cy.extent() : null;
+        if (!extent || !Number.isFinite(extent.x1) || !Number.isFinite(extent.x2) || !Number.isFinite(extent.y1) || !Number.isFinite(extent.y2)) {
+            return null;
+        }
+
+        const width = Math.max(1, extent.x2 - extent.x1);
+        const height = Math.max(1, extent.y2 - extent.y1);
+        const centerX = extent.x1 + (width / 2);
+        const centerY = extent.y1 + (height / 2);
+
+        const parentByNodeId = new Map();
+        candidateChildren.forEach(node => {
+            parentByNodeId.set(node.id(), node.data('parent') || null);
+        });
+
+        const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const containerId = `export-bg-container-${suffix}`;
+        const backdropId = `export-bg-backdrop-${suffix}`;
+        const fitMode = this.getBackgroundFitModeForExport();
+
+        this.cy.batch(() => {
+            this.cy.add({
+                group: 'nodes',
+                data: {
+                    id: containerId,
+                    label: '',
+                    color: 'transparent'
+                },
+                classes: 'container'
+            });
+
+            candidateChildren.forEach(node => {
+                node.data('parent', containerId);
+            });
+
+            const backdrop = this.cy.add({
+                group: 'nodes',
+                data: {
+                    id: backdropId,
+                    parent: containerId,
+                    type: 'image',
+                    label: '',
+                    color: 'transparent',
+                    icon: backgroundImage,
+                    backgroundImage,
+                    backgroundFit: fitMode,
+                    backgroundWidth: fitMode === 'none' ? 'auto' : '100%',
+                    backgroundHeight: fitMode === 'none' ? 'auto' : '100%',
+                    backgroundPositionX: '50%',
+                    backgroundPositionY: '50%',
+                    width,
+                    height,
+                    legendVisible: false,
+                    labelVisible: false,
+                    iconOpacity: 1,
+                    opacity: 1
+                },
+                position: { x: centerX, y: centerY }
+            });
+
+            backdrop.style({
+                'z-index': -9999,
+                'z-compound-depth': 'bottom',
+                'border-width': 0,
+                'events': 'no',
+                'text-opacity': 0
+            });
+            backdrop.lock();
+            backdrop.unselectify();
+            backdrop.ungrabify();
+        });
 
         return {
-            pngDataUrl,
-            scale: scaleUsed,
-            renderedBounds,
-            rect,
-            boundsWidth,
-            boundsHeight,
-            originX: renderedBounds && Number.isFinite(renderedBounds.x1) ? renderedBounds.x1 : 0,
-            originY: renderedBounds && Number.isFinite(renderedBounds.y1) ? renderedBounds.y1 : 0,
-            isBlankSnapshot: false
+            containerId,
+            backdropId,
+            parentByNodeId
         };
+    }
+
+    removeTemporaryExportBackgroundContainer(exportBackgroundInfo) {
+        if (!exportBackgroundInfo || !this.cy || typeof this.cy.getElementById !== 'function') {
+            return;
+        }
+
+        const { containerId, backdropId, parentByNodeId } = exportBackgroundInfo;
+
+        this.cy.batch(() => {
+            if (parentByNodeId && typeof parentByNodeId.forEach === 'function') {
+                parentByNodeId.forEach((parentId, nodeId) => {
+                    const node = this.cy.getElementById(nodeId);
+                    if (!node || typeof node.empty === 'function' && node.empty()) {
+                        return;
+                    }
+
+                    if (parentId) {
+                        node.data('parent', parentId);
+                    } else {
+                        node.removeData('parent');
+                    }
+                });
+            }
+
+            if (backdropId) {
+                const backdropNode = this.cy.getElementById(backdropId);
+                if (backdropNode && !(typeof backdropNode.empty === 'function' && backdropNode.empty())) {
+                    backdropNode.remove();
+                }
+            }
+
+            const tempContainer = this.cy.getElementById(containerId);
+            if (tempContainer && !(typeof tempContainer.empty === 'function' && tempContainer.empty())) {
+                tempContainer.remove();
+            }
+        });
     }
 
     createBlankSnapshotDataUrl() {
