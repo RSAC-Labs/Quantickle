@@ -4918,15 +4918,6 @@ class FileManagerModule {
             backdrop.ungrabify();
         });
 
-        const elements = typeof this.cy.elements === 'function' ? this.cy.elements() : null;
-        const bounds = elements && typeof elements.boundingBox === 'function'
-            ? elements.boundingBox({ includeLabels: true, includeOverlays: false })
-            : null;
-
-        if (!bounds || !Number.isFinite(bounds.x1) || !Number.isFinite(bounds.x2) || !Number.isFinite(bounds.y1) || !Number.isFinite(bounds.y2)) {
-            return null;
-        }
-
         const padding = 40;
         const width = Math.max(1, (bounds.x2 - bounds.x1) + (padding * 2));
         const height = Math.max(1, (bounds.y2 - bounds.y1) + (padding * 2));
