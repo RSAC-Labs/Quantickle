@@ -4637,7 +4637,6 @@ class FileManagerModule {
             const renderedBounds = exportElements && typeof exportElements.renderedBoundingBox === 'function'
                 ? exportElements.renderedBoundingBox({ includeOverlays: false, includeEdges: true, includeLabels: true })
                 : null;
-
             const hasDrawableBounds = !!(
                 renderedBounds
                 && Number.isFinite(renderedBounds.w)
@@ -4663,6 +4662,9 @@ class FileManagerModule {
             const boundsWidth = renderedBounds.w;
             const boundsHeight = renderedBounds.h;
             const restoreExcludedElements = this.prepareExcludedElementsForExport(exportElements);
+
+            const originalZoom = typeof this.cy.zoom === 'function' ? this.cy.zoom() : null;
+            const originalPan = typeof this.cy.pan === 'function' ? this.cy.pan() : null;
 
             let pngDataUrl;
             let attemptedScale = scale;
@@ -4719,8 +4721,8 @@ class FileManagerModule {
                 rect,
                 boundsWidth,
                 boundsHeight,
-                originX: renderedBounds && Number.isFinite(renderedBounds.x1) ? renderedBounds.x1 : 0,
-                originY: renderedBounds && Number.isFinite(renderedBounds.y1) ? renderedBounds.y1 : 0,
+                originX: 0,
+                originY: 0,
                 isBlankSnapshot: false
             };
         } finally {
