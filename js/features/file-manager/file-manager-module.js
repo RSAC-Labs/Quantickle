@@ -4783,6 +4783,7 @@ class FileManagerModule {
                 return built.trim();
             }
         }
+    }
 
         if (/^url\(/i.test(trimmed)) {
             return trimmed;
@@ -4911,6 +4912,74 @@ class FileManagerModule {
                 'background-image': backgroundImageStyle,
                 'background-fit': fitMode,
                 'shape': 'rectangle'
+            });
+            backdrop.lock();
+            backdrop.unselectify();
+            backdrop.ungrabify();
+        });
+
+        const padding = 40;
+        const width = Math.max(1, (bounds.x2 - bounds.x1) + (padding * 2));
+        const height = Math.max(1, (bounds.y2 - bounds.y1) + (padding * 2));
+        const centerX = ((bounds.x1 + bounds.x2) / 2);
+        const centerY = ((bounds.y1 + bounds.y2) / 2);
+
+        const parentByNodeId = new Map();
+        candidateChildren.forEach(node => {
+            parentByNodeId.set(node.id(), node.data('parent') || null);
+        });
+
+        const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const containerId = `export-bg-container-${suffix}`;
+        const backdropId = `export-bg-backdrop-${suffix}`;
+        const fitMode = this.getBackgroundFitModeForExport();
+
+        this.cy.batch(() => {
+            this.cy.add({
+                group: 'nodes',
+                data: {
+                    id: containerId,
+                    label: '',
+                    color: 'transparent'
+                },
+                classes: 'container'
+            });
+
+            candidateChildren.forEach(node => {
+                node.data('parent', containerId);
+            });
+
+            const backdrop = this.cy.add({
+                group: 'nodes',
+                data: {
+                    id: backdropId,
+                    type: 'image',
+                    label: '',
+                    color: backgroundColor,
+                    icon: backgroundImage || '',
+                    backgroundImage: backgroundImage || 'none',
+                    backgroundFit: fitMode,
+                    backgroundWidth: fitMode === 'none' ? 'auto' : '100%',
+                    backgroundHeight: fitMode === 'none' ? 'auto' : '100%',
+                    backgroundPositionX: '50%',
+                    backgroundPositionY: '50%',
+                    width,
+                    height,
+                    legendVisible: false,
+                    labelVisible: false,
+                    iconOpacity: 1,
+                    opacity: 1
+                },
+                position: { x: centerX, y: centerY }
+            });
+
+            backdrop.style({
+                'z-index': -1,
+                'z-compound-depth': 'bottom',
+                'border-width': 0,
+                'events': 'no',
+                'text-opacity': 0,
+                'background-opacity': 1
             });
             backdrop.lock();
             backdrop.unselectify();
