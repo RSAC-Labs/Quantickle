@@ -4749,17 +4749,28 @@ class FileManagerModule {
             return null;
         }
 
-        let resolvedValue = backgroundValue;
-
         if (window.GraphAreaEditor && typeof window.GraphAreaEditor.resolveBackgroundImageSource === 'function') {
             try {
                 const resolved = await window.GraphAreaEditor.resolveBackgroundImageSource(backgroundValue);
                 if (typeof resolved === 'string' && resolved.trim() && resolved.trim() !== 'none') {
-                    resolvedValue = resolved.trim();
+                    return resolved.trim();
                 }
             } catch (error) {
                 console.warn('Failed to resolve graph background image for export, using raw value.', error);
             }
+        }
+
+        return backgroundValue;
+    }
+
+    buildExportBackgroundImageStyle(imageValue) {
+        if (!imageValue || typeof imageValue !== 'string') {
+            return 'none';
+        }
+
+        const trimmed = imageValue.trim();
+        if (!trimmed || trimmed === 'none') {
+            return 'none';
         }
 
         const buildImage = window.GraphAreaEditor && typeof window.GraphAreaEditor.buildBackgroundImage === 'function'
@@ -4767,16 +4778,18 @@ class FileManagerModule {
             : null;
 
         if (buildImage) {
-            const built = buildImage(resolvedValue);
-            return typeof built === 'string' && built.trim() && built.trim() !== 'none' ? built.trim() : null;
+            const built = buildImage(trimmed);
+            if (typeof built === 'string' && built.trim()) {
+                return built.trim();
+            }
         }
     }
 
-        if (/^url\(/i.test(resolvedValue)) {
-            return resolvedValue;
+        if (/^url\(/i.test(trimmed)) {
+            return trimmed;
         }
 
-        const escaped = resolvedValue.replace(/"/g, '\"');
+        const escaped = trimmed.replace(/"/g, '\"');
         return `url("${escaped}")`;
     }
 
@@ -4807,6 +4820,7 @@ class FileManagerModule {
         }
 
         const backgroundImage = await this.getCurrentBackgroundImageForExport();
+        const backgroundImageStyle = this.buildExportBackgroundImageStyle(backgroundImage);
         const settings = window.GraphAreaEditor && typeof window.GraphAreaEditor.getSettings === 'function'
             ? window.GraphAreaEditor.getSettings()
             : null;
@@ -4823,6 +4837,86 @@ class FileManagerModule {
         if (!candidateChildren.length) {
             return null;
         }
+
+        const elements = typeof this.cy.elements === 'function' ? this.cy.elements() : null;
+        const bounds = elements && typeof elements.boundingBox === 'function'
+            ? elements.boundingBox({ includeLabels: true, includeOverlays: false })
+            : null;
+
+        if (!bounds || !Number.isFinite(bounds.x1) || !Number.isFinite(bounds.x2) || !Number.isFinite(bounds.y1) || !Number.isFinite(bounds.y2)) {
+            return null;
+        }
+
+        const padding = 40;
+        const width = Math.max(1, (bounds.x2 - bounds.x1) + (padding * 2));
+        const height = Math.max(1, (bounds.y2 - bounds.y1) + (padding * 2));
+        const centerX = ((bounds.x1 + bounds.x2) / 2);
+        const centerY = ((bounds.y1 + bounds.y2) / 2);
+
+        const parentByNodeId = new Map();
+        candidateChildren.forEach(node => {
+            parentByNodeId.set(node.id(), node.data('parent') || null);
+        });
+
+        const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const containerId = `export-bg-container-${suffix}`;
+        const backdropId = `export-bg-backdrop-${suffix}`;
+        const fitMode = this.getBackgroundFitModeForExport();
+
+        this.cy.batch(() => {
+            this.cy.add({
+                group: 'nodes',
+                data: {
+                    id: containerId,
+                    label: '',
+                    color: 'transparent'
+                },
+                classes: 'container'
+            });
+
+            candidateChildren.forEach(node => {
+                node.data('parent', containerId);
+            });
+
+            const backdrop = this.cy.add({
+                group: 'nodes',
+                data: {
+                    id: backdropId,
+                    type: 'image',
+                    label: '',
+                    color: backgroundColor,
+                    icon: backgroundImage || '',
+                    backgroundImage: backgroundImageStyle,
+                    backgroundFit: fitMode,
+                    backgroundWidth: fitMode === 'none' ? 'auto' : '100%',
+                    backgroundHeight: fitMode === 'none' ? 'auto' : '100%',
+                    backgroundPositionX: '50%',
+                    backgroundPositionY: '50%',
+                    width,
+                    height,
+                    legendVisible: false,
+                    labelVisible: false,
+                    iconOpacity: 1,
+                    opacity: 1
+                },
+                position: { x: centerX, y: centerY }
+            });
+
+            backdrop.style({
+                'z-index': -1,
+                'z-compound-depth': 'bottom',
+                'border-width': 0,
+                'events': 'no',
+                'text-opacity': 0,
+                'background-opacity': 1,
+                'background-image': backgroundImageStyle,
+                'background-fit': fitMode,
+                'shape': 'rectangle'
+            });
+            backdrop.lock();
+            backdrop.unselectify();
+            backdrop.ungrabify();
+        });
 
         const elements = typeof this.cy.elements === 'function' ? this.cy.elements() : null;
         const bounds = elements && typeof elements.boundingBox === 'function'
