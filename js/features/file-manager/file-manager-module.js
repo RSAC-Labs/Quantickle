@@ -4844,7 +4844,11 @@ class FileManagerModule {
         } = options;
 
         if (!basePngDataUrl || !container) {
-            return basePngDataUrl;
+            return {
+                pngDataUrl: basePngDataUrl,
+                hasCalloutOverlay: false,
+                warningMessage: ''
+            };
         }
 
         const notifyWarning = typeof onWarning === 'function'
@@ -4854,13 +4858,21 @@ class FileManagerModule {
         try {
             const calloutLayer = this.findActiveCalloutLayer(container);
             if (!calloutLayer) {
-                return basePngDataUrl;
+                return {
+                    pngDataUrl: basePngDataUrl,
+                    hasCalloutOverlay: false,
+                    warningMessage: ''
+                };
             }
 
             const containerRect = container.getBoundingClientRect();
             const renderRect = this.getCalloutLayerRenderRect(calloutLayer);
             if (!(containerRect.width > 0 && containerRect.height > 0 && renderRect && renderRect.width > 0 && renderRect.height > 0)) {
-                return basePngDataUrl;
+                return {
+                    pngDataUrl: basePngDataUrl,
+                    hasCalloutOverlay: false,
+                    warningMessage: ''
+                };
             }
 
             const sharedTransform = this.getSharedCalloutTransform(container, calloutLayer);
@@ -4922,10 +4934,19 @@ class FileManagerModule {
                 targetHeight
             );
 
-            return outputCanvas.toDataURL('image/png');
+            return {
+                pngDataUrl: outputCanvas.toDataURL('image/png'),
+                hasCalloutOverlay: true,
+                warningMessage: ''
+            };
         } catch (error) {
-            notifyWarning('Callout overlay could not be rendered for export. The exported file includes only the base graph.');
-            return basePngDataUrl;
+            const warningMessage = 'Callout overlay could not be rendered for export. The exported file includes only the base graph.';
+            notifyWarning(warningMessage);
+            return {
+                pngDataUrl: basePngDataUrl,
+                hasCalloutOverlay: false,
+                warningMessage
+            };
         }
     }
 
@@ -4984,7 +5005,8 @@ class FileManagerModule {
                     boundsHeight: 2,
                     originX: 0,
                     originY: 0,
-                    isBlankSnapshot: true
+                    isBlankSnapshot: true,
+                    partialWarnings: []
                 };
             }
 
@@ -5045,11 +5067,19 @@ class FileManagerModule {
 
             const scaleX = rect && rect.width > 0 ? (1 / rect.width) * (Math.max(1, Math.round(rect.width * scaleUsed))) : scaleUsed;
             const scaleY = rect && rect.height > 0 ? (1 / rect.height) * (Math.max(1, Math.round(rect.height * scaleUsed))) : scaleUsed;
-            const composedPngDataUrl = await this.composeSnapshotWithCalloutLayer(pngDataUrl, {
+            const composedSnapshot = await this.composeSnapshotWithCalloutLayer(pngDataUrl, {
                 container,
                 scaleX,
-                scaleY
+                scaleY,
+                onWarning: () => {}
             });
+            const composedPngDataUrl = composedSnapshot && composedSnapshot.pngDataUrl
+                ? composedSnapshot.pngDataUrl
+                : pngDataUrl;
+            const partialWarnings = [];
+            if (composedSnapshot && composedSnapshot.warningMessage) {
+                partialWarnings.push(composedSnapshot.warningMessage);
+            }
 
             return {
                 pngDataUrl: composedPngDataUrl,
@@ -5060,7 +5090,8 @@ class FileManagerModule {
                 boundsHeight,
                 originX: 0,
                 originY: 0,
-                isBlankSnapshot: false
+                isBlankSnapshot: false,
+                partialWarnings
             };
         } finally {
             if (exportBackgroundInfo) {
@@ -5436,7 +5467,8 @@ class FileManagerModule {
             preferredFormat = 'PNG',
             jpegQuality = 0.85,
             maxPixelCount = Infinity,
-            maxDimension = Infinity
+            maxDimension = Infinity,
+            maxScaleRatio = 1
         } = options;
 
         const toPdfFormat = (mimeType = '') => {
@@ -5510,7 +5542,10 @@ class FileManagerModule {
             const maxEdge = Number.isFinite(maxDimension) && maxDimension > 0 ? maxDimension : Infinity;
             const pixelRatio = Math.min(1, Math.sqrt(maxPixels / (sourceWidth * sourceHeight)));
             const dimensionRatio = Math.min(1, maxEdge / sourceWidth, maxEdge / sourceHeight);
-            const resizeRatio = Math.min(pixelRatio, dimensionRatio);
+            const boundedScaleRatio = Number.isFinite(maxScaleRatio) && maxScaleRatio > 0
+                ? Math.min(1, maxScaleRatio)
+                : 1;
+            const resizeRatio = Math.min(pixelRatio, dimensionRatio, boundedScaleRatio);
 
             const targetWidth = Math.max(1, Math.floor(sourceWidth * resizeRatio));
             const targetHeight = Math.max(1, Math.floor(sourceHeight * resizeRatio));
@@ -5562,6 +5597,17 @@ class FileManagerModule {
         try {
             let data, filename, mimeType;
 
+            const notifyPartialExportWarnings = snapshot => {
+                if (!snapshot || !Array.isArray(snapshot.partialWarnings) || snapshot.partialWarnings.length === 0) {
+                    return;
+                }
+
+                const uniqueWarnings = [...new Set(snapshot.partialWarnings.filter(message => typeof message === 'string' && message.trim()))];
+                uniqueWarnings.forEach(message => {
+                    this.notifications.show(`Partial export: ${message}`, 'warning');
+                });
+            };
+
             switch (format.toLowerCase()) {
                 case 'json':
                     data = JSON.stringify(this.exportCurrentGraph(), null, 2);
@@ -5577,6 +5623,7 @@ class FileManagerModule {
 
                 case 'png': {
                     const snapshot = await this.captureExportSnapshot({ desiredScale: 4 });
+                    notifyPartialExportWarnings(snapshot);
                     const pngResponse = await fetch(snapshot.pngDataUrl);
                     data = await pngResponse.blob();
                     filename = `graph-export-${Date.now()}.png`;
@@ -5600,16 +5647,20 @@ class FileManagerModule {
                     let lastPdfError = null;
                     let generatedPdfBlob = null;
 
-                    while (attemptedScale >= minScale) {
-                        const snapshot = await this.captureExportSnapshot({ desiredScale: attemptedScale });
-                        if (snapshot.isBlankSnapshot) {
-                            this.notifications.show('Blank graph has no drawable snapshot; exported empty PDF page instead.', 'warning');
-                        }
+                    const snapshot = await this.captureExportSnapshot({ desiredScale: initialScale });
+                    notifyPartialExportWarnings(snapshot);
 
+                    if (snapshot.isBlankSnapshot) {
+                        this.notifications.show('Blank graph has no drawable snapshot; exported empty PDF page instead.', 'warning');
+                    }
+
+                    while (attemptedScale >= minScale) {
+                        const resizeRatio = attemptedScale / initialScale;
                         const normalizedImage = await this.normalizeSnapshotForPdf(snapshot.pngDataUrl, null, {
                             preferredFormat: attemptedFormat,
                             maxPixelCount: attemptedFormat === 'JPEG' ? 16_000_000 : Infinity,
                             maxDimension: attemptedFormat === 'JPEG' ? 6000 : Infinity,
+                            maxScaleRatio: resizeRatio,
                             jpegQuality: 0.88
                         });
 
@@ -5732,6 +5783,10 @@ class FileManagerModule {
         };
 
         const snapshot = await this.captureExportSnapshot({ desiredScale, onError: markNotifiedError });
+        if (Array.isArray(snapshot.partialWarnings) && snapshot.partialWarnings.length > 0) {
+            const uniqueWarnings = [...new Set(snapshot.partialWarnings.filter(message => typeof message === 'string' && message.trim()))];
+            uniqueWarnings.forEach(message => this.notifications.show(`Partial export: ${message}`, 'warning'));
+        }
         const { pngDataUrl, scale, renderedBounds, boundsWidth, boundsHeight, originX, originY } = snapshot;
 
         const graphExport = this.exportCurrentGraph();
