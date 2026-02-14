@@ -5073,6 +5073,8 @@ class FileManagerModule {
             scaleY = 1,
             renderedOriginX = 0,
             renderedOriginY = 0,
+            renderedBoundsWidth = null,
+            renderedBoundsHeight = null,
             onWarning
         } = options;
 
@@ -5152,6 +5154,13 @@ class FileManagerModule {
 
             context.drawImage(baseImage, 0, 0, outputCanvas.width, outputCanvas.height);
 
+            const effectiveScaleX = Number.isFinite(renderedBoundsWidth) && renderedBoundsWidth > 0
+                ? (outputCanvas.width / renderedBoundsWidth)
+                : scaleX;
+            const effectiveScaleY = Number.isFinite(renderedBoundsHeight) && renderedBoundsHeight > 0
+                ? (outputCanvas.height / renderedBoundsHeight)
+                : scaleY;
+
             const layerOffsetX = sharedTransform
                 ? sharedTransform.layerToContainerOffsetX
                 : (layerRect.left - containerRect.left);
@@ -5160,10 +5169,10 @@ class FileManagerModule {
                 : (layerRect.top - containerRect.top);
             const viewportOffsetX = layerOffsetX + (renderRect.left - layerRect.left);
             const viewportOffsetY = layerOffsetY + (renderRect.top - layerRect.top);
-            const offsetX = (viewportOffsetX - renderedOriginX) * scaleX;
-            const offsetY = (viewportOffsetY - renderedOriginY) * scaleY;
-            const targetWidth = renderRect.width * scaleX;
-            const targetHeight = renderRect.height * scaleY;
+            const offsetX = (viewportOffsetX - renderedOriginX) * effectiveScaleX;
+            const offsetY = (viewportOffsetY - renderedOriginY) * effectiveScaleY;
+            const targetWidth = renderRect.width * effectiveScaleX;
+            const targetHeight = renderRect.height * effectiveScaleY;
 
             context.drawImage(
                 renderedCalloutCanvas,
@@ -5318,6 +5327,8 @@ class FileManagerModule {
                 scaleY,
                 renderedOriginX,
                 renderedOriginY,
+                renderedBoundsWidth: boundsWidth,
+                renderedBoundsHeight: boundsHeight,
                 onWarning: () => {}
             });
             const composedPngDataUrl = composedSnapshot && composedSnapshot.pngDataUrl
