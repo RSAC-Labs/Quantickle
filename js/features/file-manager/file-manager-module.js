@@ -4783,8 +4783,6 @@ class FileManagerModule {
                 return built.trim();
             }
         }
-    }
-
         if (/^url\(/i.test(trimmed)) {
             return trimmed;
         }
