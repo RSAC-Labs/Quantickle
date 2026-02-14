@@ -4749,18 +4749,35 @@ class FileManagerModule {
             return null;
         }
 
+        let resolvedValue = backgroundValue;
+
         if (window.GraphAreaEditor && typeof window.GraphAreaEditor.resolveBackgroundImageSource === 'function') {
             try {
                 const resolved = await window.GraphAreaEditor.resolveBackgroundImageSource(backgroundValue);
                 if (typeof resolved === 'string' && resolved.trim() && resolved.trim() !== 'none') {
-                    return resolved.trim();
+                    resolvedValue = resolved.trim();
                 }
             } catch (error) {
                 console.warn('Failed to resolve graph background image for export, using raw value.', error);
             }
         }
 
-        return backgroundValue;
+        const buildImage = window.GraphAreaEditor && typeof window.GraphAreaEditor.buildBackgroundImage === 'function'
+            ? window.GraphAreaEditor.buildBackgroundImage.bind(window.GraphAreaEditor)
+            : null;
+
+        if (buildImage) {
+            const built = buildImage(resolvedValue);
+            return typeof built === 'string' && built.trim() && built.trim() !== 'none' ? built.trim() : null;
+        }
+    }
+
+        if (/^url\(/i.test(resolvedValue)) {
+            return resolvedValue;
+        }
+
+        const escaped = resolvedValue.replace(/"/g, '\"');
+        return `url("${escaped}")`;
     }
 
     getBackgroundFitModeForExport() {
@@ -4790,9 +4807,12 @@ class FileManagerModule {
         }
 
         const backgroundImage = await this.getCurrentBackgroundImageForExport();
-        if (!backgroundImage) {
-            return null;
-        }
+        const settings = window.GraphAreaEditor && typeof window.GraphAreaEditor.getSettings === 'function'
+            ? window.GraphAreaEditor.getSettings()
+            : null;
+        const backgroundColor = settings && typeof settings.backgroundColor === 'string' && settings.backgroundColor.trim()
+            ? settings.backgroundColor.trim()
+            : '#000000';
 
         const allNodes = this.cy.nodes();
         const candidateChildren = allNodes.filter(node => {
@@ -4804,15 +4824,20 @@ class FileManagerModule {
             return null;
         }
 
-        const extent = typeof this.cy.extent === 'function' ? this.cy.extent() : null;
-        if (!extent || !Number.isFinite(extent.x1) || !Number.isFinite(extent.x2) || !Number.isFinite(extent.y1) || !Number.isFinite(extent.y2)) {
+        const elements = typeof this.cy.elements === 'function' ? this.cy.elements() : null;
+        const bounds = elements && typeof elements.boundingBox === 'function'
+            ? elements.boundingBox({ includeLabels: true, includeOverlays: false })
+            : null;
+
+        if (!bounds || !Number.isFinite(bounds.x1) || !Number.isFinite(bounds.x2) || !Number.isFinite(bounds.y1) || !Number.isFinite(bounds.y2)) {
             return null;
         }
 
-        const width = Math.max(1, extent.x2 - extent.x1);
-        const height = Math.max(1, extent.y2 - extent.y1);
-        const centerX = extent.x1 + (width / 2);
-        const centerY = extent.y1 + (height / 2);
+        const padding = 40;
+        const width = Math.max(1, (bounds.x2 - bounds.x1) + (padding * 2));
+        const height = Math.max(1, (bounds.y2 - bounds.y1) + (padding * 2));
+        const centerX = ((bounds.x1 + bounds.x2) / 2);
+        const centerY = ((bounds.y1 + bounds.y2) / 2);
 
         const parentByNodeId = new Map();
         candidateChildren.forEach(node => {
@@ -4843,12 +4868,11 @@ class FileManagerModule {
                 group: 'nodes',
                 data: {
                     id: backdropId,
-                    parent: containerId,
                     type: 'image',
                     label: '',
-                    color: 'transparent',
-                    icon: backgroundImage,
-                    backgroundImage,
+                    color: backgroundColor,
+                    icon: backgroundImage || '',
+                    backgroundImage: backgroundImage || 'none',
                     backgroundFit: fitMode,
                     backgroundWidth: fitMode === 'none' ? 'auto' : '100%',
                     backgroundHeight: fitMode === 'none' ? 'auto' : '100%',
@@ -4865,11 +4889,12 @@ class FileManagerModule {
             });
 
             backdrop.style({
-                'z-index': -9999,
+                'z-index': -1,
                 'z-compound-depth': 'bottom',
                 'border-width': 0,
                 'events': 'no',
-                'text-opacity': 0
+                'text-opacity': 0,
+                'background-opacity': 1
             });
             backdrop.lock();
             backdrop.unselectify();
@@ -4891,6 +4916,13 @@ class FileManagerModule {
         const { containerId, backdropId, parentByNodeId } = exportBackgroundInfo;
 
         this.cy.batch(() => {
+            if (backdropId) {
+                const backdropNode = this.cy.getElementById(backdropId);
+                if (backdropNode && !(typeof backdropNode.empty === 'function' && backdropNode.empty())) {
+                    backdropNode.remove();
+                }
+            }
+
             if (parentByNodeId && typeof parentByNodeId.forEach === 'function') {
                 parentByNodeId.forEach((parentId, nodeId) => {
                     const node = this.cy.getElementById(nodeId);
@@ -4904,13 +4936,6 @@ class FileManagerModule {
                         node.removeData('parent');
                     }
                 });
-            }
-
-            if (backdropId) {
-                const backdropNode = this.cy.getElementById(backdropId);
-                if (backdropNode && !(typeof backdropNode.empty === 'function' && backdropNode.empty())) {
-                    backdropNode.remove();
-                }
             }
 
             const tempContainer = this.cy.getElementById(containerId);
