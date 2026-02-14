@@ -4503,31 +4503,32 @@ class FileManagerModule {
             return;
         }
 
-        const nodes = this.cy.nodes();
-        if (!nodes || !nodes.length) {
-            return;
-        }
-
         const urlsToPreload = new Set();
 
-        nodes.forEach(node => {
-            if (!node) {
-                return;
-            }
+        const graphBackgroundImage = await this.getCurrentBackgroundImageForExport();
+        this.collectBackgroundImageUrls(graphBackgroundImage).forEach(url => urlsToPreload.add(url));
 
-            if (typeof node.data === 'function') {
-                this.collectBackgroundImageUrls(node.data('backgroundImage')).forEach(url => urlsToPreload.add(url));
-                this.collectBackgroundImageUrls(node.data('background-image')).forEach(url => urlsToPreload.add(url));
-            }
-
-            if (typeof node.style === 'function') {
-                try {
-                    this.collectBackgroundImageUrls(node.style('background-image')).forEach(url => urlsToPreload.add(url));
-                } catch (err) {
-                    console.warn('Failed to read node background image style during export preflight.', err);
+        const nodes = this.cy.nodes();
+        if (nodes && nodes.length) {
+            nodes.forEach(node => {
+                if (!node) {
+                    return;
                 }
-            }
-        });
+
+                if (typeof node.data === 'function') {
+                    this.collectBackgroundImageUrls(node.data('backgroundImage')).forEach(url => urlsToPreload.add(url));
+                    this.collectBackgroundImageUrls(node.data('background-image')).forEach(url => urlsToPreload.add(url));
+                }
+
+                if (typeof node.style === 'function') {
+                    try {
+                        this.collectBackgroundImageUrls(node.style('background-image')).forEach(url => urlsToPreload.add(url));
+                    } catch (err) {
+                        console.warn('Failed to read node background image style during export preflight.', err);
+                    }
+                }
+            });
+        }
 
         if (!urlsToPreload.size || typeof Image === 'undefined') {
             urlsToPreload.forEach(url => {
@@ -4599,7 +4600,7 @@ class FileManagerModule {
         });
 
         if (shouldWarn) {
-            this.notifications.show('Some node background images failed to load before export; they may appear missing in the snapshot.', 'warning');
+            this.notifications.show('Some node or graph background images failed to load before export; they may appear missing in the snapshot.', 'warning');
         }
     }
 
