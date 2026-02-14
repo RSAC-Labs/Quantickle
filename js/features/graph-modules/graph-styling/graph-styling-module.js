@@ -96,6 +96,10 @@ class GraphStylingModule {
 
         // Ensure newly added container nodes immediately show their border
         this._ensureContainerBorder = (evt) => {
+            if (evt.target.hasClass('export-temp-container')) {
+                return;
+            }
+
             evt.target.style({
                 'border-width': 1,
                 'border-color': '#000000'
@@ -460,6 +464,10 @@ class GraphStylingModule {
 
         // Ensure container nodes always have a visible border
         this.cy.nodes('.container').forEach(node => {
+            if (node.hasClass('export-temp-container')) {
+                return;
+            }
+
             node.style({
                 'border-width': 1,
                 'border-color': '#000000'
@@ -566,6 +574,15 @@ class GraphStylingModule {
                     'text-valign': 'top',
                     'text-halign': 'center',
                     'text-margin-y': 10
+                }
+            },
+            {
+                selector: 'node.export-temp-container',
+                style: {
+                    'background-opacity': 0,
+                    'border-width': 0,
+                    'text-opacity': 0,
+                    'events': 'no'
                 }
             },
             {

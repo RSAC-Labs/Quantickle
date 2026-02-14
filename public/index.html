@@ -1885,13 +1885,13 @@
                         📂 Set workspace
                     </div>
                     <div class="menu-separator"></div>
-                    <div class="menu-option" onclick="window.FileManager.openFileDialog()">
+                    <div class="menu-option" onclick="window.FileManager && window.FileManager.openFileDialog && window.FileManager.openFileDialog()">
                         📁 Open Graph File
                     </div>
                     <div class="menu-option" onclick="window.FileManager && window.FileManager.openExamplesDialog && window.FileManager.openExamplesDialog()">
                         📚 Load Example Graph
                     </div>
-                    <div class="menu-option" onclick="window.FileManager.saveFileDialog()">
+                    <div class="menu-option" onclick="window.FileManager && window.FileManager.saveFileDialog && window.FileManager.saveFileDialog()">
                         💾 Save Graph As...
                     </div>
                     <div
@@ -1899,7 +1899,7 @@
                         id="neo4jDesktopOption"
                         aria-disabled="true"
                         title="Configure Neo4j credentials to enable this action"
-                        onclick="window.FileManager.openGraphDesktop()"
+                        onclick="window.FileManager && window.FileManager.openGraphDesktop && window.FileManager.openGraphDesktop()"
                     >
                         🖥️ Graph Desktop
                     </div>
@@ -1908,11 +1908,11 @@
                         id="neo4jSetupOption"
                         class="menu-option"
                         style="display: none;"
-                        onclick="window.FileManager.showNeo4jSetupGuide()"
+                        onclick="window.FileManager && window.FileManager.showNeo4jSetupGuide && window.FileManager.showNeo4jSetupGuide()"
                     >
                         📘 Neo4j Setup Guide
                     </div>
-                    <div class="menu-option" onclick="window.FileManager.createNewGraph()">
+                    <div class="menu-option" onclick="window.FileManager && window.FileManager.createNewGraph && window.FileManager.createNewGraph()">
                         🆕 New Graph
                     </div>
                     <div class="menu-separator"></div>

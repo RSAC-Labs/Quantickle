@@ -4503,31 +4503,32 @@ class FileManagerModule {
             return;
         }
 
-        const nodes = this.cy.nodes();
-        if (!nodes || !nodes.length) {
-            return;
-        }
-
         const urlsToPreload = new Set();
 
-        nodes.forEach(node => {
-            if (!node) {
-                return;
-            }
+        const graphBackgroundImage = await this.getCurrentBackgroundImageForExport();
+        this.collectBackgroundImageUrls(graphBackgroundImage).forEach(url => urlsToPreload.add(url));
 
-            if (typeof node.data === 'function') {
-                this.collectBackgroundImageUrls(node.data('backgroundImage')).forEach(url => urlsToPreload.add(url));
-                this.collectBackgroundImageUrls(node.data('background-image')).forEach(url => urlsToPreload.add(url));
-            }
-
-            if (typeof node.style === 'function') {
-                try {
-                    this.collectBackgroundImageUrls(node.style('background-image')).forEach(url => urlsToPreload.add(url));
-                } catch (err) {
-                    console.warn('Failed to read node background image style during export preflight.', err);
+        const nodes = this.cy.nodes();
+        if (nodes && nodes.length) {
+            nodes.forEach(node => {
+                if (!node) {
+                    return;
                 }
-            }
-        });
+
+                if (typeof node.data === 'function') {
+                    this.collectBackgroundImageUrls(node.data('backgroundImage')).forEach(url => urlsToPreload.add(url));
+                    this.collectBackgroundImageUrls(node.data('background-image')).forEach(url => urlsToPreload.add(url));
+                }
+
+                if (typeof node.style === 'function') {
+                    try {
+                        this.collectBackgroundImageUrls(node.style('background-image')).forEach(url => urlsToPreload.add(url));
+                    } catch (err) {
+                        console.warn('Failed to read node background image style during export preflight.', err);
+                    }
+                }
+            });
+        }
 
         if (!urlsToPreload.size || typeof Image === 'undefined') {
             urlsToPreload.forEach(url => {
@@ -4547,7 +4548,7 @@ class FileManagerModule {
             }
 
             const cached = this._imagePreloadCache.get(url);
-            if (cached && (cached.loaded || cached.failed)) {
+            if (cached && cached.loaded) {
                 return;
             }
 
@@ -4579,7 +4580,7 @@ class FileManagerModule {
                 img.src = url;
             });
 
-            this._imagePreloadCache.set(url, { loaded: false, promise });
+            this._imagePreloadCache.set(url, { loaded: false, failed: false, promise });
             promises.push(promise);
         });
 
@@ -4599,8 +4600,35 @@ class FileManagerModule {
         });
 
         if (shouldWarn) {
-            this.notifications.show('Some node background images failed to load before export; they may appear missing in the snapshot.', 'warning');
+            this.notifications.show('Some node or graph background images failed to load before export; they may appear missing in the snapshot.', 'warning');
         }
+    }
+
+    async waitForCytoscapeRender(timeoutMs = 350) {
+        if (!this.cy || typeof this.cy.one !== 'function') {
+            return;
+        }
+
+        await new Promise(resolve => {
+            let settled = false;
+            const finalize = () => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                clearTimeout(timeoutId);
+                resolve();
+            };
+
+            const timeoutId = setTimeout(finalize, timeoutMs);
+            this.cy.one('render', finalize);
+
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(finalize);
+                });
+            }
+        });
     }
 
     async captureExportSnapshot({ desiredScale = 2, backgroundColor = '#ffffff', onError } = {}) {
@@ -4618,114 +4646,465 @@ class FileManagerModule {
         const minScale = 1;
         const scaleReductionFactor = 0.75;
 
-        await this.preloadBackgroundImagesForExport();
+        const exportBackgroundInfo = await this.createTemporaryExportBackgroundContainer();
+        await this.waitForCytoscapeRender();
 
-        const container = typeof this.cy.container === 'function' ? this.cy.container() : null;
-        if (!container) {
-            throw markNotifiedError('Graph container is not available for export.');
-        }
+        try {
+            await this.preloadBackgroundImagesForExport();
+            await this.waitForCytoscapeRender();
 
-        const rect = typeof container.getBoundingClientRect === 'function'
-            ? container.getBoundingClientRect()
-            : { width: this.cy.width ? this.cy.width() : 0, height: this.cy.height ? this.cy.height() : 0 };
+            const container = typeof this.cy.container === 'function' ? this.cy.container() : null;
+            if (!container) {
+                throw markNotifiedError('Graph container is not available for export.');
+            }
 
-        const elements = typeof this.cy.elements === 'function' ? this.cy.elements() : null;
-        const hasVisibleElements = !!(elements && typeof elements.length === 'number' && elements.length > 0);
-        const renderedBounds = elements && typeof elements.renderedBoundingBox === 'function'
-            ? elements.renderedBoundingBox({ includeOverlays: false, includeEdges: true, includeLabels: true })
-            : null;
+            const rect = typeof container.getBoundingClientRect === 'function'
+                ? container.getBoundingClientRect()
+                : { width: this.cy.width ? this.cy.width() : 0, height: this.cy.height ? this.cy.height() : 0 };
 
-        const hasDrawableBounds = !!(
-            renderedBounds
-            && Number.isFinite(renderedBounds.w)
-            && Number.isFinite(renderedBounds.h)
-            && renderedBounds.w > 0
-            && renderedBounds.h > 0
-        );
+            const exportElements = this.getFilteredExportElements();
+            const hasVisibleElements = !!(exportElements && typeof exportElements.length === 'number' && exportElements.length > 0);
+            const renderedBounds = exportElements && typeof exportElements.renderedBoundingBox === 'function'
+                ? exportElements.renderedBoundingBox({ includeOverlays: false, includeEdges: true, includeLabels: true })
+                : null;
+            const hasDrawableBounds = !!(
+                renderedBounds
+                && Number.isFinite(renderedBounds.w)
+                && Number.isFinite(renderedBounds.h)
+                && renderedBounds.w > 0
+                && renderedBounds.h > 0
+            );
 
-        if (!hasVisibleElements || !hasDrawableBounds) {
+            if (!hasVisibleElements || !hasDrawableBounds) {
+                return {
+                    pngDataUrl: this.createBlankSnapshotDataUrl(),
+                    scale,
+                    renderedBounds,
+                    rect,
+                    boundsWidth: 2,
+                    boundsHeight: 2,
+                    originX: 0,
+                    originY: 0,
+                    isBlankSnapshot: true
+                };
+            }
+
+            const boundsWidth = renderedBounds.w;
+            const boundsHeight = renderedBounds.h;
+            const restoreExcludedElements = this.prepareExcludedElementsForExport(exportElements);
+
+            const originalZoom = typeof this.cy.zoom === 'function' ? this.cy.zoom() : null;
+            const originalPan = typeof this.cy.pan === 'function' ? this.cy.pan() : null;
+
+            let pngDataUrl;
+            let attemptedScale = scale;
+            let scaleUsed = scale;
+            let lastError = null;
+
+            try {
+                while (attemptedScale >= minScale) {
+                    try {
+                        const candidate = this.cy.png({ full: true, scale: attemptedScale, bg: backgroundColor });
+
+                        if (!candidate || (typeof candidate === 'string' && !candidate.trim())) {
+                            throw new Error('Failed to capture graph snapshot.');
+                        }
+
+                        if (typeof candidate !== 'string' || !candidate.startsWith('data:image/')) {
+                            throw new Error('Failed to capture a valid graph image snapshot.');
+                        }
+
+                        pngDataUrl = candidate;
+                        scaleUsed = attemptedScale;
+                        break;
+                    } catch (err) {
+                        lastError = err;
+                        const nextScale = attemptedScale * scaleReductionFactor;
+                        if (nextScale < minScale) {
+                            break;
+                        }
+                        attemptedScale = nextScale;
+                    }
+                }
+            } finally {
+                if (typeof restoreExcludedElements === 'function') {
+                    restoreExcludedElements();
+                }
+            }
+
+            if (!pngDataUrl) {
+                const originalMessage = lastError && lastError.message ? ` ${lastError.message}` : '';
+                throw markNotifiedError(`Failed to capture graph snapshot at export scales >= ${minScale}.${originalMessage}`);
+            }
+
+            if (scaleUsed < scale) {
+                this.notifications.show(
+                    `Graph export scale was reduced from ${scale.toFixed(2)}x to ${scaleUsed.toFixed(2)}x to complete the snapshot.`,
+                    'warning'
+                );
+            }
+
             return {
-                pngDataUrl: this.createBlankSnapshotDataUrl(),
-                scale,
+                pngDataUrl,
+                scale: scaleUsed,
                 renderedBounds,
                 rect,
-                boundsWidth: 2,
-                boundsHeight: 2,
+                boundsWidth,
+                boundsHeight,
                 originX: 0,
                 originY: 0,
-                isBlankSnapshot: true
+                isBlankSnapshot: false
             };
+        } finally {
+            if (exportBackgroundInfo) {
+                this.removeTemporaryExportBackgroundContainer(exportBackgroundInfo);
+            }
+        }
+    }
+
+    getFilteredExportElements() {
+        if (!this.cy || typeof this.cy.elements !== 'function') {
+            return null;
         }
 
-        const boundsWidth = renderedBounds && Number.isFinite(renderedBounds.w) && renderedBounds.w > 0
-            ? renderedBounds.w
-            : rect && Number.isFinite(rect.width) && rect.width > 0
-                ? rect.width
-                : (this.cy.width ? this.cy.width() : 0);
+        const scaffoldIdFragments = [
+            'timeline-anchor',
+            'timeline-bar',
+            'timeline-tick',
+            'timeline-link'
+        ];
+        const temporaryIdPrefixes = ['export-bg-container-', 'export-bg-backdrop-'];
 
-        const boundsHeight = renderedBounds && Number.isFinite(renderedBounds.h) && renderedBounds.h > 0
-            ? renderedBounds.h
-            : rect && Number.isFinite(rect.height) && rect.height > 0
-                ? rect.height
-                : (this.cy.height ? this.cy.height() : 0);
+        const shouldExcludeElement = element => {
+            if (!element || typeof element.id !== 'function') {
+                return false;
+            }
 
-        if (!boundsWidth || !boundsHeight) {
-            throw markNotifiedError('Unable to determine graph dimensions for export.');
+            const id = String(element.id() || '');
+            if (!id) {
+                return false;
+            }
+
+            if (temporaryIdPrefixes.some(prefix => id.startsWith(prefix))) {
+                return true;
+            }
+
+            return scaffoldIdFragments.some(fragment => id.includes(fragment));
+        };
+
+        const allElements = this.cy.elements();
+        const filtered = allElements.filter(ele => !shouldExcludeElement(ele));
+
+        if (filtered && typeof filtered.nodes === 'function' && typeof filtered.edges === 'function') {
+            const filteredNodes = filtered.nodes();
+            const filteredNodeIds = new Set(filteredNodes.map(node => node.id()));
+            const connectedEdges = filtered.edges().filter(edge => {
+                if (!edge || typeof edge.source !== 'function' || typeof edge.target !== 'function') {
+                    return false;
+                }
+
+                const source = edge.source();
+                const target = edge.target();
+
+                return !!(
+                    source
+                    && target
+                    && filteredNodeIds.has(source.id())
+                    && filteredNodeIds.has(target.id())
+                );
+            });
+
+            return filteredNodes.union(connectedEdges);
         }
 
-        let pngDataUrl;
-        let attemptedScale = scale;
-        let scaleUsed = scale;
-        let lastError = null;
+        return filtered;
+    }
 
-        while (attemptedScale >= minScale) {
+    prepareExcludedElementsForExport(exportElements) {
+        if (!this.cy || typeof this.cy.elements !== 'function' || !exportElements) {
+            return () => {};
+        }
+
+        const preservePrefix = 'export-bg-';
+        const includedIds = new Set();
+        if (typeof exportElements.forEach === 'function') {
+            exportElements.forEach(ele => {
+                if (ele && typeof ele.id === 'function') {
+                    includedIds.add(ele.id());
+                }
+            });
+        }
+
+        const excludedElements = this.cy.elements().filter(ele => {
+            if (!ele || typeof ele.id !== 'function') {
+                return false;
+            }
+
+            const id = String(ele.id() || '');
+            if (!id) {
+                return false;
+            }
+
+            if (id.startsWith(preservePrefix)) {
+                return false;
+            }
+
+            return !includedIds.has(id);
+        });
+
+        if (!excludedElements || !excludedElements.length) {
+            return () => {};
+        }
+
+        this.cy.batch(() => {
+            excludedElements.style('display', 'none');
+        });
+
+        return () => {
+            this.cy.batch(() => {
+                excludedElements.removeStyle('display');
+            });
+        };
+    }
+
+    async getCurrentBackgroundImageForExport() {
+        const settings = window.GraphAreaEditor && typeof window.GraphAreaEditor.getSettings === 'function'
+            ? window.GraphAreaEditor.getSettings()
+            : null;
+
+        const backgroundValue = settings && typeof settings.backgroundImage === 'string'
+            ? settings.backgroundImage.trim()
+            : '';
+
+        if (!backgroundValue || backgroundValue === 'none') {
+            return null;
+        }
+
+        if (window.GraphAreaEditor && typeof window.GraphAreaEditor.resolveBackgroundImageSource === 'function') {
             try {
-                const candidate = this.cy.png({ full: true, scale: attemptedScale, bg: backgroundColor });
-
-                if (!candidate || (typeof candidate === 'string' && !candidate.trim())) {
-                    throw new Error('Failed to capture graph snapshot.');
+                const resolved = await window.GraphAreaEditor.resolveBackgroundImageSource(backgroundValue);
+                if (typeof resolved === 'string' && resolved.trim() && resolved.trim() !== 'none') {
+                    return resolved.trim();
                 }
-
-                if (typeof candidate !== 'string' || !candidate.startsWith('data:image/')) {
-                    throw new Error('Failed to capture a valid graph image snapshot.');
-                }
-
-                pngDataUrl = candidate;
-                scaleUsed = attemptedScale;
-                break;
-            } catch (err) {
-                lastError = err;
-                const nextScale = attemptedScale * scaleReductionFactor;
-                if (nextScale < minScale) {
-                    break;
-                }
-                attemptedScale = nextScale;
+            } catch (error) {
+                console.warn('Failed to resolve graph background image for export, using raw value.', error);
             }
         }
 
-        if (!pngDataUrl) {
-            const originalMessage = lastError && lastError.message ? ` ${lastError.message}` : '';
-            throw markNotifiedError(`Failed to capture graph snapshot at export scales >= ${minScale}.${originalMessage}`);
+        return backgroundValue;
+    }
+
+    buildExportBackgroundImageStyle(imageValue) {
+        if (!imageValue || typeof imageValue !== 'string') {
+            return 'none';
         }
 
-        if (scaleUsed < scale) {
-            this.notifications.show(
-                `Graph export scale was reduced from ${scale.toFixed(2)}x to ${scaleUsed.toFixed(2)}x to complete the snapshot.`,
-                'warning'
-            );
+        const trimmed = imageValue.trim();
+        if (!trimmed || trimmed === 'none') {
+            return 'none';
         }
+
+        const buildImage = window.GraphAreaEditor && typeof window.GraphAreaEditor.buildBackgroundImage === 'function'
+            ? window.GraphAreaEditor.buildBackgroundImage.bind(window.GraphAreaEditor)
+            : null;
+
+        if (buildImage) {
+            const built = buildImage(trimmed);
+            if (typeof built === 'string' && built.trim()) {
+                return built.trim();
+            }
+        }
+        if (/^url\(/i.test(trimmed)) {
+            return trimmed;
+        }
+
+        const escaped = trimmed.replace(/"/g, '\"');
+        return `url("${escaped}")`;
+    }
+
+    getBackgroundFitModeForExport() {
+        const settings = window.GraphAreaEditor && typeof window.GraphAreaEditor.getSettings === 'function'
+            ? window.GraphAreaEditor.getSettings()
+            : null;
+        const mode = settings && typeof settings.backgroundImageMode === 'string'
+            ? settings.backgroundImageMode
+            : 'fit';
+
+        switch (mode) {
+            case 'fill':
+            case 'stretch':
+                return 'cover';
+            case 'center':
+            case 'repeat':
+                return 'none';
+            case 'fit':
+            default:
+                return 'contain';
+        }
+    }
+
+    async createTemporaryExportBackgroundContainer() {
+        if (!this.cy || typeof this.cy.add !== 'function' || typeof this.cy.nodes !== 'function') {
+            return null;
+        }
+
+        const backgroundImage = await this.getCurrentBackgroundImageForExport();
+        const backgroundImageStyle = this.buildExportBackgroundImageStyle(backgroundImage);
+        const settings = window.GraphAreaEditor && typeof window.GraphAreaEditor.getSettings === 'function'
+            ? window.GraphAreaEditor.getSettings()
+            : null;
+        const backgroundColor = settings && typeof settings.backgroundColor === 'string' && settings.backgroundColor.trim()
+            ? settings.backgroundColor.trim()
+            : '#000000';
+
+        const exportElements = this.getFilteredExportElements();
+        const allNodes = exportElements && typeof exportElements.nodes === 'function'
+            ? exportElements.nodes()
+            : this.cy.nodes();
+        const candidateChildren = allNodes.filter(node => {
+            const id = typeof node.id === 'function' ? node.id() : '';
+            return !id.startsWith('export-bg-container-') && !id.startsWith('export-bg-backdrop-');
+        });
+
+        if (!candidateChildren.length) {
+            return null;
+        }
+
+        const elements = exportElements || (typeof this.cy.elements === 'function' ? this.cy.elements() : null);
+        const bounds = elements && typeof elements.boundingBox === 'function'
+            ? elements.boundingBox({ includeLabels: true, includeOverlays: false })
+            : null;
+
+        if (!bounds || !Number.isFinite(bounds.x1) || !Number.isFinite(bounds.x2) || !Number.isFinite(bounds.y1) || !Number.isFinite(bounds.y2)) {
+            return null;
+        }
+
+        const padding = 0;
+        const width = Math.max(1, (bounds.x2 - bounds.x1) + (padding * 2));
+        const height = Math.max(1, (bounds.y2 - bounds.y1) + (padding * 2));
+        const centerX = ((bounds.x1 + bounds.x2) / 2);
+        const centerY = ((bounds.y1 + bounds.y2) / 2);
+
+        const parentByNodeId = new Map();
+        candidateChildren.forEach(node => {
+            parentByNodeId.set(node.id(), node.data('parent') || null);
+        });
+
+        const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const containerId = `export-bg-container-${suffix}`;
+        const backdropId = `export-bg-backdrop-${suffix}`;
+        const fitMode = this.getBackgroundFitModeForExport();
+
+        this.cy.batch(() => {
+            this.cy.add({
+                group: 'nodes',
+                data: {
+                    id: containerId,
+                    label: '',
+                    color: 'transparent',
+                    width: 1,
+                    height: 1,
+                    opacity: 0
+                },
+                classes: 'container export-temp-container'
+            });
+
+            const container = this.cy.getElementById(containerId);
+            container.style({
+                'background-opacity': 0,
+                'border-width': 0,
+                'text-opacity': 0,
+                'events': 'no'
+            });
+
+            candidateChildren.forEach(node => {
+                node.data('parent', containerId);
+            });
+
+            const backdrop = this.cy.add({
+                group: 'nodes',
+                data: {
+                    id: backdropId,
+                    parent: containerId,
+                    type: 'image',
+                    label: '',
+                    color: backgroundColor,
+                    icon: backgroundImage || '',
+                    backgroundImage: backgroundImageStyle,
+                    backgroundFit: fitMode,
+                    backgroundWidth: fitMode === 'none' ? 'auto' : '100%',
+                    backgroundHeight: fitMode === 'none' ? 'auto' : '100%',
+                    backgroundPositionX: '50%',
+                    backgroundPositionY: '50%',
+                    width,
+                    height,
+                    legendVisible: false,
+                    labelVisible: false,
+                    iconOpacity: 1,
+                    opacity: 1
+                },
+                position: { x: centerX, y: centerY }
+            });
+
+            backdrop.style({
+                'z-index': -1,
+                'z-compound-depth': 'bottom',
+                'border-width': 0,
+                'events': 'no',
+                'text-opacity': 0,
+                'background-opacity': 1,
+                'background-image': backgroundImageStyle,
+                'background-fit': fitMode,
+                'shape': 'rectangle'
+            });
+            backdrop.lock();
+            backdrop.unselectify();
+            backdrop.ungrabify();
+        });
+
 
         return {
-            pngDataUrl,
-            scale: scaleUsed,
-            renderedBounds,
-            rect,
-            boundsWidth,
-            boundsHeight,
-            originX: renderedBounds && Number.isFinite(renderedBounds.x1) ? renderedBounds.x1 : 0,
-            originY: renderedBounds && Number.isFinite(renderedBounds.y1) ? renderedBounds.y1 : 0,
-            isBlankSnapshot: false
+            containerId,
+            backdropId,
+            parentByNodeId
         };
+    }
+
+    removeTemporaryExportBackgroundContainer(exportBackgroundInfo) {
+        if (!exportBackgroundInfo || !this.cy || typeof this.cy.getElementById !== 'function') {
+            return;
+        }
+
+        const { containerId, backdropId, parentByNodeId } = exportBackgroundInfo;
+
+        this.cy.batch(() => {
+            if (backdropId) {
+                const backdropNode = this.cy.getElementById(backdropId);
+                if (backdropNode && !(typeof backdropNode.empty === 'function' && backdropNode.empty())) {
+                    backdropNode.remove();
+                }
+            }
+
+            if (parentByNodeId && typeof parentByNodeId.forEach === 'function') {
+                parentByNodeId.forEach((parentId, nodeId) => {
+                    const node = this.cy.getElementById(nodeId);
+                    if (!node || typeof node.empty === 'function' && node.empty()) {
+                        return;
+                    }
+
+                    if (parentId) {
+                        node.data('parent', parentId);
+                    } else {
+                        node.removeData('parent');
+                    }
+                });
+            }
+
+            const tempContainer = this.cy.getElementById(containerId);
+            if (tempContainer && !(typeof tempContainer.empty === 'function' && tempContainer.empty())) {
+                tempContainer.remove();
+            }
+        });
     }
 
     createBlankSnapshotDataUrl() {
@@ -4744,8 +5123,14 @@ class FileManagerModule {
     }
 
 
-    async normalizeSnapshotForPdf(imageSource, onError) {
+    async normalizeSnapshotForPdf(imageSource, onError, options = {}) {
         const markNotifiedError = onError || (message => this.markExportError(message));
+        const {
+            preferredFormat = 'PNG',
+            jpegQuality = 0.85,
+            maxPixelCount = Infinity,
+            maxDimension = Infinity
+        } = options;
 
         const toPdfFormat = (mimeType = '') => {
             const normalized = String(mimeType).toLowerCase();
@@ -4810,21 +5195,46 @@ class FileManagerModule {
                 throw markNotifiedError('Failed to capture a valid image for PDF export.');
             }
 
-            const mimeType = blob.type;
-            const arrayBuffer = await blob.arrayBuffer();
-            const bytes = new Uint8Array(arrayBuffer);
+            const imageBitmap = await createImageBitmap(blob);
+            const sourceWidth = Math.max(1, imageBitmap.width || 1);
+            const sourceHeight = Math.max(1, imageBitmap.height || 1);
 
-            const chunkSize = 0x8000;
-            let binary = '';
-            for (let index = 0; index < bytes.length; index += chunkSize) {
-                const chunk = bytes.subarray(index, index + chunkSize);
-                binary += String.fromCharCode(...chunk);
+            const maxPixels = Number.isFinite(maxPixelCount) && maxPixelCount > 0 ? maxPixelCount : Infinity;
+            const maxEdge = Number.isFinite(maxDimension) && maxDimension > 0 ? maxDimension : Infinity;
+            const pixelRatio = Math.min(1, Math.sqrt(maxPixels / (sourceWidth * sourceHeight)));
+            const dimensionRatio = Math.min(1, maxEdge / sourceWidth, maxEdge / sourceHeight);
+            const resizeRatio = Math.min(pixelRatio, dimensionRatio);
+
+            const targetWidth = Math.max(1, Math.floor(sourceWidth * resizeRatio));
+            const targetHeight = Math.max(1, Math.floor(sourceHeight * resizeRatio));
+
+            const canvas = document.createElement('canvas');
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+
+            const context = canvas.getContext('2d');
+            if (!context) {
+                imageBitmap.close();
+                throw markNotifiedError('Unable to normalize graph snapshot for PDF export.');
             }
 
-            const base64 = btoa(binary);
+            context.fillStyle = '#ffffff';
+            context.fillRect(0, 0, targetWidth, targetHeight);
+            context.drawImage(imageBitmap, 0, 0, targetWidth, targetHeight);
+            imageBitmap.close();
+
+            const useJpeg = String(preferredFormat).toUpperCase() === 'JPEG';
+            const mimeType = useJpeg ? 'image/jpeg' : 'image/png';
+            const dataUrl = useJpeg
+                ? canvas.toDataURL(mimeType, jpegQuality)
+                : canvas.toDataURL(mimeType);
+
             return {
-                dataUrl: `data:${mimeType};base64,${base64}`,
-                format: toPdfFormat(mimeType)
+                dataUrl,
+                format: toPdfFormat(mimeType),
+                width: targetWidth,
+                height: targetHeight,
+                wasResized: targetWidth !== sourceWidth || targetHeight !== sourceHeight
             };
         } catch (error) {
             throw markNotifiedError('Unable to normalize graph snapshot for PDF export.');
@@ -4873,43 +5283,107 @@ class FileManagerModule {
                         return;
                     }
 
-                    const snapshot = await this.captureExportSnapshot({ desiredScale: 2 });
-                    if (snapshot.isBlankSnapshot) {
-                        this.notifications.show('Blank graph has no drawable snapshot; exported empty PDF page instead.', 'warning');
+                    const initialScale = 4;
+                    const minScale = 0.5;
+                    const scaleReductionFactor = 0.75;
+                    let attemptedScale = initialScale;
+                    let attemptedFormat = 'PNG';
+                    let warnedScaleReduction = false;
+                    let warnedFormatFallback = false;
+                    let lastPdfError = null;
+                    let generatedPdfBlob = null;
+
+                    while (attemptedScale >= minScale) {
+                        const snapshot = await this.captureExportSnapshot({ desiredScale: attemptedScale });
+                        if (snapshot.isBlankSnapshot) {
+                            this.notifications.show('Blank graph has no drawable snapshot; exported empty PDF page instead.', 'warning');
+                        }
+
+                        const normalizedImage = await this.normalizeSnapshotForPdf(snapshot.pngDataUrl, null, {
+                            preferredFormat: attemptedFormat,
+                            maxPixelCount: attemptedFormat === 'JPEG' ? 16_000_000 : Infinity,
+                            maxDimension: attemptedFormat === 'JPEG' ? 6000 : Infinity,
+                            jpegQuality: 0.88
+                        });
+
+                        const container = snapshot.rect ? snapshot.rect : this.cy.container();
+                        const containerWidth = container ? container.width || container.clientWidth || 0 : 0;
+                        const containerHeight = container ? container.height || container.clientHeight || 0 : 0;
+                        const containerRatio = containerWidth && containerHeight
+                            ? containerWidth / containerHeight
+                            : 1;
+
+                        const orientation = containerRatio >= 1 ? 'landscape' : 'portrait';
+                        const pdfDoc = new window.jspdf.jsPDF({ orientation });
+                        const pageWidth = pdfDoc.internal.pageSize.getWidth();
+                        const pageHeight = pdfDoc.internal.pageSize.getHeight();
+
+                        const imgWidth = Math.max(1, normalizedImage.width || Math.round(snapshot.boundsWidth * snapshot.scale));
+                        const imgHeight = Math.max(1, normalizedImage.height || Math.round(snapshot.boundsHeight * snapshot.scale));
+                        const imageRatio = imgWidth / imgHeight;
+
+                        let renderWidth = pageWidth;
+                        let renderHeight = renderWidth / imageRatio;
+
+                        if (renderHeight > pageHeight) {
+                            renderHeight = pageHeight;
+                            renderWidth = renderHeight * imageRatio;
+                        }
+
+                        const offsetX = (pageWidth - renderWidth) / 2;
+                        const offsetY = (pageHeight - renderHeight) / 2;
+
+                        try {
+                            pdfDoc.addImage(normalizedImage.dataUrl, normalizedImage.format, offsetX, offsetY, renderWidth, renderHeight);
+                            generatedPdfBlob = pdfDoc.output('blob');
+
+                            if (normalizedImage.wasResized && !warnedScaleReduction) {
+                                this.notifications.show(
+                                    `PDF export image was resized to ${imgWidth}x${imgHeight} for compatibility.`,
+                                    'warning'
+                                );
+                                warnedScaleReduction = true;
+                            }
+                            break;
+                        } catch (error) {
+                            lastPdfError = error;
+                            const message = error && error.message ? error.message : '';
+                            const isSizeRelated = error instanceof RangeError
+                                || /invalid string length|addimage|png|out of memory|too large/i.test(message);
+
+                            if (!isSizeRelated) {
+                                throw error;
+                            }
+
+                            if (attemptedFormat === 'PNG') {
+                                attemptedFormat = 'JPEG';
+                                if (!warnedFormatFallback) {
+                                    this.notifications.show('PDF export fell back to JPEG image encoding to avoid size limits.', 'warning');
+                                    warnedFormatFallback = true;
+                                }
+                                continue;
+                            }
+
+                            const nextScale = attemptedScale * scaleReductionFactor;
+                            if (nextScale < minScale) {
+                                break;
+                            }
+
+                            this.notifications.show(
+                                `PDF export scale reduced from ${attemptedScale.toFixed(2)}x to ${nextScale.toFixed(2)}x due to image size limits.`,
+                                'warning'
+                            );
+                            attemptedScale = nextScale;
+                            attemptedFormat = 'PNG';
+                        }
                     }
-                    const normalizedImage = await this.normalizeSnapshotForPdf(snapshot.pngDataUrl);
 
-                    const container = snapshot.rect ? snapshot.rect : this.cy.container();
-                    const containerWidth = container ? container.width || container.clientWidth || 0 : 0;
-                    const containerHeight = container ? container.height || container.clientHeight || 0 : 0;
-                    const containerRatio = containerWidth && containerHeight
-                        ? containerWidth / containerHeight
-                        : 1;
-
-                    const orientation = containerRatio >= 1 ? 'landscape' : 'portrait';
-                    const pdfDoc = new window.jspdf.jsPDF({ orientation });
-
-                    const pageWidth = pdfDoc.internal.pageSize.getWidth();
-                    const pageHeight = pdfDoc.internal.pageSize.getHeight();
-
-                    const imgWidth = Math.max(1, Math.round(snapshot.boundsWidth * snapshot.scale));
-                    const imgHeight = Math.max(1, Math.round(snapshot.boundsHeight * snapshot.scale));
-                    const imageRatio = imgWidth / imgHeight;
-
-                    let renderWidth = pageWidth;
-                    let renderHeight = renderWidth / imageRatio;
-
-                    if (renderHeight > pageHeight) {
-                        renderHeight = pageHeight;
-                        renderWidth = renderHeight * imageRatio;
+                    if (!generatedPdfBlob) {
+                        const message = lastPdfError && lastPdfError.message ? lastPdfError.message : 'Image exceeded PDF export limits.';
+                        throw new Error(`Unable to export PDF after reducing scale to ${attemptedScale.toFixed(2)}x and trying PNG/JPEG. ${message}`);
                     }
 
-                    const offsetX = (pageWidth - renderWidth) / 2;
-                    const offsetY = (pageHeight - renderHeight) / 2;
-
-                    pdfDoc.addImage(normalizedImage.dataUrl, normalizedImage.format, offsetX, offsetY, renderWidth, renderHeight);
-
-                    data = pdfDoc.output('blob');
+                    data = generatedPdfBlob;
                     filename = `graph-export-${Date.now()}.pdf`;
                     mimeType = 'application/pdf';
                     break;
