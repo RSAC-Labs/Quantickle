@@ -4773,11 +4773,9 @@ class FileManagerModule {
 
         switch (mode) {
             case 'fill':
-                return 'cover';
             case 'stretch':
                 return 'cover';
             case 'center':
-                return 'none';
             case 'repeat':
                 return 'none';
             case 'fit':
@@ -4799,19 +4797,31 @@ class FileManagerModule {
         const allNodes = this.cy.nodes();
         const candidateChildren = allNodes.filter(node => {
             const id = typeof node.id === 'function' ? node.id() : '';
-            return !id.startsWith('export-bg-container-');
+            return !id.startsWith('export-bg-container-') && !id.startsWith('export-bg-backdrop-');
         });
 
         if (!candidateChildren.length) {
             return null;
         }
 
+        const extent = typeof this.cy.extent === 'function' ? this.cy.extent() : null;
+        if (!extent || !Number.isFinite(extent.x1) || !Number.isFinite(extent.x2) || !Number.isFinite(extent.y1) || !Number.isFinite(extent.y2)) {
+            return null;
+        }
+
+        const width = Math.max(1, extent.x2 - extent.x1);
+        const height = Math.max(1, extent.y2 - extent.y1);
+        const centerX = extent.x1 + (width / 2);
+        const centerY = extent.y1 + (height / 2);
+
         const parentByNodeId = new Map();
         candidateChildren.forEach(node => {
             parentByNodeId.set(node.id(), node.data('parent') || null);
         });
 
-        const containerId = `export-bg-container-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const containerId = `export-bg-container-${suffix}`;
+        const backdropId = `export-bg-backdrop-${suffix}`;
         const fitMode = this.getBackgroundFitModeForExport();
 
         this.cy.batch(() => {
@@ -4820,14 +4830,7 @@ class FileManagerModule {
                 data: {
                     id: containerId,
                     label: '',
-                    color: 'transparent',
-                    icon: backgroundImage,
-                    backgroundImage,
-                    backgroundFit: fitMode,
-                    backgroundWidth: fitMode === 'none' ? 'auto' : '100%',
-                    backgroundHeight: fitMode === 'none' ? 'auto' : '100%',
-                    backgroundPositionX: '50%',
-                    backgroundPositionY: '50%'
+                    color: 'transparent'
                 },
                 classes: 'container'
             });
@@ -4835,10 +4838,47 @@ class FileManagerModule {
             candidateChildren.forEach(node => {
                 node.data('parent', containerId);
             });
+
+            const backdrop = this.cy.add({
+                group: 'nodes',
+                data: {
+                    id: backdropId,
+                    parent: containerId,
+                    type: 'image',
+                    label: '',
+                    color: 'transparent',
+                    icon: backgroundImage,
+                    backgroundImage,
+                    backgroundFit: fitMode,
+                    backgroundWidth: fitMode === 'none' ? 'auto' : '100%',
+                    backgroundHeight: fitMode === 'none' ? 'auto' : '100%',
+                    backgroundPositionX: '50%',
+                    backgroundPositionY: '50%',
+                    width,
+                    height,
+                    legendVisible: false,
+                    labelVisible: false,
+                    iconOpacity: 1,
+                    opacity: 1
+                },
+                position: { x: centerX, y: centerY }
+            });
+
+            backdrop.style({
+                'z-index': -9999,
+                'z-compound-depth': 'bottom',
+                'border-width': 0,
+                'events': 'no',
+                'text-opacity': 0
+            });
+            backdrop.lock();
+            backdrop.unselectify();
+            backdrop.ungrabify();
         });
 
         return {
             containerId,
+            backdropId,
             parentByNodeId
         };
     }
@@ -4848,7 +4888,7 @@ class FileManagerModule {
             return;
         }
 
-        const { containerId, parentByNodeId } = exportBackgroundInfo;
+        const { containerId, backdropId, parentByNodeId } = exportBackgroundInfo;
 
         this.cy.batch(() => {
             if (parentByNodeId && typeof parentByNodeId.forEach === 'function') {
@@ -4864,6 +4904,13 @@ class FileManagerModule {
                         node.removeData('parent');
                     }
                 });
+            }
+
+            if (backdropId) {
+                const backdropNode = this.cy.getElementById(backdropId);
+                if (backdropNode && !(typeof backdropNode.empty === 'function' && backdropNode.empty())) {
+                    backdropNode.remove();
+                }
             }
 
             const tempContainer = this.cy.getElementById(containerId);
