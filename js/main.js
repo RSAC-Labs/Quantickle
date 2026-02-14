@@ -113,6 +113,26 @@ window.QuantickleApp = {
         // Help menu handlers are already inline in HTML
     },
 
+    createFileManagerFallback: function(reason = 'File manager is unavailable') {
+        const notify = () => {
+            if (window.UI && typeof window.UI.showNotification === 'function') {
+                window.UI.showNotification(reason, 'error');
+            }
+        };
+
+        const unsupported = () => notify();
+
+        return {
+            openFileDialog: unsupported,
+            openExamplesDialog: unsupported,
+            saveFileDialog: unsupported,
+            openGraphDesktop: unsupported,
+            showNeo4jSetupGuide: unsupported,
+            createNewGraph: unsupported,
+            exportGraph: unsupported
+        };
+    },
+
     // Initialize all managers
     initializeManagers: function() {
         const graphRenderer = window.GraphRenderer;
@@ -387,7 +407,19 @@ window.QuantickleApp = {
             ui,
             includePapaParse: true
         });
-        window.FileManager = new fileManagerModule(fileManagerDependencies);
+
+        if (typeof fileManagerModule !== 'function') {
+            console.error('FileManagerModule is not available as a constructor.', { fileManagerModule });
+            window.FileManager = this.createFileManagerFallback('File manager failed to initialize. Please reload the page.');
+            return;
+        }
+
+        try {
+            window.FileManager = new fileManagerModule(fileManagerDependencies);
+        } catch (error) {
+            console.error('FileManager initialization failed:', error);
+            window.FileManager = this.createFileManagerFallback('File manager failed to initialize. Please reload the page.');
+        }
         
     },
 
