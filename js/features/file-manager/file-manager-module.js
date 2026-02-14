@@ -4632,12 +4632,11 @@ class FileManagerModule {
                 ? container.getBoundingClientRect()
                 : { width: this.cy.width ? this.cy.width() : 0, height: this.cy.height ? this.cy.height() : 0 };
 
-            const elements = typeof this.cy.elements === 'function' ? this.cy.elements() : null;
-            const hasVisibleElements = !!(elements && typeof elements.length === 'number' && elements.length > 0);
-            const renderedBounds = elements && typeof elements.renderedBoundingBox === 'function'
-                ? elements.renderedBoundingBox({ includeOverlays: false, includeEdges: true, includeLabels: true })
+            const exportElements = this.getFilteredExportElements();
+            const hasVisibleElements = !!(exportElements && typeof exportElements.length === 'number' && exportElements.length > 0);
+            const renderedBounds = exportElements && typeof exportElements.renderedBoundingBox === 'function'
+                ? exportElements.renderedBoundingBox({ includeOverlays: false, includeEdges: true, includeLabels: true })
                 : null;
-
             const hasDrawableBounds = !!(
                 renderedBounds
                 && Number.isFinite(renderedBounds.w)
@@ -4660,49 +4659,59 @@ class FileManagerModule {
                 };
             }
 
-            const boundsWidth = renderedBounds && Number.isFinite(renderedBounds.w) && renderedBounds.w > 0
-                ? renderedBounds.w
-                : rect && Number.isFinite(rect.width) && rect.width > 0
-                    ? rect.width
-                    : (this.cy.width ? this.cy.width() : 0);
+            const boundsWidth = rect && Number.isFinite(rect.width) && rect.width > 0
+                ? rect.width
+                : (this.cy.width ? this.cy.width() : 0);
 
-            const boundsHeight = renderedBounds && Number.isFinite(renderedBounds.h) && renderedBounds.h > 0
-                ? renderedBounds.h
-                : rect && Number.isFinite(rect.height) && rect.height > 0
-                    ? rect.height
-                    : (this.cy.height ? this.cy.height() : 0);
+            const boundsHeight = rect && Number.isFinite(rect.height) && rect.height > 0
+                ? rect.height
+                : (this.cy.height ? this.cy.height() : 0);
 
             if (!boundsWidth || !boundsHeight) {
                 throw markNotifiedError('Unable to determine graph dimensions for export.');
             }
+
+            const originalZoom = typeof this.cy.zoom === 'function' ? this.cy.zoom() : null;
+            const originalPan = typeof this.cy.pan === 'function' ? this.cy.pan() : null;
 
             let pngDataUrl;
             let attemptedScale = scale;
             let scaleUsed = scale;
             let lastError = null;
 
-            while (attemptedScale >= minScale) {
-                try {
-                    const candidate = this.cy.png({ full: true, scale: attemptedScale, bg: backgroundColor });
+            try {
+                if (typeof this.cy.fit === 'function') {
+                    this.cy.fit(exportElements, 40);
+                }
 
-                    if (!candidate || (typeof candidate === 'string' && !candidate.trim())) {
-                        throw new Error('Failed to capture graph snapshot.');
-                    }
+                while (attemptedScale >= minScale) {
+                    try {
+                        const candidate = this.cy.png({ full: false, scale: attemptedScale, bg: backgroundColor });
 
-                    if (typeof candidate !== 'string' || !candidate.startsWith('data:image/')) {
-                        throw new Error('Failed to capture a valid graph image snapshot.');
-                    }
+                        if (!candidate || (typeof candidate === 'string' && !candidate.trim())) {
+                            throw new Error('Failed to capture graph snapshot.');
+                        }
 
-                    pngDataUrl = candidate;
-                    scaleUsed = attemptedScale;
-                    break;
-                } catch (err) {
-                    lastError = err;
-                    const nextScale = attemptedScale * scaleReductionFactor;
-                    if (nextScale < minScale) {
+                        if (typeof candidate !== 'string' || !candidate.startsWith('data:image/')) {
+                            throw new Error('Failed to capture a valid graph image snapshot.');
+                        }
+
+                        pngDataUrl = candidate;
+                        scaleUsed = attemptedScale;
                         break;
+                    } catch (err) {
+                        lastError = err;
+                        const nextScale = attemptedScale * scaleReductionFactor;
+                        if (nextScale < minScale) {
+                            break;
+                        }
+                        attemptedScale = nextScale;
                     }
-                    attemptedScale = nextScale;
+                }
+            } finally {
+                if (Number.isFinite(originalZoom) && originalPan && Number.isFinite(originalPan.x) && Number.isFinite(originalPan.y)) {
+                    this.cy.zoom(originalZoom);
+                    this.cy.pan({ x: originalPan.x, y: originalPan.y });
                 }
             }
 
@@ -4725,8 +4734,8 @@ class FileManagerModule {
                 rect,
                 boundsWidth,
                 boundsHeight,
-                originX: renderedBounds && Number.isFinite(renderedBounds.x1) ? renderedBounds.x1 : 0,
-                originY: renderedBounds && Number.isFinite(renderedBounds.y1) ? renderedBounds.y1 : 0,
+                originX: 0,
+                originY: 0,
                 isBlankSnapshot: false
             };
         } finally {
@@ -4734,6 +4743,64 @@ class FileManagerModule {
                 this.removeTemporaryExportBackgroundContainer(exportBackgroundInfo);
             }
         }
+    }
+
+    getFilteredExportElements() {
+        if (!this.cy || typeof this.cy.elements !== 'function') {
+            return null;
+        }
+
+        const scaffoldIdFragments = [
+            'timeline-anchor',
+            'timeline-bar',
+            'timeline-tick',
+            'timeline-link'
+        ];
+        const temporaryIdPrefixes = ['export-bg-container-', 'export-bg-backdrop-'];
+
+        const shouldExcludeElement = element => {
+            if (!element || typeof element.id !== 'function') {
+                return false;
+            }
+
+            const id = String(element.id() || '');
+            if (!id) {
+                return false;
+            }
+
+            if (temporaryIdPrefixes.some(prefix => id.startsWith(prefix))) {
+                return true;
+            }
+
+            return scaffoldIdFragments.some(fragment => id.includes(fragment));
+        };
+
+        const allElements = this.cy.elements();
+        const filtered = allElements.filter(ele => !shouldExcludeElement(ele));
+
+        if (filtered && typeof filtered.nodes === 'function' && typeof filtered.edges === 'function') {
+            const filteredNodes = filtered.nodes();
+            const filteredNodeIds = new Set(filteredNodes.map(node => node.id()));
+            const connectedEdges = filtered.edges().filter(edge => {
+                if (!edge || typeof edge.source !== 'function' || typeof edge.target !== 'function') {
+                    return false;
+                }
+
+                const source = edge.source();
+                const target = edge.target();
+
+                return !!(
+                    source
+                    && target
+                    && filteredNodeIds.has(source.id())
+                    && filteredNodeIds.has(target.id())
+                );
+            });
+
+            return filteredNodes.union(connectedEdges);
+        }
+
+        return filtered;
     }
 
     async getCurrentBackgroundImageForExport() {
@@ -4826,7 +4893,10 @@ class FileManagerModule {
             ? settings.backgroundColor.trim()
             : '#000000';
 
-        const allNodes = this.cy.nodes();
+        const exportElements = this.getFilteredExportElements();
+        const allNodes = exportElements && typeof exportElements.nodes === 'function'
+            ? exportElements.nodes()
+            : this.cy.nodes();
         const candidateChildren = allNodes.filter(node => {
             const id = typeof node.id === 'function' ? node.id() : '';
             return !id.startsWith('export-bg-container-') && !id.startsWith('export-bg-backdrop-');
@@ -4836,7 +4906,7 @@ class FileManagerModule {
             return null;
         }
 
-        const elements = typeof this.cy.elements === 'function' ? this.cy.elements() : null;
+        const elements = exportElements || (typeof this.cy.elements === 'function' ? this.cy.elements() : null);
         const bounds = elements && typeof elements.boundingBox === 'function'
             ? elements.boundingBox({ includeLabels: true, includeOverlays: false })
             : null;
