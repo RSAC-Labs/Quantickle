@@ -1424,9 +1424,7 @@ class ContextMenuModule {
             nodes.unselect();
             parentContainer.select();
             if (window.GraphRenderer) {
-                if (window.GraphRenderer.arrangeContainerNodes) {
-                    window.GraphRenderer.arrangeContainerNodes(parentContainer);
-                } else if (window.GraphRenderer.updateContainerBounds) {
+                if (window.GraphRenderer.updateContainerBounds) {
                     window.GraphRenderer.updateContainerBounds(parentContainer);
                 }
             }
@@ -1452,9 +1450,7 @@ class ContextMenuModule {
             nodes.unselect();
             containerNode.select();
             if (window.GraphRenderer) {
-                if (window.GraphRenderer.arrangeContainerNodes) {
-                    window.GraphRenderer.arrangeContainerNodes(containerNode);
-                } else if (window.GraphRenderer.updateContainerBounds) {
+                if (window.GraphRenderer.updateContainerBounds) {
                     window.GraphRenderer.updateContainerBounds(containerNode);
                 }
             }
