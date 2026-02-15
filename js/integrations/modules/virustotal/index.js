@@ -1152,8 +1152,17 @@
                 infoHtml: fileInfoHtml
             };
             const { id: fileNodeId, created: fileCreated } = await getOrCreateNode(cy, fileNodeData.id, fileNodeData, bulkOptions);
-            cy.getElementById(fileNodeId).data('info', fileInfoText);
-            cy.getElementById(fileNodeId).data('infoHtml', fileInfoHtml);
+            const fileNode = cy.getElementById(fileNodeId);
+            fileNode.data({
+                detectionRatio: fileNodeData.detectionRatio,
+                fileName: fileNodeData.fileName,
+                fileType: fileNodeData.fileType,
+                firstSeen: fileNodeData.firstSeen,
+                lastSeen: fileNodeData.lastSeen,
+                timestamp: fileNodeData.timestamp,
+                info: fileInfoText,
+                infoHtml: fileInfoHtml
+            });
             if (fileCreated) {
                 nodesAdded++;
             }
@@ -1643,8 +1652,17 @@
                 domainNodeData,
                 bulkOptions
             );
-            cy.getElementById(domainNodeId).data('info', domainInfoText);
-            cy.getElementById(domainNodeId).data('infoHtml', domainInfoHtml);
+            const domainCreationTime = attributes.creation_date ? new Date(attributes.creation_date * 1000).toISOString() : null;
+            const domainNode = cy.getElementById(domainNodeId);
+            domainNode.data({
+                detectionRatio: domainNodeData.detectionRatio,
+                reputation: domainNodeData.reputation,
+                creationDate: domainCreationTime,
+                timestamp: domainCreationTime,
+                lastSeen: domainNodeData.lastSeen,
+                info: domainInfoText,
+                infoHtml: domainInfoHtml
+            });
             if (domainCreated) {
                 nodesAdded++;
             }
@@ -1982,8 +2000,20 @@
             };
 
             const { id: ipNodeId, created: ipCreated } = await getOrCreateNode(cy, ipNodeData.id, ipNodeData, bulkOptions);
-            cy.getElementById(ipNodeId).data('info', ipInfoText);
-            cy.getElementById(ipNodeId).data('infoHtml', ipInfoHtml);
+            const ipNode = cy.getElementById(ipNodeId);
+            ipNode.data({
+                detectionRatio: ipNodeData.detectionRatio,
+                country: ipNodeData.country,
+                asn: ipNodeData.asn,
+                asOwner: ipNodeData.asOwner,
+                network: ipNodeData.network,
+                reputation: ipNodeData.reputation,
+                lastSeen: ipNodeData.lastSeen,
+                lastModDate: ipNodeData.lastSeen,
+                timestamp: ipNodeData.timestamp,
+                info: ipInfoText,
+                infoHtml: ipInfoHtml
+            });
             if (ipCreated) {
                 nodesAdded++;
             }
