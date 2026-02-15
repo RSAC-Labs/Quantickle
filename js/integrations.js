@@ -73,6 +73,7 @@ window.IntegrationsManager = {
         opmlUpdatingListDisplay: false,
         opmlExistingGraphNames: new Set(),
         opmlExistingGraphCacheReady: false,
+        mispImportCancelRequested: false,
         vtRelationshipForbiddenEndpoints: new Set(),
         integrationHosts: []
     },
@@ -81,9 +82,39 @@ window.IntegrationsManager = {
     moduleServices: null,
 
     createModuleServices: function() {
+        const manager = this;
         const fetchFn = (typeof window !== 'undefined' && typeof window.fetch === 'function')
             ? window.fetch.bind(window)
             : (typeof fetch === 'function' ? fetch : null);
+
+        const safeFetch = (...args) => {
+            if (!fetchFn) {
+                return Promise.reject(new Error('Fetch is not available'));
+            }
+            return fetchFn(...args);
+        };
+
+        const createApiAdapter = (basePath) => ({
+            request: (path = '', options = {}) => {
+                const normalizedPath = typeof path === 'string' ? path : '';
+                const endpoint = `${basePath}${normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`}`;
+                return safeFetch(endpoint, options);
+            }
+        });
+
+        const uiAdapter = {
+            beginActivity: (activityId, label) => window.UI?.beginGraphActivity?.(activityId, label) || null,
+            updateActivity: (taskId, label) => {
+                if (taskId) {
+                    window.UI?.updateGraphActivity?.(taskId, label);
+                }
+            },
+            endActivity: (taskId) => {
+                if (taskId) {
+                    window.UI?.endGraphActivity?.(taskId);
+                }
+            }
+        };
 
         return {
             config: {
@@ -140,13 +171,93 @@ window.IntegrationsManager = {
                     }
                 }
             },
+            integrations: {
+                getCirclLuConfiguration: () => manager.getCirclLuConfiguration(),
+                getDefaultMispFeedUrl: () => manager.CIRCL_MISP_DEFAULT_FEED_URL,
+                getLastMispFeedUrl: () => manager.lastCirclMispFeedUrl,
+                normalizeMispFeedUrl: (feedUrl) => manager.normalizeMispFeedUrl(feedUrl),
+                fetchCirclMispManifest: (feedUrl) => manager.fetchCirclMispManifest(feedUrl),
+                fetchMispEventPayload: (feedUrl, descriptor) => manager.fetchMispEventPayload(feedUrl, descriptor),
+                importCirclMispFeed: (options = {}) => manager.importCirclMispFeed(options),
+                fetchOpmlText: (opmlUrl) => manager.fetchOpmlText(opmlUrl),
+                parseOpmlFeeds: (opmlText) => manager.parseOpmlFeeds(opmlText),
+                setOpmlFeeds: (feeds, options = {}) => manager.setOpmlFeeds(feeds, options),
+                refreshOpmlExistingGraphCache: () => manager.refreshOpmlExistingGraphCache(),
+                processOpmlFeed: (feed, statusId) => manager.processOpmlFeed(feed, statusId),
+                persistOpmlState: () => manager.persistOpmlState(),
+                updateOpmlFeedListDisplay: (feeds) => manager.updateOpmlFeedListDisplay(feeds),
+                updateOpmlControls: () => manager.updateOpmlControls(),
+                formatInfoHTML: (info) => manager.formatInfoHTML(info),
+                formatInfoText: (info) => manager.formatInfoText(info),
+                updateNeo4jMenuVisibility: () => manager.updateNeo4jMenuVisibility()
+            },
+            credentials: {
+                ensurePassphrase: async () => {
+                    if (window.SecureStorage?.ensurePassphrase) {
+                        await window.SecureStorage.ensurePassphrase();
+                    }
+                },
+                encrypt: async (value) => {
+                    if (window.SecureStorage?.encrypt) {
+                        return window.SecureStorage.encrypt(value);
+                    }
+                    return value;
+                },
+                decrypt: async (value) => {
+                    if (window.SecureStorage?.decrypt) {
+                        return window.SecureStorage.decrypt(value);
+                    }
+                    return value;
+                }
+            },
             graph: window.GraphServiceAdapter?.create?.() || null,
             network: {
-                fetch: (...args) => {
-                    if (!fetchFn) {
-                        return Promise.reject(new Error('Fetch is not available'));
+                fetch: (...args) => safeFetch(...args)
+            },
+            server: {
+                misp: createApiAdapter('/api/integrations/misp'),
+                neo4j: createApiAdapter('/api/neo4j'),
+                serpapi: {
+                    request: (params, options = {}) => {
+                        if (typeof params === 'string') {
+                            return safeFetch(`/api/serpapi?${params}`, options);
+                        }
+                        const searchParams = new URLSearchParams(params || {}).toString();
+                        const suffix = searchParams ? `?${searchParams}` : '';
+                        return safeFetch(`/api/serpapi${suffix}`, options);
                     }
-                    return fetchFn(...args);
+                }
+            },
+            tasks: {
+                opml: {
+                    isRunning: () => Boolean(manager.runtime?.opmlScanInProgress),
+                    setRunning: (running) => {
+                        manager.runtime.opmlScanInProgress = Boolean(running);
+                    },
+                    isCancelRequested: () => Boolean(manager.runtime?.opmlCancelRequested),
+                    requestCancel: () => {
+                        manager.runtime.opmlCancelRequested = true;
+                        manager.updateOpmlControls?.();
+                    },
+                    resetCancel: () => {
+                        manager.runtime.opmlCancelRequested = false;
+                        manager.updateOpmlControls?.();
+                    },
+                    beginProgress: (label = 'Checking OPML feeds...') => uiAdapter.beginActivity('opml-scan', label),
+                    updateProgress: (taskId, label) => uiAdapter.updateActivity(taskId, label),
+                    endProgress: (taskId) => uiAdapter.endActivity(taskId)
+                },
+                misp: {
+                    isCancelRequested: () => Boolean(manager.runtime?.mispImportCancelRequested),
+                    requestCancel: () => {
+                        manager.runtime.mispImportCancelRequested = true;
+                    },
+                    resetCancel: () => {
+                        manager.runtime.mispImportCancelRequested = false;
+                    },
+                    beginProgress: (label = 'Loading CIRCL MISP manifest...') => uiAdapter.beginActivity('misp-import', label),
+                    updateProgress: (taskId, label) => uiAdapter.updateActivity(taskId, label),
+                    endProgress: (taskId) => uiAdapter.endActivity(taskId)
                 }
             }
         };
@@ -1569,12 +1680,15 @@ window.IntegrationsManager = {
             statusId = 'circlMispStatus',
             onEventImported,
             maxEvents = null,
-            batchSave = false
+            batchSave = false,
+            taskHooks = null
         } = options;
 
         const baseUrl = this.normalizeMispFeedUrl(feedUrl);
         this.updateStatus(statusId, 'Fetching CIRCL MISP manifest...', 'loading');
-        const graphTaskId = window.UI?.beginGraphActivity?.('misp-import', 'Loading CIRCL MISP manifest...');
+        const graphTaskId = taskHooks?.beginProgress
+            ? taskHooks.beginProgress('Loading CIRCL MISP manifest...')
+            : window.UI?.beginGraphActivity?.('misp-import', 'Loading CIRCL MISP manifest...');
 
         try {
         let descriptors = [];
@@ -1695,7 +1809,16 @@ window.IntegrationsManager = {
                 const progressMessage = `Importing CIRCL MISP event ${descriptor.info || descriptor.uuid} (${index}/${eventsToProcess.length})...`;
 
                 this.updateStatus(statusId, progressMessage, 'loading');
-                window.UI?.updateGraphActivity?.('misp-import', progressMessage);
+                if (taskHooks?.updateProgress) {
+                    taskHooks.updateProgress(graphTaskId, progressMessage);
+                } else {
+                    window.UI?.updateGraphActivity?.('misp-import', progressMessage);
+                }
+
+                if (taskHooks?.isCancelRequested?.()) {
+                    this.updateStatus(statusId, 'CIRCL MISP import cancelled', 'warning');
+                    break;
+                }
 
                 const descriptorUuid = typeof descriptor?.uuid === 'string' ? descriptor.uuid.trim() : null;
                 const graphFileName = this.buildMispGraphFileName(descriptor);
@@ -1853,6 +1976,10 @@ window.IntegrationsManager = {
             }
         }
 
+        if (taskHooks?.isCancelRequested?.()) {
+            return { events: results, manifest: descriptors, cancelled: true };
+        }
+
         if (!results.length) {
             if (skippedDueToExisting > 0) {
                 const message = skippedDueToExisting === 1
@@ -1869,7 +1996,9 @@ window.IntegrationsManager = {
 
         return { events: results, manifest: descriptors };
         } finally {
-            if (graphTaskId) {
+            if (taskHooks?.endProgress) {
+                taskHooks.endProgress(graphTaskId);
+            } else if (graphTaskId) {
                 window.UI?.endGraphActivity?.(graphTaskId);
             }
         }

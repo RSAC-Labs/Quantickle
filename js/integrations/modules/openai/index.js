@@ -26,12 +26,12 @@
                         return { ok: false };
                     }
 
-                    await SecureStorage.ensurePassphrase();
+                    await services?.credentials?.ensurePassphrase?.();
                     services?.config?.setRuntime?.('openaiApiKey', apiKey);
 
                     const storageKey = services?.config?.getStorageKey?.('OPENAI_API_KEY');
                     if (storageKey) {
-                        services?.storage?.setItem?.(storageKey, await SecureStorage.encrypt(apiKey));
+                        services?.storage?.setItem?.(storageKey, await services?.credentials?.encrypt?.(apiKey));
                     }
 
                     notify('Configuration saved successfully', 'success');

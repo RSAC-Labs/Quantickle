@@ -26,12 +26,12 @@
                         return { ok: false };
                     }
 
-                    await SecureStorage.ensurePassphrase();
+                    await services?.credentials?.ensurePassphrase?.();
                     services?.config?.setRuntime?.('serpApiKey', apiKey);
 
                     const storageKey = services?.config?.getStorageKey?.('SERPAPI_API_KEY');
                     if (storageKey) {
-                        services?.storage?.setItem?.(storageKey, await SecureStorage.encrypt(apiKey));
+                        services?.storage?.setItem?.(storageKey, await services?.credentials?.encrypt?.(apiKey));
                     }
 
                     notify('Configuration saved successfully', 'success');
@@ -47,7 +47,7 @@
                     notify('Testing connection...', 'testing');
 
                     try {
-                        const response = await services.network.fetch(`/api/serpapi?q=coffee&api_key=${apiKey}`);
+                        const response = await services?.server?.serpapi?.request?.({ q: 'coffee', api_key: apiKey });
                         if (!response.ok) {
                             throw new Error('Invalid API key');
                         }
