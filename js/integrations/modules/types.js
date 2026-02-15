@@ -68,7 +68,7 @@
 /**
  * @typedef {Object} IntegrationServerService
  * @property {IntegrationServerApiAdapter} misp Required for proxied MISP endpoints under `/api/integrations/misp/*`.
- * @property {IntegrationServerApiAdapter} neo4j Required for proxied Neo4j endpoints under `/api/neo4j/*`.
+ * @property {IntegrationServerApiAdapter} neo4j Required for Neo4j integration endpoints under `/api/neo4j/*` (including proxied database calls under `/api/neo4j/db/*`).
  * @property {IntegrationSerpApiServerAdapter} serpapi Required for proxied SerpApi endpoint `/api/serpapi`.
  */
 
