@@ -7,15 +7,12 @@
         };
 
         const requestCirclLu = async (endpoint, options = {}) => {
-            const manager = window.IntegrationsManager;
-            const { baseUrl, username, authKey } = manager.getCirclLuConfiguration();
+            const manager = services?.integrations;
+            const { baseUrl, username, authKey } = manager?.getCirclLuConfiguration?.() || {};
 
             if (!baseUrl) {
                 throw new Error('CIRCL-LU base URL not configured');
             }
-
-            const normalizedBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
-            const url = `${normalizedBase}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
 
             const requestOptions = { ...options };
             const headers = { ...(options.headers || {}) };
@@ -32,29 +29,16 @@
                 headers.Authorization = authorizationHeader;
             }
 
-            let fetchUrl = url;
-            let requestUrl;
-            try {
-                requestUrl = new URL(url);
-            } catch (_) {
-                requestUrl = new URL(url, window.location.origin);
+            const proxyHeaders = { ...headers };
+            if (authorizationHeader) {
+                proxyHeaders['X-Proxy-Authorization'] = authorizationHeader;
+                delete proxyHeaders.Authorization;
             }
-
-            const isCrossOrigin = requestUrl.origin !== window.location.origin;
-            if (isCrossOrigin) {
-                fetchUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
-                const proxyHeaders = { ...headers };
-                if (authorizationHeader) {
-                    proxyHeaders['X-Proxy-Authorization'] = authorizationHeader;
-                    delete proxyHeaders.Authorization;
-                }
-                requestOptions.headers = proxyHeaders;
-            } else {
-                requestOptions.headers = headers;
-            }
+            requestOptions.headers = proxyHeaders;
 
             try {
-                const response = await services.network.fetch(fetchUrl, requestOptions);
+                const relativeEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+                const response = await services?.server?.misp?.request?.(relativeEndpoint, requestOptions);
                 if (!response.ok) {
                     throw new Error(`CIRCL-LU request failed (${response.status})`);
                 }
@@ -69,23 +53,21 @@
         };
 
         const proxyRequest = async (resource = 'manifest.json', options = {}) => {
-            const manager = window.IntegrationsManager;
+            const manager = services?.integrations;
             const feedUrl = options.feedUrl
-                || manager?.CIRCL_LU_BASE_URL
-                || manager?.lastCirclMispFeedUrl
-                || manager?.CIRCL_MISP_DEFAULT_FEED_URL;
+                || services?.config?.getRuntime?.('circlLuBaseUrl')
+                || manager?.getLastMispFeedUrl?.()
+                || manager?.getDefaultMispFeedUrl?.();
 
             if (!manager || !feedUrl) {
                 throw new Error('CIRCL MISP integration is not available');
             }
 
-            const normalizedFeed = manager.normalizeMispFeedUrl(feedUrl);
+            const normalizedFeed = manager?.normalizeMispFeedUrl?.(feedUrl) || feedUrl;
 
             try {
                 if (typeof resource === 'string' && /manifest\.json$/i.test(resource.trim())) {
-                    const { manifest, descriptors } = await manager.fetchCirclMispManifest(normalizedFeed);
-                    manager.lastCirclMispManifest = descriptors;
-                    manager.lastCirclMispFeedUrl = normalizedFeed;
+                    const { manifest } = await manager.fetchCirclMispManifest(normalizedFeed);
                     return manifest;
                 }
 
@@ -123,7 +105,7 @@
                     const authKey = authKeyInput?.value.trim() || '';
                     const lastSync = lastSyncInput?.value.trim() || '';
 
-                    await SecureStorage.ensurePassphrase();
+                    await services?.credentials?.ensurePassphrase?.();
 
                     services?.config?.setRuntime?.('circlLuAuthUsername', username);
                     services?.config?.setRuntime?.('circlLuAuthKey', authKey);
@@ -135,7 +117,7 @@
 
                     if (usernameStorageKey) {
                         if (username) {
-                            services?.storage?.setItem?.(usernameStorageKey, await SecureStorage.encrypt(username));
+                            services?.storage?.setItem?.(usernameStorageKey, await services?.credentials?.encrypt?.(username));
                         } else {
                             services?.storage?.removeItem?.(usernameStorageKey);
                         }
@@ -143,7 +125,7 @@
 
                     if (authStorageKey) {
                         if (authKey) {
-                            services?.storage?.setItem?.(authStorageKey, await SecureStorage.encrypt(authKey));
+                            services?.storage?.setItem?.(authStorageKey, await services?.credentials?.encrypt?.(authKey));
                         } else {
                             services?.storage?.removeItem?.(authStorageKey);
                         }
@@ -162,7 +144,22 @@
                 },
                 request: async (_ctx, params = {}) => requestCirclLu(params.endpoint || '/', params.options || {}),
                 importData: async (_ctx, params = {}) => {
-                    return window.IntegrationsManager.importCirclMispFeed(params);
+                    const mispTasks = services?.tasks?.misp;
+                    mispTasks?.resetCancel?.();
+                    return services?.integrations?.importCirclMispFeed?.({
+                        ...params,
+                        taskHooks: {
+                            beginProgress: (label) => mispTasks?.beginProgress?.(label),
+                            updateProgress: (taskId, label) => mispTasks?.updateProgress?.(taskId, label),
+                            endProgress: (taskId) => mispTasks?.endProgress?.(taskId),
+                            isCancelRequested: () => mispTasks?.isCancelRequested?.() || false
+                        }
+                    });
+                },
+                cancelImport: async () => {
+                    services?.tasks?.misp?.requestCancel?.();
+                    notify('Cancelling CIRCL MISP import...', 'info', { toast: false });
+                    return { ok: true };
                 },
                 requestResource: async (_ctx, params = {}) => proxyRequest(params.resource, params.options || {}),
                 testConnection: async () => {

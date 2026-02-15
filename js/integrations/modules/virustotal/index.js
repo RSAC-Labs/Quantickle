@@ -129,8 +129,8 @@
         };
 
         const formatInfoHTML = (infoObj) => {
-            if (window.IntegrationsManager?.formatInfoHTML) {
-                return window.IntegrationsManager.formatInfoHTML(infoObj);
+            if (services?.integrations?.formatInfoHTML) {
+                return services.integrations.formatInfoHTML(infoObj);
             }
             const rows = Object.entries(infoObj || {})
                 .filter(([_, value]) => value !== undefined && value !== null && value !== '')
@@ -144,8 +144,8 @@
         };
 
         const formatInfoText = (infoObj) => {
-            if (window.IntegrationsManager?.formatInfoText) {
-                return window.IntegrationsManager.formatInfoText(infoObj);
+            if (services?.integrations?.formatInfoText) {
+                return services.integrations.formatInfoText(infoObj);
             }
             const stripTags = value => String(value).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
             const lines = Object.entries(infoObj || {})
@@ -2389,12 +2389,12 @@
                         return { ok: false };
                     }
 
-                    await SecureStorage.ensurePassphrase();
+                    await services?.credentials?.ensurePassphrase?.();
                     setRuntime('virustotalApiKey', apiKey);
 
                     const storageKey = getStorageKey('VIRUSTOTAL_API_KEY');
                     if (storageKey) {
-                        storageSet(storageKey, await SecureStorage.encrypt(apiKey));
+                        storageSet(storageKey, await services?.credentials?.encrypt?.(apiKey));
                     }
 
                     notifyStatus('Configuration saved successfully', 'success');

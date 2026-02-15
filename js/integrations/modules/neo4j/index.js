@@ -28,11 +28,11 @@
 
                     if (!url || !username || !password) {
                         notify(url ? 'Please enter username and password' : 'Server Neo4j URL is not configured', 'error');
-                        window.IntegrationsManager?.updateNeo4jMenuVisibility?.();
+                        services?.integrations?.updateNeo4jMenuVisibility?.();
                         return { ok: false };
                     }
 
-                    await SecureStorage.ensurePassphrase();
+                    await services?.credentials?.ensurePassphrase?.();
 
                     services?.config?.setRuntime?.('neo4jUrl', url);
                     services?.config?.setRuntime?.('neo4jUsername', username);
@@ -41,14 +41,14 @@
                     const usernameStorageKey = services?.config?.getStorageKey?.('NEO4J_USERNAME');
                     const passwordStorageKey = services?.config?.getStorageKey?.('NEO4J_PASSWORD');
                     if (usernameStorageKey) {
-                        services?.storage?.setItem?.(usernameStorageKey, await SecureStorage.encrypt(username));
+                        services?.storage?.setItem?.(usernameStorageKey, await services?.credentials?.encrypt?.(username));
                     }
                     if (passwordStorageKey) {
-                        services?.storage?.setItem?.(passwordStorageKey, await SecureStorage.encrypt(password));
+                        services?.storage?.setItem?.(passwordStorageKey, await services?.credentials?.encrypt?.(password));
                     }
 
                     notify('Configuration saved successfully', 'success');
-                    window.IntegrationsManager?.updateNeo4jMenuVisibility?.();
+                    services?.integrations?.updateNeo4jMenuVisibility?.();
                     return { ok: true };
                 },
                 testConnection: async () => {
@@ -83,8 +83,9 @@
                         }
 
                         const url = `${testUrl.replace(/\/$/, '')}/db/${database}/tx/commit`;
+                        const apiPath = url.replace(/^https?:\/\/[^/]+/i, '');
                         const body = JSON.stringify({ statements: [{ statement: 'RETURN 1' }] });
-                        const response = await services.network.fetch(url, {
+                        const response = await services?.server?.neo4j?.request?.(apiPath, {
                             method: 'POST',
                             headers: {
                                 'Authorization': `Basic ${auth}`,

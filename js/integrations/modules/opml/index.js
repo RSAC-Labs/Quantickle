@@ -13,7 +13,7 @@
             },
             actions: {
                 loadFromUrl: async () => {
-                    const manager = window.IntegrationsManager;
+                    const manager = services?.integrations;
                     const urlInput = document.getElementById('opmlFeedUrl');
                     const targetUrl = urlInput?.value?.trim();
                     if (!targetUrl) {
@@ -42,7 +42,7 @@
                     }
                 },
                 importFeeds: async () => {
-                    const manager = window.IntegrationsManager;
+                    const manager = services?.integrations;
                     const textarea = document.getElementById('opmlFeedInput');
                     const opmlText = textarea?.value?.trim();
                     if (!opmlText) {
@@ -59,34 +59,34 @@
                     return { ok: true, feeds };
                 },
                 cancelScan: () => {
-                    const manager = window.IntegrationsManager;
-                    if (!manager.runtime.opmlScanInProgress) {
+                    const taskService = services?.tasks?.opml;
+                    if (!taskService?.isRunning?.()) {
                         notify('No OPML scan is currently running.', 'info', { toast: false });
                         return { ok: false, skipped: true };
                     }
-                    manager.runtime.opmlCancelRequested = true;
-                    manager.updateOpmlControls();
+                    taskService.requestCancel();
                     notify('Cancelling OPML scan...', 'info', { toast: false });
                     return { ok: true };
                 },
                 runScan: async (_ctx = {}, options = {}) => {
-                    const manager = window.IntegrationsManager;
+                    const manager = services?.integrations;
+                    const taskService = services?.tasks?.opml;
                     const statusId = options.statusId || 'opmlStatus';
-                    if (!Array.isArray(manager.runtime.opmlFeeds) || manager.runtime.opmlFeeds.length === 0) {
+                    const opmlFeeds = services?.config?.getRuntime?.('opmlFeeds') || [];
+                    if (!Array.isArray(opmlFeeds) || opmlFeeds.length === 0) {
                         manager.updateOpmlFeedListDisplay([]);
                         notify('No OPML feeds configured', 'warning', { statusId, toast: false });
                         return { feedsChecked: 0, newArticles: 0, iocGraphs: 0 };
                     }
 
-                    if (manager.runtime.opmlScanInProgress) {
+                    if (taskService?.isRunning?.()) {
                         return { feedsChecked: 0, newArticles: 0, iocGraphs: 0, skipped: true };
                     }
 
-                    manager.runtime.opmlScanInProgress = true;
-                    manager.runtime.opmlCancelRequested = false;
-                    manager.updateOpmlControls();
+                    taskService?.setRunning?.(true);
+                    taskService?.resetCancel?.();
                     notify('Checking OPML feeds...', 'loading', { statusId, toast: false });
-                    const graphTaskId = window.UI?.beginGraphActivity?.('opml-scan', 'Checking OPML feeds...');
+                    const graphTaskId = taskService?.beginProgress?.('Checking OPML feeds...');
 
                     try {
                         await manager.refreshOpmlExistingGraphCache();
@@ -100,21 +100,21 @@
                     let cancelled = false;
 
                     try {
-                        for (const feed of manager.runtime.opmlFeeds) {
-                            if (manager.runtime.opmlCancelRequested) {
+                        for (const feed of opmlFeeds) {
+                            if (taskService?.isCancelRequested?.()) {
                                 cancelled = true;
                                 break;
                             }
                             const progressLabel = feed?.title || feed?.url || 'OPML feed';
-                            window.UI?.updateGraphActivity?.(
+                            taskService?.updateProgress?.(
                                 graphTaskId,
-                                `Scanning ${progressLabel} (${feedsChecked + 1}/${manager.runtime.opmlFeeds.length})`
+                                `Scanning ${progressLabel} (${feedsChecked + 1}/${opmlFeeds.length})`
                             );
                             const result = await manager.processOpmlFeed(feed, statusId);
                             feedsChecked += 1;
                             newArticles += result.newArticles || 0;
                             iocGraphs += result.iocGraphs || 0;
-                            if (manager.runtime.opmlCancelRequested || result.cancelled) {
+                            if (taskService?.isCancelRequested?.() || result.cancelled) {
                                 cancelled = true;
                                 break;
                             }
@@ -125,8 +125,12 @@
                             return { feedsChecked, newArticles, iocGraphs, cancelled: true };
                         }
 
-                        manager.runtime.opmlLastRun = new Date().toISOString();
-                        localStorage.setItem(manager.STORAGE_KEYS.OPML_LAST_RUN, manager.runtime.opmlLastRun);
+                        const opmlLastRun = new Date().toISOString();
+                        services?.config?.setRuntime?.('opmlLastRun', opmlLastRun);
+                        const lastRunStorageKey = services?.config?.getStorageKey?.('OPML_LAST_RUN');
+                        if (lastRunStorageKey) {
+                            services?.storage?.setItem?.(lastRunStorageKey, opmlLastRun);
+                        }
                         manager.persistOpmlState();
                         manager.updateOpmlFeedListDisplay();
 
@@ -139,12 +143,9 @@
                         notify(error.message || 'OPML feed check failed', 'error', { statusId, toast: false });
                         return { feedsChecked, newArticles, iocGraphs, error };
                     } finally {
-                        if (graphTaskId) {
-                            window.UI?.endGraphActivity?.(graphTaskId);
-                        }
-                        manager.runtime.opmlScanInProgress = false;
-                        manager.runtime.opmlCancelRequested = false;
-                        manager.updateOpmlControls();
+                        taskService?.endProgress?.(graphTaskId);
+                        taskService?.setRunning?.(false);
+                        taskService?.resetCancel?.();
                     }
                 }
             }
