@@ -1861,10 +1861,14 @@ window.IntegrationsManager = {
                 }
 
                 const payload = await this.fetchMispEventPayload(baseUrl, descriptor);
-                const graphData = this.buildGraphFromMispEvent(payload, {
+                let graphData = this.buildGraphFromMispEvent(payload, {
                     descriptor,
                     feedUrl: baseUrl
                 });
+
+                this.assertMispGraphPresent(graphData, descriptor);
+                graphData = this.sortMispNodesIntoTypeContainers(graphData);
+                await this.preloadMispTypeDefinitions(graphData);
 
                 if (!window.DataManager || typeof window.DataManager.setGraphData !== 'function') {
                     throw new Error('DataManager not available');
@@ -2629,6 +2633,104 @@ window.IntegrationsManager = {
         }
 
         return graphData;
+    },
+
+    assertMispGraphPresent(graphData, descriptor = {}) {
+        if (!graphData || typeof graphData !== 'object') {
+            throw new Error('MISP import did not produce graph data');
+        }
+
+        const nodes = Array.isArray(graphData.nodes) ? graphData.nodes : [];
+        if (nodes.length === 0) {
+            const eventLabel = descriptor.info || descriptor.uuid || graphData.title || 'unknown event';
+            throw new Error(`MISP event ${eventLabel} did not contain any graph nodes`);
+        }
+    },
+
+    sortMispNodesIntoTypeContainers(graphData) {
+        if (!graphData || !Array.isArray(graphData.nodes) || graphData.nodes.length === 0) {
+            return graphData;
+        }
+
+        const graphIdSeed = graphData.id || graphData.title || `misp-${Date.now()}`;
+        const normalizedGraphSeed = this.normalizeIdentifier(graphIdSeed, { fallbackPrefix: 'misp' });
+        const nodes = graphData.nodes.map(node => ({ ...node }));
+        const containerByType = new Map();
+
+        const toContainerLabel = (type) => {
+            const cleanType = String(type || 'unknown').replace(/[_-]+/g, ' ').trim();
+            return cleanType ? `${cleanType} nodes` : 'Unknown nodes';
+        };
+
+        for (const node of nodes) {
+            if (!node || typeof node !== 'object') {
+                continue;
+            }
+
+            const type = typeof node.type === 'string' ? node.type.trim() : '';
+            if (!type || type === 'container' || type === 'report') {
+                continue;
+            }
+
+            let containerId = containerByType.get(type);
+            if (!containerId) {
+                const typeKey = this.normalizeIdentifier(type, { fallbackPrefix: 'type' });
+                containerId = `misp_container_${normalizedGraphSeed}_${typeKey}`;
+                containerByType.set(type, containerId);
+            }
+
+            node.parent = containerId;
+        }
+
+        if (containerByType.size === 0) {
+            return { ...graphData, nodes };
+        }
+
+        const containerNodes = Array.from(containerByType.entries()).map(([type, id]) => ({
+            id,
+            label: toContainerLabel(type),
+            type: 'container',
+            classes: 'container',
+            isContainer: true,
+            category: 'misp-container',
+            color: '#E8EAF6',
+            metadata: {
+                source: 'MISP import',
+                groupedByType: type
+            }
+        }));
+
+        return {
+            ...graphData,
+            nodes: [...containerNodes, ...nodes]
+        };
+    },
+
+    async preloadMispTypeDefinitions(graphData) {
+        if (!graphData || !Array.isArray(graphData.nodes)) {
+            return;
+        }
+
+        const uniqueTypes = new Set();
+        graphData.nodes.forEach(node => {
+            const nodeType = node?.type;
+            if (typeof nodeType === 'string' && nodeType && nodeType !== 'container' && nodeType !== 'default') {
+                uniqueTypes.add(nodeType);
+            }
+        });
+
+        if (uniqueTypes.size === 0) {
+            return;
+        }
+
+        if (window.DomainLoader && typeof window.DomainLoader.autoLoadDomainsForGraph === 'function') {
+            await window.DomainLoader.autoLoadDomainsForGraph(graphData);
+            return;
+        }
+
+        for (const type of uniqueTypes) {
+            await this.ensureNodeTypeAvailability(type);
+        }
     },
 
     mapMispAttributes(attributes, reportNodeId) {
