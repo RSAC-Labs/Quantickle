@@ -175,18 +175,31 @@ window.IntegrationsManager = {
             return;
         }
 
-        const factories = [
-            window.VirusTotalIntegrationModule,
-            window.OpenAIIntegrationModule,
-            window.SerpApiIntegrationModule,
-            window.CirclMispIntegrationModule,
-            window.OpmlIntegrationModule,
-            window.Neo4jIntegrationModule
+        const factoryDefinitions = [
+            { id: 'virustotal', globalName: 'VirusTotalIntegrationModule' },
+            { id: 'openai', globalName: 'OpenAIIntegrationModule' },
+            { id: 'serpapi', globalName: 'SerpApiIntegrationModule' },
+            { id: 'circl-misp', globalName: 'CirclMispIntegrationModule' },
+            { id: 'opml', globalName: 'OpmlIntegrationModule' },
+            { id: 'neo4j', globalName: 'Neo4jIntegrationModule' }
         ];
 
-        factories.forEach(factory => {
-            if (factory?.create) {
-                this.moduleRegistry.register(factory.create());
+        factoryDefinitions.forEach(({ id, globalName }) => {
+            const factory = window[globalName];
+            if (!factory?.create) {
+                console.warn(`Integration module script missing or invalid for ${id}: window.${globalName}.create()`);
+                return;
+            }
+
+            try {
+                const moduleInstance = factory.create();
+                if (!moduleInstance) {
+                    console.warn(`Integration module factory returned no instance for ${id}: window.${globalName}.create()`);
+                    return;
+                }
+                this.moduleRegistry.register(moduleInstance);
+            } catch (error) {
+                console.warn(`Failed to register integration module ${id}:`, error);
             }
         });
     },
