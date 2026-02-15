@@ -831,6 +831,7 @@
 
                         if (nodeType === 'domain' && infoData.creationDate) {
                             node.data('creationDate', infoData.creationDate);
+                            node.data('timestamp', infoData.creationDate);
                         }
 
                         if (nodeType === 'malware') {
@@ -842,6 +843,8 @@
                             }
                             if (infoData.firstSubmissionDate) {
                                 node.data('firstSubmissionDate', infoData.firstSubmissionDate);
+                                node.data('firstSeen', infoData.firstSubmissionDate);
+                                node.data('timestamp', infoData.firstSubmissionDate);
                             }
                         }
 
@@ -851,6 +854,8 @@
                             }
                             if (infoData.lastModDate) {
                                 node.data('lastModDate', infoData.lastModDate);
+                                node.data('lastSeen', infoData.lastModDate);
+                                node.data('timestamp', infoData.lastModDate);
                             }
                             if (attributes.country && !infoData.country) {
                                 node.data('country', attributes.country);
