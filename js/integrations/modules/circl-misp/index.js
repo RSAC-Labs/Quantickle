@@ -2,6 +2,10 @@
     const createCirclMispIntegrationModule = () => {
         let services = null;
 
+        const notify = (message, level = 'info', options = {}) => {
+            services?.status?.notify?.({ message, level, statusId: 'circlLuStatus', ...options });
+        };
+
         const requestCirclLu = async (endpoint, options = {}) => {
             const manager = window.IntegrationsManager;
             const { baseUrl, username, authKey } = manager.getCirclLuConfiguration();
@@ -110,12 +114,80 @@
                 services = providedServices;
             },
             actions: {
+                saveConfig: async () => {
+                    const usernameInput = document.getElementById('circlLuAuthUsername');
+                    const authKeyInput = document.getElementById('circlLuAuthKey');
+                    const lastSyncInput = document.getElementById('circlLuLastSync');
+
+                    const username = usernameInput?.value.trim() || '';
+                    const authKey = authKeyInput?.value.trim() || '';
+                    const lastSync = lastSyncInput?.value.trim() || '';
+
+                    await SecureStorage.ensurePassphrase();
+
+                    services?.config?.setRuntime?.('circlLuAuthUsername', username);
+                    services?.config?.setRuntime?.('circlLuAuthKey', authKey);
+                    services?.config?.setRuntime?.('circlLuLastSync', lastSync);
+
+                    const usernameStorageKey = services?.config?.getStorageKey?.('CIRCL_LU_AUTH_USERNAME');
+                    const authStorageKey = services?.config?.getStorageKey?.('CIRCL_LU_AUTH_KEY');
+                    const lastSyncStorageKey = services?.config?.getStorageKey?.('CIRCL_LU_LAST_SYNC');
+
+                    if (usernameStorageKey) {
+                        if (username) {
+                            services?.storage?.setItem?.(usernameStorageKey, await SecureStorage.encrypt(username));
+                        } else {
+                            services?.storage?.removeItem?.(usernameStorageKey);
+                        }
+                    }
+
+                    if (authStorageKey) {
+                        if (authKey) {
+                            services?.storage?.setItem?.(authStorageKey, await SecureStorage.encrypt(authKey));
+                        } else {
+                            services?.storage?.removeItem?.(authStorageKey);
+                        }
+                    }
+
+                    if (lastSyncStorageKey) {
+                        if (lastSync) {
+                            services?.storage?.setItem?.(lastSyncStorageKey, lastSync);
+                        } else {
+                            services?.storage?.removeItem?.(lastSyncStorageKey);
+                        }
+                    }
+
+                    notify('Configuration saved successfully', 'success');
+                    return { ok: true };
+                },
                 request: async (_ctx, params = {}) => requestCirclLu(params.endpoint || '/', params.options || {}),
                 importData: async (_ctx, params = {}) => {
                     return window.IntegrationsManager.importCirclMispFeed(params);
                 },
                 requestResource: async (_ctx, params = {}) => proxyRequest(params.resource, params.options || {}),
-                testConnection: async () => requestCirclLu('/manifest.json', { method: 'GET' })
+                testConnection: async () => {
+                    notify('Testing connection...', 'testing');
+                    try {
+                        await requestCirclLu('/manifest.json', { method: 'GET' });
+                        notify('Connection successful', 'success');
+                        return { ok: true };
+                    } catch (error) {
+                        notify(error.message || 'Connection test failed', 'error');
+                        return { ok: false, error };
+                    }
+                },
+                fetchManifest: async () => {
+                    notify('Fetching manifest...', 'testing');
+                    try {
+                        const manifest = await requestCirclLu('/manifest.json', { method: 'GET' });
+                        console.info('CIRCL-LU manifest:', manifest);
+                        notify('Manifest fetched (check console for details)', 'success');
+                        return manifest;
+                    } catch (error) {
+                        notify(error.message || 'Failed to fetch manifest', 'error');
+                        throw error;
+                    }
+                }
             }
         };
     };

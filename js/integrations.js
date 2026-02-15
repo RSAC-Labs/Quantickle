@@ -3156,203 +3156,40 @@ window.togglePasswordVisibility = function(inputId) {
 };
 
 window.loadOpmlFromUrl = async function() {
-    const urlInput = document.getElementById('opmlFeedUrl');
-    const targetUrl = urlInput?.value?.trim();
-    if (!targetUrl) {
-        window.IntegrationsManager.updateStatus('opmlStatus', 'Enter an OPML URL to load', 'warning');
-        return;
-    }
-    try {
-        window.IntegrationsManager.updateStatus('opmlStatus', 'Fetching OPML...', 'loading');
-        const opmlText = await window.IntegrationsManager.fetchOpmlText(targetUrl);
-        const textarea = document.getElementById('opmlFeedInput');
-        if (textarea) {
-            textarea.value = opmlText;
-        }
-        const feeds = window.IntegrationsManager.parseOpmlFeeds(opmlText);
-        window.IntegrationsManager.setOpmlFeeds(feeds, { opmlXml: opmlText });
-        const message = feeds.length
-            ? `Loaded ${feeds.length} feed${feeds.length === 1 ? '' : 's'} from OPML`
-            : 'No feeds were detected in the OPML file';
-        window.IntegrationsManager.updateStatus('opmlStatus', message, feeds.length ? 'success' : 'warning');
-    } catch (error) {
-        console.error('Failed to load OPML from URL', error);
-        window.IntegrationsManager.updateStatus('opmlStatus', 'Unable to fetch OPML file (check proxy allowlist)', 'error');
-    }
+    return window.IntegrationsManager.runAction('opml', 'loadFromUrl', { source: 'ui' }, {});
 };
 
 window.importOpmlFeeds = async function() {
-    const textarea = document.getElementById('opmlFeedInput');
-    const opmlText = textarea?.value?.trim();
-    if (!opmlText) {
-        window.IntegrationsManager.updateStatus('opmlStatus', 'Paste OPML XML before importing', 'warning');
-        return;
-    }
-    const feeds = window.IntegrationsManager.parseOpmlFeeds(opmlText);
-    window.IntegrationsManager.setOpmlFeeds(feeds, { opmlXml: opmlText });
-    const message = feeds.length
-        ? `Imported ${feeds.length} feed${feeds.length === 1 ? '' : 's'} from OPML`
-        : 'No feeds found in OPML input';
-    window.IntegrationsManager.updateStatus('opmlStatus', message, feeds.length ? 'success' : 'warning');
+    return window.IntegrationsManager.runAction('opml', 'importFeeds', { source: 'ui' }, {});
 };
 
 window.runOpmlScanNow = async function() {
-    const result = await window.IntegrationsManager.runAction('opml', 'runScan', { source: 'ui' }, { force: true, statusId: 'opmlStatus' });
-    if (result && result.error) {
-        window.IntegrationsManager.updateStatus('opmlStatus', result.error.message || 'OPML scan failed', 'error');
-    }
+    return window.IntegrationsManager.runAction('opml', 'runScan', { source: 'ui' }, { force: true, statusId: 'opmlStatus' });
 };
 
 window.cancelOpmlScan = function() {
-    if (!window.IntegrationsManager.runtime.opmlScanInProgress) {
-        window.IntegrationsManager.updateStatus('opmlStatus', 'No OPML scan is currently running.', 'info');
-        return;
-    }
-    window.IntegrationsManager.runtime.opmlCancelRequested = true;
-    window.IntegrationsManager.updateOpmlControls();
-    window.IntegrationsManager.updateStatus('opmlStatus', 'Cancelling OPML scan...', 'info');
+    return window.IntegrationsManager.runAction('opml', 'cancelScan', { source: 'ui' }, {});
 };
 
+// Compatibility wrappers: keep existing global names while delegating into module actions.
 window.saveVirusTotalConfig = async function() {
-    const apiKeyInput = document.getElementById('virustotalApiKey');
-    const apiKey = apiKeyInput?.value.trim();
-
-    if (!apiKey) {
-        window.IntegrationsManager.updateStatus('virustotalStatus', 'Please enter an API key', 'error');
-        return;
-    }
-
-    // Validate API key format (VirusTotal keys are 64 character hex strings)
-    if (!/^[a-fA-F0-9]{64}$/.test(apiKey)) {
-        window.IntegrationsManager.updateStatus('virustotalStatus', 'Invalid API key format', 'error');
-        return;
-    }
-
-    // Prompt for passphrase if not already provided
-    await SecureStorage.ensurePassphrase();
-
-    window.IntegrationsManager.runtime.virustotalApiKey = apiKey;
-    localStorage.setItem(
-        window.IntegrationsManager.STORAGE_KEYS.VIRUSTOTAL_API_KEY,
-        await SecureStorage.encrypt(apiKey)
-    );
-    window.IntegrationsManager.updateStatus('virustotalStatus', 'Configuration saved successfully', 'success');
-};
-
-window.saveCirclLuConfig = async function() {
-    const usernameInput = document.getElementById('circlLuAuthUsername');
-    const authKeyInput = document.getElementById('circlLuAuthKey');
-    const lastSyncInput = document.getElementById('circlLuLastSync');
-
-    const username = usernameInput?.value.trim();
-    const authKey = authKeyInput?.value.trim();
-    const lastSync = lastSyncInput?.value.trim();
-
-    await SecureStorage.ensurePassphrase();
-
-    window.IntegrationsManager.runtime.circlLuAuthUsername = username || '';
-    window.IntegrationsManager.runtime.circlLuAuthKey = authKey || '';
-    window.IntegrationsManager.runtime.circlLuLastSync = lastSync || '';
-
-    if (username) {
-        localStorage.setItem(
-            window.IntegrationsManager.STORAGE_KEYS.CIRCL_LU_AUTH_USERNAME,
-            await SecureStorage.encrypt(username)
-        );
-    } else {
-        localStorage.removeItem(window.IntegrationsManager.STORAGE_KEYS.CIRCL_LU_AUTH_USERNAME);
-    }
-
-    if (authKey) {
-        localStorage.setItem(
-            window.IntegrationsManager.STORAGE_KEYS.CIRCL_LU_AUTH_KEY,
-            await SecureStorage.encrypt(authKey)
-        );
-    } else {
-        localStorage.removeItem(window.IntegrationsManager.STORAGE_KEYS.CIRCL_LU_AUTH_KEY);
-    }
-
-    if (lastSync) {
-        localStorage.setItem(window.IntegrationsManager.STORAGE_KEYS.CIRCL_LU_LAST_SYNC, lastSync);
-    } else {
-        localStorage.removeItem(window.IntegrationsManager.STORAGE_KEYS.CIRCL_LU_LAST_SYNC);
-    }
-
-    window.IntegrationsManager.updateStatus('circlLuStatus', 'Configuration saved successfully', 'success');
+    return window.IntegrationsManager.runAction('virustotal', 'saveConfig', { source: 'ui' }, {});
 };
 
 window.testVirusTotalConnection = async function() {
-    const apiKey = window.IntegrationsManager.runtime.virustotalApiKey;
+    return window.IntegrationsManager.runAction('virustotal', 'testConnection', { source: 'ui' }, {});
+};
 
-    if (!apiKey) {
-        window.IntegrationsManager.updateStatus('virustotalStatus', 'No API key configured', 'error');
-        return;
-    }
-    
-    window.IntegrationsManager.updateStatus('virustotalStatus', 'Testing connection...', 'testing');
-
-    try {
-        await window.IntegrationsManager.runAction('virustotal', 'testConnection', { source: 'ui' }, {});
-        window.IntegrationsManager.updateStatus('virustotalStatus', 'Connection successful', 'success');
-    } catch (error) {
-        console.error('VirusTotal connection test failed:', error);
-        if (error.message.includes('Invalid VirusTotal API key')) {
-            window.IntegrationsManager.updateStatus('virustotalStatus', 'Invalid API key', 'error');
-        } else if (error.message.includes('VirusTotal proxy blocked')) {
-            window.IntegrationsManager.updateStatus('virustotalStatus', 'VirusTotal proxy blocked (check proxy allowlist)', 'error');
-        } else if (error.message.includes('VirusTotal access forbidden')) {
-            window.IntegrationsManager.updateStatus('virustotalStatus', 'VirusTotal access forbidden (check account permissions)', 'error');
-        } else if (error.message.includes('VirusTotal API quota exceeded')) {
-            window.IntegrationsManager.updateStatus('virustotalStatus', 'API quota exceeded', 'error');
-        } else {
-            window.IntegrationsManager.updateStatus('virustotalStatus', 'Connection test failed (CORS/Network)', 'error');
-        }
-    }
+window.saveCirclLuConfig = async function() {
+    return window.IntegrationsManager.runAction('circl-misp', 'saveConfig', { source: 'ui' }, {});
 };
 
 window.testCirclLuConnection = async function() {
-    window.IntegrationsManager.updateStatus('circlLuStatus', 'Testing connection...', 'testing');
-
-    try {
-        await window.IntegrationsManager.runAction('circl-misp', 'testConnection', { source: 'ui' }, {});
-        window.IntegrationsManager.updateStatus('circlLuStatus', 'Connection successful', 'success');
-    } catch (error) {
-        console.error('CIRCL-LU connection test failed:', error);
-        window.IntegrationsManager.updateStatus('circlLuStatus', error.message || 'Connection test failed', 'error');
-    }
+    return window.IntegrationsManager.runAction('circl-misp', 'testConnection', { source: 'ui' }, {});
 };
 
 window.fetchCirclLuManifest = async function() {
-    window.IntegrationsManager.updateStatus('circlLuStatus', 'Fetching manifest...', 'testing');
-
-    try {
-        const manifest = await window.IntegrationsManager.makeCirclLuRequest('/manifest.json', { method: 'GET' });
-        console.info('CIRCL-LU manifest:', manifest);
-        window.IntegrationsManager.updateStatus('circlLuStatus', 'Manifest fetched (check console for details)', 'success');
-    } catch (error) {
-        console.error('Failed to fetch CIRCL-LU manifest:', error);
-        window.IntegrationsManager.updateStatus('circlLuStatus', error.message || 'Failed to fetch manifest', 'error');
-    }
-};
-
-window.syncCirclLuLatestEvent = async function() {
-    window.IntegrationsManager.updateStatus('circlLuStatus', 'Syncing latest event...', 'testing');
-
-    try {
-        const event = await window.IntegrationsManager.makeCirclLuRequest('/events/latest', { method: 'GET' });
-        console.info('CIRCL-LU latest event:', event);
-        const timestamp = new Date().toISOString();
-        window.IntegrationsManager.runtime.circlLuLastSync = timestamp;
-        const lastSyncInput = document.getElementById('circlLuLastSync');
-        if (lastSyncInput) {
-            lastSyncInput.value = timestamp;
-        }
-        localStorage.setItem(window.IntegrationsManager.STORAGE_KEYS.CIRCL_LU_LAST_SYNC, timestamp);
-        window.IntegrationsManager.updateStatus('circlLuStatus', 'Latest event synced (check console for details)', 'success');
-    } catch (error) {
-        console.error('Failed to sync CIRCL-LU latest event:', error);
-        window.IntegrationsManager.updateStatus('circlLuStatus', error.message || 'Failed to sync latest event', 'error');
-    }
+    return window.IntegrationsManager.runAction('circl-misp', 'fetchManifest', { source: 'ui' }, {});
 };
 
 // VirusTotal Query Functions
