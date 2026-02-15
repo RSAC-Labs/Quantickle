@@ -94,6 +94,11 @@ window.IntegrationsManager = {
             return fetchFn(...args);
         };
 
+        const API_BASE_PATHS = Object.freeze({
+            misp: '/api/integrations/misp',
+            neo4j: '/api/neo4j'
+        });
+
         const createApiAdapter = (basePath) => ({
             request: (path = '', options = {}) => {
                 const normalizedPath = typeof path === 'string' ? path : '';
@@ -215,8 +220,8 @@ window.IntegrationsManager = {
                 fetch: (...args) => safeFetch(...args)
             },
             server: {
-                misp: createApiAdapter('/api/integrations/misp'),
-                neo4j: createApiAdapter('/api/neo4j'),
+                misp: createApiAdapter(API_BASE_PATHS.misp),
+                neo4j: createApiAdapter(API_BASE_PATHS.neo4j),
                 serpapi: {
                     request: (params, options = {}) => {
                         if (typeof params === 'string') {
