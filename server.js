@@ -422,8 +422,19 @@ function buildProxyRequestHeaders(req, { forceJsonContentType = false } = {}) {
     return headers;
 }
 
-async function proxyPassthrough(req, res, targetUrl, { forceJsonContentType = false } = {}) {
-    if (!isAllowedHost(targetUrl.hostname)) {
+async function proxyPassthrough(
+    req,
+    res,
+    targetUrl,
+    { forceJsonContentType = false, allowedHosts = [] } = {}
+) {
+    const normalizedTargetHost = String(targetUrl.hostname || '').toLowerCase();
+    const explicitAllowlist = Array.isArray(allowedHosts)
+        ? allowedHosts.map(host => String(host || '').toLowerCase()).filter(Boolean)
+        : [];
+    const isExplicitlyAllowed = explicitAllowlist.includes(normalizedTargetHost);
+
+    if (!isAllowedHost(normalizedTargetHost) && !isExplicitlyAllowed) {
         return res.status(403).json({ error: 'Host not allowed' });
     }
 
@@ -482,8 +493,10 @@ app.all('/api/neo4j/db/*', async (req, res) => {
     const neo4jBaseUrl = (typeof req.headers['x-neo4j-url'] === 'string' && req.headers['x-neo4j-url'].trim())
         || getConfiguredNeo4jUrl();
     let baseUrl;
+    let configuredBaseUrl;
     try {
         baseUrl = new URL(neo4jBaseUrl);
+        configuredBaseUrl = new URL(getConfiguredNeo4jUrl());
     } catch (_) {
         return res.status(400).json({ error: 'Invalid Neo4j URL' });
     }
@@ -491,8 +504,12 @@ app.all('/api/neo4j/db/*', async (req, res) => {
     const wildcardPath = req.params[0] || '';
     const querySuffix = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
     const targetUrl = new URL(`./db/${wildcardPath}${querySuffix}`, baseUrl);
+    const allowedNeo4jHosts = [baseUrl.hostname, configuredBaseUrl?.hostname].filter(Boolean);
 
-    return proxyPassthrough(req, res, targetUrl, { forceJsonContentType: true });
+    return proxyPassthrough(req, res, targetUrl, {
+        forceJsonContentType: true,
+        allowedHosts: allowedNeo4jHosts
+    });
 });
 
 // Provide JSON list of domain files
