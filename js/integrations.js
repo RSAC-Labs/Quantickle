@@ -175,9 +175,20 @@ window.IntegrationsManager = {
             return;
         }
 
-        if (window.VirusTotalIntegrationModule?.create) {
-            this.moduleRegistry.register(window.VirusTotalIntegrationModule.create());
-        }
+        const factories = [
+            window.VirusTotalIntegrationModule,
+            window.OpenAIIntegrationModule,
+            window.SerpApiIntegrationModule,
+            window.CirclMispIntegrationModule,
+            window.OpmlIntegrationModule,
+            window.Neo4jIntegrationModule
+        ];
+
+        factories.forEach(factory => {
+            if (factory?.create) {
+                this.moduleRegistry.register(factory.create());
+            }
+        });
     },
 
     getModule: function(id) {
@@ -789,81 +800,7 @@ window.IntegrationsManager = {
     },
 
     runOpmlDailyCheck: async function(options = {}) {
-        const statusId = options.statusId || 'opmlStatus';
-        if (!Array.isArray(this.runtime.opmlFeeds) || this.runtime.opmlFeeds.length === 0) {
-            this.updateOpmlFeedListDisplay([]);
-            this.updateStatus(statusId, 'No OPML feeds configured', 'warning');
-            return { feedsChecked: 0, newArticles: 0, iocGraphs: 0 };
-        }
-
-        if (this.runtime.opmlScanInProgress) {
-            return { feedsChecked: 0, newArticles: 0, iocGraphs: 0, skipped: true };
-        }
-
-        this.runtime.opmlScanInProgress = true;
-        this.runtime.opmlCancelRequested = false;
-        this.updateOpmlControls();
-        this.updateStatus(statusId, 'Checking OPML feeds...', 'loading');
-        const graphTaskId = window.UI?.beginGraphActivity?.('opml-scan', 'Checking OPML feeds...');
-
-        try {
-            await this.refreshOpmlExistingGraphCache();
-        } catch (error) {
-            console.warn('Unable to refresh OPML graph cache; duplicate detection may be incomplete.', error);
-        }
-
-        let feedsChecked = 0;
-        let newArticles = 0;
-        let iocGraphs = 0;
-        let cancelled = false;
-
-        try {
-            for (const feed of this.runtime.opmlFeeds) {
-                if (this.runtime.opmlCancelRequested) {
-                    cancelled = true;
-                    break;
-                }
-                const progressLabel = feed?.title || feed?.url || 'OPML feed';
-                window.UI?.updateGraphActivity?.(
-                    graphTaskId,
-                    `Scanning ${progressLabel} (${feedsChecked + 1}/${this.runtime.opmlFeeds.length})`
-                );
-                const result = await this.processOpmlFeed(feed, statusId);
-                feedsChecked += 1;
-                newArticles += result.newArticles || 0;
-                iocGraphs += result.iocGraphs || 0;
-                if (this.runtime.opmlCancelRequested || result.cancelled) {
-                    cancelled = true;
-                    break;
-                }
-            }
-
-            if (cancelled) {
-                this.updateStatus(statusId, 'OPML scan cancelled', 'warning');
-                return { feedsChecked, newArticles, iocGraphs, cancelled: true };
-            }
-
-            this.runtime.opmlLastRun = new Date().toISOString();
-            localStorage.setItem(this.STORAGE_KEYS.OPML_LAST_RUN, this.runtime.opmlLastRun);
-            this.persistOpmlState();
-            this.updateOpmlFeedListDisplay();
-
-            const summary = `Checked ${feedsChecked} feed${feedsChecked === 1 ? '' : 's'}; ${newArticles} new article${newArticles === 1 ? '' : 's'}; ${iocGraphs} graph${iocGraphs === 1 ? '' : 's'} created`;
-            this.updateStatus(statusId, summary, 'success');
-
-            return { feedsChecked, newArticles, iocGraphs };
-        } catch (error) {
-            console.error('OPML feed check failed', error);
-            this.updateStatus(statusId, error.message || 'OPML feed check failed', 'error');
-            return { feedsChecked, newArticles, iocGraphs, error };
-        } finally {
-            if (graphTaskId) {
-                window.UI?.endGraphActivity?.(graphTaskId);
-            }
-            this.runtime.opmlScanInProgress = false;
-            this.runtime.opmlCancelRequested = false;
-            this.updateOpmlControls();
-        }
+        return this.runAction('opml', 'runScan', { source: 'manager' }, options);
     },
 
     processOpmlFeed: async function(feed, statusId = 'opmlStatus') {
@@ -3154,69 +3091,7 @@ window.IntegrationsManager = {
     },
 
     makeCirclLuRequest: async function(endpoint, options = {}) {
-        const { baseUrl, username, authKey } = this.getCirclLuConfiguration();
-
-        if (!baseUrl) {
-            throw new Error('CIRCL-LU base URL not configured');
-        }
-
-        const normalizedBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
-        const url = `${normalizedBase}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
-
-        const requestOptions = { ...options };
-        const headers = { ...(options.headers || {}) };
-
-
-        let authorizationHeader = '';
-        if (username && authKey) {
-            const token = btoa(`${username}:${authKey}`);
-            authorizationHeader = `Basic ${token}`;
-        } else if (authKey) {
-            authorizationHeader = `Bearer ${authKey}`;
-        }
-
-        if (authorizationHeader) {
-            headers['Authorization'] = authorizationHeader;
-        }
-
-        let fetchUrl = url;
-        let requestUrl;
-        try {
-            requestUrl = new URL(url);
-        } catch (_) {
-            requestUrl = new URL(url, window.location.origin);
-        }
-
-        const isCrossOrigin = requestUrl.origin !== window.location.origin;
-
-        if (isCrossOrigin) {
-            fetchUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
-            const proxyHeaders = { ...headers };
-            if (authorizationHeader) {
-                proxyHeaders['X-Proxy-Authorization'] = authorizationHeader;
-                delete proxyHeaders['Authorization'];
-            }
-            requestOptions.headers = proxyHeaders;
-        } else {
-            requestOptions.headers = headers;
-        }
-
-        try {
-            const response = await fetch(fetchUrl, requestOptions);
-
-
-            if (!response.ok) {
-                throw new Error(`CIRCL-LU request failed (${response.status})`);
-            }
-
-            const contentType = response.headers.get('content-type') || '';
-            if (contentType.includes('application/json')) {
-                return await response.json();
-            }
-            return await response.text();
-        } catch (error) {
-            throw new Error(error.message || 'Failed to reach CIRCL-LU feed');
-        }
+        return this.runAction('circl-misp', 'request', { source: 'manager' }, { endpoint, options });
     },
 
     updateNeo4jMenuVisibility: function() {
@@ -3309,7 +3184,7 @@ window.importOpmlFeeds = async function() {
 };
 
 window.runOpmlScanNow = async function() {
-    const result = await window.IntegrationsManager.runOpmlDailyCheck({ force: true, statusId: 'opmlStatus' });
+    const result = await window.IntegrationsManager.runAction('opml', 'runScan', { source: 'ui' }, { force: true, statusId: 'opmlStatus' });
     if (result && result.error) {
         window.IntegrationsManager.updateStatus('opmlStatus', result.error.message || 'OPML scan failed', 'error');
     }
@@ -3426,7 +3301,7 @@ window.testCirclLuConnection = async function() {
     window.IntegrationsManager.updateStatus('circlLuStatus', 'Testing connection...', 'testing');
 
     try {
-        await window.IntegrationsManager.makeCirclLuRequest('/manifest.json', { method: 'GET' });
+        await window.IntegrationsManager.runAction('circl-misp', 'testConnection', { source: 'ui' }, {});
         window.IntegrationsManager.updateStatus('circlLuStatus', 'Connection successful', 'success');
     } catch (error) {
         console.error('CIRCL-LU connection test failed:', error);
@@ -3693,7 +3568,7 @@ window.importSelectedCirclMispEvents = async function() {
     const autoSave = !!(autoSaveToggle && autoSaveToggle.checked);
 
     try {
-        await window.IntegrationsManager.importCirclMispFeed({
+        await window.IntegrationsManager.runAction('circl-misp', 'importData', { source: 'ui' }, {
             feedUrl,
             selectedEventUuids: selected.length ? selected : null,
             autoSave,
@@ -3719,7 +3594,7 @@ window.syncCirclLuLatestEvent = async function(options = {}) {
         || window.IntegrationsManager.CIRCL_MISP_DEFAULT_FEED_URL;
 
     try {
-        const result = await window.IntegrationsManager.importCirclMispFeed({
+        const result = await window.IntegrationsManager.runAction('circl-misp', 'importData', { source: 'ui' }, {
             feedUrl,
             selectedEventUuids: null,
             autoSave: !!options.autoSave,
@@ -3751,7 +3626,7 @@ window.syncCirclMispWholeFeed = async function(options = {}) {
         || window.IntegrationsManager.CIRCL_MISP_DEFAULT_FEED_URL;
 
     try {
-        const result = await window.IntegrationsManager.importCirclMispFeed({
+        const result = await window.IntegrationsManager.runAction('circl-misp', 'importData', { source: 'ui' }, {
             feedUrl,
             selectedEventUuids: null,
             autoSave: false,
@@ -3770,243 +3645,36 @@ window.syncCirclMispWholeFeed = async function(options = {}) {
     }
 };
 
+
+window.importCirclMispEvents = async function(options = {}) {
+    return window.IntegrationsManager.runAction('circl-misp', 'importData', { source: 'ui' }, options);
+};
+
 window.makeCirclLuRequest = async function(resource = 'manifest.json', options = {}) {
-    const feedUrl = options.feedUrl
-        || window.IntegrationsManager?.CIRCL_LU_BASE_URL
-        || window.IntegrationsManager?.lastCirclMispFeedUrl
-        || window.IntegrationsManager?.CIRCL_MISP_DEFAULT_FEED_URL;
-
-    if (!window.IntegrationsManager || !feedUrl) {
-        throw new Error('CIRCL MISP integration is not available');
-    }
-
-    const normalizedFeed = window.IntegrationsManager.normalizeMispFeedUrl(feedUrl);
-
-    try {
-        if (typeof resource === 'string' && /manifest\.json$/i.test(resource.trim())) {
-            const { manifest, descriptors } = await window.IntegrationsManager.fetchCirclMispManifest(normalizedFeed);
-            window.IntegrationsManager.lastCirclMispManifest = descriptors;
-            window.IntegrationsManager.lastCirclMispFeedUrl = normalizedFeed;
-            return manifest;
-        }
-
-        const descriptor = typeof resource === 'object' && resource
-            ? { ...resource }
-            : { path: resource };
-
-        if (!descriptor.uuid && typeof descriptor.path === 'string') {
-            const uuidFromPath = descriptor.path.replace(/\.json(\.gz)?$/i, '').split('/').pop();
-            descriptor.uuid = uuidFromPath || descriptor.uuid;
-        }
-
-        return await window.IntegrationsManager.fetchMispEventPayload(normalizedFeed, descriptor);
-    } catch (error) {
-        console.error('CIRCL MISP proxy request failed', error);
-        const status = error.status || (/status\s+(\d{3})/i.exec(error.message || '')?.[1]) || 'unknown';
-        const wrapped = new Error(`CIRCL-LU request failed (${status})`);
-        wrapped.cause = error;
-        throw wrapped;
-    }
+    return window.IntegrationsManager.runAction('circl-misp', 'requestResource', { source: 'ui' }, { resource, options });
 };
 
 
 window.saveOpenAIConfig = async function() {
-    const apiKeyInput = document.getElementById('openaiApiKey');
-    const apiKey = apiKeyInput?.value.trim();
-
-    if (!apiKey) {
-        window.IntegrationsManager.updateStatus('openaiStatus', 'Please enter an API key', 'error');
-        return;
-    }
-
-    // Basic validation for OpenAI API keys which start with 'sk-'. OpenAI has
-    // introduced multiple key formats (project keys, user keys, etc.) that may
-    // contain mixed casing, hyphens, underscores and other safe characters.
-    // Avoid rejecting valid keys by simply checking the prefix and enforcing a
-    // reasonable minimum length.
-    if (!apiKey.startsWith('sk-') || apiKey.length < 20) {
-        window.IntegrationsManager.updateStatus('openaiStatus', 'Invalid API key format', 'error');
-        return;
-    }
-
-    await SecureStorage.ensurePassphrase();
-
-    window.IntegrationsManager.runtime.openaiApiKey = apiKey;
-    localStorage.setItem(
-        window.IntegrationsManager.STORAGE_KEYS.OPENAI_API_KEY,
-        await SecureStorage.encrypt(apiKey)
-    );
-    window.IntegrationsManager.updateStatus('openaiStatus', 'Configuration saved successfully', 'success');
+    return window.IntegrationsManager.runAction('openai', 'saveConfig', { source: 'ui' }, {});
 };
 
 window.testOpenAIConnection = async function() {
-    const apiKey = window.IntegrationsManager.getOpenAIApiKey();
-
-    if (!apiKey) {
-        window.IntegrationsManager.updateStatus('openaiStatus', 'No API key configured', 'error');
-        return;
-    }
-
-    window.IntegrationsManager.updateStatus('openaiStatus', 'Testing connection...', 'testing');
-
-    try {
-        const response = await fetch('https://api.openai.com/v1/models', {
-            headers: { 'Authorization': `Bearer ${apiKey}` }
-        });
-        if (!response.ok) {
-            throw new Error('Invalid API key');
-        }
-        window.IntegrationsManager.updateStatus('openaiStatus', 'Connection successful', 'success');
-    } catch (error) {
-        console.error('OpenAI connection test failed:', error);
-        window.IntegrationsManager.updateStatus('openaiStatus', 'Connection test failed (CORS/Network)', 'error');
-    }
+    return window.IntegrationsManager.runAction('openai', 'testConnection', { source: 'ui' }, {});
 };
 
 window.saveSerpApiConfig = async function() {
-    const apiKeyInput = document.getElementById('serpApiKey');
-    const apiKey = apiKeyInput?.value.trim();
-
-    if (!apiKey) {
-        window.IntegrationsManager.updateStatus('serpapiStatus', 'Please enter an API key', 'error');
-        return;
-    }
-
-    // Basic validation for SerpApi keys (alphanumeric, at least 20 chars)
-    if (!/^[A-Za-z0-9]{20,}$/.test(apiKey)) {
-        window.IntegrationsManager.updateStatus('serpapiStatus', 'Invalid API key format', 'error');
-        return;
-    }
-
-    await SecureStorage.ensurePassphrase();
-
-    window.IntegrationsManager.runtime.serpApiKey = apiKey;
-    localStorage.setItem(
-        window.IntegrationsManager.STORAGE_KEYS.SERPAPI_API_KEY,
-        await SecureStorage.encrypt(apiKey)
-    );
-    window.IntegrationsManager.updateStatus('serpapiStatus', 'Configuration saved successfully', 'success');
+    return window.IntegrationsManager.runAction('serpapi', 'saveConfig', { source: 'ui' }, {});
 };
 
 window.testSerpApiConnection = async function() {
-    const apiKey = window.IntegrationsManager.getSerpApiKey();
-
-    if (!apiKey) {
-        window.IntegrationsManager.updateStatus('serpapiStatus', 'No API key configured', 'error');
-        return;
-    }
-
-    window.IntegrationsManager.updateStatus('serpapiStatus', 'Testing connection...', 'testing');
-
-    try {
-        const response = await fetch(`/api/serpapi?q=coffee&api_key=${apiKey}`);
-        if (!response.ok) {
-            throw new Error('Invalid API key');
-        }
-        window.IntegrationsManager.updateStatus('serpapiStatus', 'Connection successful', 'success');
-    } catch (error) {
-        console.error('SerpApi connection test failed:', error);
-        window.IntegrationsManager.updateStatus('serpapiStatus', 'Connection test failed (CORS/Network)', 'error');
-    }
+    return window.IntegrationsManager.runAction('serpapi', 'testConnection', { source: 'ui' }, {});
 };
 
 window.saveNeo4jConfig = async function() {
-    const usernameInput = document.getElementById('neo4jUsername');
-    const passwordInput = document.getElementById('neo4jPassword');
-
-    const url = window.IntegrationsManager.runtime.neo4jUrl?.trim();
-    const username = usernameInput?.value.trim();
-    const password = passwordInput?.value.trim();
-
-    if (!url || !username || !password) {
-        window.IntegrationsManager.updateStatus(
-            'neo4jStatus',
-            url ? 'Please enter username and password' : 'Server Neo4j URL is not configured',
-            'error'
-        );
-        if (typeof window.IntegrationsManager.updateNeo4jMenuVisibility === 'function') {
-            window.IntegrationsManager.updateNeo4jMenuVisibility();
-        }
-        return;
-    }
-
-    await SecureStorage.ensurePassphrase();
-
-    window.IntegrationsManager.runtime.neo4jUrl = url;
-    window.IntegrationsManager.runtime.neo4jUsername = username;
-    window.IntegrationsManager.runtime.neo4jPassword = password;
-
-    localStorage.setItem(window.IntegrationsManager.STORAGE_KEYS.NEO4J_USERNAME, await SecureStorage.encrypt(username));
-    localStorage.setItem(window.IntegrationsManager.STORAGE_KEYS.NEO4J_PASSWORD, await SecureStorage.encrypt(password));
-
-    window.IntegrationsManager.updateStatus('neo4jStatus', 'Configuration saved successfully', 'success');
-
-    if (typeof window.IntegrationsManager.updateNeo4jMenuVisibility === 'function') {
-        window.IntegrationsManager.updateNeo4jMenuVisibility();
-    }
+    return window.IntegrationsManager.runAction('neo4j', 'saveConfig', { source: 'ui' }, {});
 };
 
 window.testNeo4jConnection = async function() {
-    const creds = window.IntegrationsManager.getNeo4jCredentials();
-
-    if (!creds.url || !creds.username || !creds.password) {
-        window.IntegrationsManager.updateStatus('neo4jStatus', 'No credentials configured', 'error');
-        return;
-    }
-
-    window.IntegrationsManager.updateStatus('neo4jStatus', 'Testing connection...', 'testing');
-
-    try {
-        const auth = btoa(`${creds.username}:${creds.password}`);
-        let testUrl = creds.url;
-        let database = 'neo4j';
-
-        try {
-            const parsed = new URL(testUrl);
-
-            if (parsed.protocol === 'neo4j:' || parsed.protocol === 'bolt:') {
-                testUrl = `http://${parsed.hostname}:7474`;
-            } else {
-                testUrl = `${parsed.protocol}//${parsed.host}`;
-            }
-
-            const pathParts = parsed.pathname.split('/').filter(Boolean);
-            if (pathParts[0] === 'db' && pathParts[1]) {
-                database = pathParts[1];
-            }
-        } catch (urlError) {
-            console.warn('Unable to parse Neo4j URL, using raw value:', urlError);
-        }
-
-        const url = `${testUrl.replace(/\/$/, '')}/db/${database}/tx/commit`;
-        const body = JSON.stringify({ statements: [{ statement: 'RETURN 1' }] });
-
-        console.log('[Neo4j HTTP] POST', url, body);
-
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Basic ${auth}`,
-                'Content-Type': 'application/json'
-            },
-            body
-        });
-
-        const responseText = await response.clone().text();
-        console.log('[Neo4j HTTP] Response', response.status, responseText);
-
-        if (!response.ok) {
-            throw new Error(`Status ${response.status}`);
-        }
-
-        const result = JSON.parse(responseText);
-        if (result.errors && result.errors.length > 0) {
-            throw new Error(result.errors[0].message);
-        }
-
-        window.IntegrationsManager.updateStatus('neo4jStatus', 'Connection successful', 'success');
-    } catch (error) {
-        console.error('Neo4j connection test failed:', error);
-        window.IntegrationsManager.updateStatus('neo4jStatus', 'Connection test failed', 'error');
-    }
+    return window.IntegrationsManager.runAction('neo4j', 'testConnection', { source: 'ui' }, {});
 };
