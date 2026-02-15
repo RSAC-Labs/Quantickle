@@ -2375,13 +2375,65 @@
                 services = moduleServices;
             },
             actions: {
+                saveConfig: async () => {
+                    const apiKeyInput = document.getElementById('virustotalApiKey');
+                    const apiKey = apiKeyInput?.value.trim();
+
+                    if (!apiKey) {
+                        notifyStatus('Please enter an API key', 'error');
+                        return { ok: false };
+                    }
+
+                    if (!/^[a-fA-F0-9]{64}$/.test(apiKey)) {
+                        notifyStatus('Invalid API key format', 'error');
+                        return { ok: false };
+                    }
+
+                    await SecureStorage.ensurePassphrase();
+                    setRuntime('virustotalApiKey', apiKey);
+
+                    const storageKey = getStorageKey('VIRUSTOTAL_API_KEY');
+                    if (storageKey) {
+                        storageSet(storageKey, await SecureStorage.encrypt(apiKey));
+                    }
+
+                    notifyStatus('Configuration saved successfully', 'success');
+                    return { ok: true };
+                },
                 enrichFromGraph: (ctx, params) => importVirusTotalData(params?.identifier, params?.queryType),
                 quickAction: (ctx, params) => updateVirusTotalInfoForNodes(params?.nodes || []),
                 importData: (ctx, params) => importVirusTotalData(params?.identifier, params?.queryType),
                 quickUpdate: (ctx, params) => updateVirusTotalInfoForNodes(params?.nodes || []),
                 addToBlocklist: (ctx, params) => addToVTBlocklist(params?.identifier),
                 submitUrl: (ctx, params) => submitVirusTotalURL(params?.url),
-                testConnection: () => makeVirusTotalRequest('/users/me')
+                testConnection: async () => {
+                    const apiKey = getVirusTotalApiKey();
+                    if (!apiKey) {
+                        notifyStatus('No API key configured', 'error');
+                        return { ok: false };
+                    }
+
+                    notifyStatus('Testing connection...', 'testing');
+                    try {
+                        await makeVirusTotalRequest('/users/me');
+                        notifyStatus('Connection successful', 'success');
+                        return { ok: true };
+                    } catch (error) {
+                        const message = error?.message || 'Connection test failed (CORS/Network)';
+                        if (message.includes('Invalid VirusTotal API key')) {
+                            notifyStatus('Invalid API key', 'error');
+                        } else if (message.includes('VirusTotal proxy blocked')) {
+                            notifyStatus('VirusTotal proxy blocked (check proxy allowlist)', 'error');
+                        } else if (message.includes('VirusTotal access forbidden')) {
+                            notifyStatus('VirusTotal access forbidden (check account permissions)', 'error');
+                        } else if (message.includes('VirusTotal API quota exceeded')) {
+                            notifyStatus('API quota exceeded', 'error');
+                        } else {
+                            notifyStatus('Connection test failed (CORS/Network)', 'error');
+                        }
+                        return { ok: false, error };
+                    }
+                }
             },
             api: {
                 getVirusTotalApiKey,
