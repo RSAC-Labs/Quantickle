@@ -3016,25 +3016,60 @@ class ContextMenuModule {
         const baseId = baseNode.id();
         const calloutUtils = window.QuantickleUtils || {};
 
+        const coerceText = value => {
+            if (typeof value === 'string') return value.trim();
+            if (Array.isArray(value)) {
+                return value
+                    .map(entry => (entry == null ? '' : String(entry).trim()))
+                    .filter(Boolean)
+                    .join('\n')
+                    .trim();
+            }
+            if (value == null) return '';
+            return String(value).trim();
+        };
+
+        const splitSummaryFields = (summary, structuredSummary) => {
+            const structuredTitle = coerceText(structuredSummary?.title);
+            const structuredBody = coerceText(structuredSummary?.body);
+
+            if (structuredTitle || structuredBody) {
+                return {
+                    title: structuredTitle,
+                    body: structuredBody
+                };
+            }
+
+            const rawText = coerceText(summary);
+            if (!rawText) {
+                return { title: '', body: '' };
+            }
+
+            const [titleLine, ...bodyLines] = rawText.split(/\r?\n/);
+            return {
+                title: coerceText(titleLine),
+                body: coerceText(bodyLines.join('\n'))
+            };
+        };
+
         const addSummaryCalloutNode = async (summary, structuredSummary) => {
             if (!summary && !structuredSummary) return null;
 
-            const summaryText = typeof summary === 'string'
-                ? summary
-                : [structuredSummary?.title, structuredSummary?.body].filter(Boolean).join('\n');
-            if (!summaryText) return null;
+            const { title: summaryTitle, body: summaryBody } = splitSummaryFields(summary, structuredSummary);
+            const summaryText = coerceText(summary) || [summaryTitle, summaryBody].filter(Boolean).join('\n');
+            if (!summaryText && !summaryBody) return null;
 
             const summaryId = `osint_summary_${baseId}`;
-            const summaryLabel = structuredSummary?.title || 'Summary';
+            const summaryLabel = summaryTitle || 'Summary';
             const calloutPayload = typeof calloutUtils.normalizeCalloutPayload === 'function'
                 ? calloutUtils.normalizeCalloutPayload({
-                    title: structuredSummary?.title || summaryLabel,
-                    body: structuredSummary?.body || summaryText,
+                    title: summaryTitle || summaryLabel,
+                    body: summaryBody || summaryText,
                     format: 'text'
                 }, { defaultFormat: 'text' })
                 : {
-                    title: structuredSummary?.title || summaryLabel,
-                    body: structuredSummary?.body || summaryText,
+                    title: summaryTitle || summaryLabel,
+                    body: summaryBody || summaryText,
                     format: 'text'
                 };
 
@@ -3127,11 +3162,12 @@ class ContextMenuModule {
             }
         };
 
-        if (parsed.summary) {
-            const structuredSummary = typeof parsed.summary === 'object' ? parsed.summary : null;
-            const summaryText = structuredSummary
-                ? [structuredSummary.title, structuredSummary.body].filter(Boolean).join('\n')
-                : parsed.summary;
+        if (parsed.summary || parsed.summaryStructured) {
+            const structuredSummary = parsed.summaryStructured
+                || (typeof parsed.summary === 'object' ? parsed.summary : null);
+            const summaryText = typeof parsed.summary === 'string'
+                ? parsed.summary
+                : [structuredSummary?.title, structuredSummary?.body].filter(Boolean).join('\n');
             await addSummaryCalloutNode(summaryText, structuredSummary);
         }
 
