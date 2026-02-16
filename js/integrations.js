@@ -961,8 +961,17 @@ window.IntegrationsManager = {
                 break;
             }
             const key = this.normalizeArticleKey(article);
-            if (!key || seen[key]) {
+            if (!key) {
                 continue;
+            }
+
+            if (seen[key]) {
+                const hasExistingGraph = await this.hasExistingGraphForOpmlArticle(article, feed.title);
+                if (hasExistingGraph) {
+                    continue;
+                }
+
+                this.updateStatus(statusId, `Reprocessing previously seen article: ${article.title || article.link}`, 'info');
             }
             result.newArticles += 1;
             const articleResult = await this.handleArticleForIocs(article, feed.title, statusId);
@@ -1163,6 +1172,29 @@ window.IntegrationsManager = {
     resolveOpmlGraphTitle(meta = {}) {
         const rawTitle = meta.title || meta.url || 'RSS Article';
         return this.truncateLabel(rawTitle, 120);
+    },
+
+    deriveOpmlArticleGraphTitleCandidates(article = {}, feedTitle = '') {
+        const candidates = [
+            this.resolveOpmlGraphTitle({ title: article?.title, url: article?.link }),
+            this.resolveOpmlGraphTitle({ url: article?.link }),
+            this.resolveOpmlGraphTitle({ title: article?.title }),
+            this.resolveOpmlGraphTitle({ title: feedTitle, url: article?.link })
+        ];
+
+        return Array.from(new Set(candidates
+            .map(candidate => (candidate || '').toString().trim())
+            .filter(Boolean)));
+    },
+
+    hasExistingGraphForOpmlArticle: async function(article = {}, feedTitle = '') {
+        const candidates = this.deriveOpmlArticleGraphTitleCandidates(article, feedTitle);
+        for (const candidate of candidates) {
+            if (await this.shouldSkipOpmlGraph(candidate)) {
+                return true;
+            }
+        }
+        return false;
     },
 
     registerOpmlGraphName(graphTitle) {
