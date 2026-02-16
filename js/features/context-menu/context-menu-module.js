@@ -2110,6 +2110,25 @@ class ContextMenuModule {
     }
 
     mergeIocLists(base = {}, extra = {}) {
+        const normalizeDefangedToken = value => String(value || '')
+            .replace(/\[(?:\.|dot)\]|\((?:\.|dot)\)|\{(?:\.|dot)\}/gi, '.')
+            .replace(/hxxps?:\/\//gi, m => (m.toLowerCase().startsWith('hxxps') ? 'https://' : 'http://'))
+            .trim();
+        const normalizeDomain = value => normalizeDefangedToken(value)
+            .replace(/^[a-z]+:\/\//i, '')
+            .replace(/^www\./i, '')
+            .split(/[/?#:]/)[0]
+            .replace(/^\.+|\.+$/g, '')
+            .toLowerCase();
+        const normalizeIp = value => normalizeDefangedToken(value)
+            .replace(/[^0-9.]/g, '');
+        const isValidIpv4 = value => {
+            const parts = value.split('.');
+            if (parts.length !== 4) {
+                return false;
+            }
+            return parts.every(part => /^\d{1,3}$/.test(part) && Number(part) >= 0 && Number(part) <= 255);
+        };
         const normalize = src => {
             const out = {};
             if (!src || typeof src !== 'object') {
@@ -2117,7 +2136,17 @@ class ContextMenuModule {
             }
             for (const [key, vals] of Object.entries(src)) {
                 if (Array.isArray(vals)) {
-                    out[key] = Array.from(new Set(vals));
+                    let normalizedVals = vals;
+                    if (key === 'domains') {
+                        normalizedVals = vals
+                            .map(normalizeDomain)
+                            .filter(Boolean);
+                    } else if (key === 'ip_addresses') {
+                        normalizedVals = vals
+                            .map(normalizeIp)
+                            .filter(isValidIpv4);
+                    }
+                    out[key] = Array.from(new Set(normalizedVals));
                 }
             }
             return out;
