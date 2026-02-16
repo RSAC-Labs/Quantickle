@@ -2110,6 +2110,25 @@ class ContextMenuModule {
     }
 
     mergeIocLists(base = {}, extra = {}) {
+        const normalizeDefangedToken = value => String(value || '')
+            .replace(/\[(?:\.|dot)\]|\((?:\.|dot)\)|\{(?:\.|dot)\}/gi, '.')
+            .replace(/hxxps?:\/\//gi, m => (m.toLowerCase().startsWith('hxxps') ? 'https://' : 'http://'))
+            .trim();
+        const normalizeDomain = value => normalizeDefangedToken(value)
+            .replace(/^[a-z]+:\/\//i, '')
+            .replace(/^www\./i, '')
+            .split(/[/?#:]/)[0]
+            .replace(/^\.+|\.+$/g, '')
+            .toLowerCase();
+        const normalizeIp = value => normalizeDefangedToken(value)
+            .replace(/[^0-9.]/g, '');
+        const isValidIpv4 = value => {
+            const parts = value.split('.');
+            if (parts.length !== 4) {
+                return false;
+            }
+            return parts.every(part => /^\d{1,3}$/.test(part) && Number(part) >= 0 && Number(part) <= 255);
+        };
         const normalize = src => {
             const out = {};
             if (!src || typeof src !== 'object') {
@@ -2117,7 +2136,17 @@ class ContextMenuModule {
             }
             for (const [key, vals] of Object.entries(src)) {
                 if (Array.isArray(vals)) {
-                    out[key] = Array.from(new Set(vals));
+                    let normalizedVals = vals;
+                    if (key === 'domains') {
+                        normalizedVals = vals
+                            .map(normalizeDomain)
+                            .filter(Boolean);
+                    } else if (key === 'ip_addresses') {
+                        normalizedVals = vals
+                            .map(normalizeIp)
+                            .filter(isValidIpv4);
+                    }
+                    out[key] = Array.from(new Set(normalizedVals));
                 }
             }
             return out;
@@ -2695,6 +2724,28 @@ class ContextMenuModule {
                 childIds.push(nid);
                 return nid;
             };
+            const normalizeDefangedToken = value => String(value || '')
+                .replace(/\[(?:\.|dot)\]|\((?:\.|dot)\)|\{(?:\.|dot)\}/gi, '.')
+                .replace(/hxxps?:\/\//gi, m => (m.toLowerCase().startsWith('hxxps') ? 'https://' : 'http://'))
+                .trim();
+            const normalizeDomain = value => normalizeDefangedToken(value)
+                .replace(/^[a-z]+:\/\//i, '')
+                .replace(/^www\./i, '')
+                .split(/[/?#:]/)[0]
+                .replace(/^\.+|\.+$/g, '')
+                .toLowerCase();
+            const normalizeIp = value => normalizeDefangedToken(value)
+                .replace(/[^0-9.\n]/g, '')
+                .split(/\s+/)
+                .map(v => v.trim())
+                .filter(Boolean);
+            const isValidIpv4 = value => {
+                const parts = String(value || '').split('.');
+                if (parts.length !== 4) {
+                    return false;
+                }
+                return parts.every(part => /^\d{1,3}$/.test(part) && Number(part) >= 0 && Number(part) <= 255);
+            };
 
             const iocs = rep.iocs || {};
             for (const hash of iocs.md5_hashes || []) {
@@ -2706,7 +2757,9 @@ class ContextMenuModule {
                 addEdge(reportId, id, 'related');
             }
             for (const domain of iocs.domains || []) {
-                const id = addReportNode(domain, 'domain', domain);
+                const normalizedDomain = normalizeDomain(domain);
+                if (!normalizedDomain) continue;
+                const id = addReportNode(normalizedDomain, 'domain', normalizedDomain);
                 addEdge(reportId, id, 'related');
             }
             for (const email of iocs.emails || []) {
@@ -2714,17 +2767,28 @@ class ContextMenuModule {
                 addEdge(reportId, id, 'related');
             }
             for (const url of iocs.urls || []) {
-                const id = addReportNode(url, 'url', url);
+                const normalizedUrl = normalizeDefangedToken(url);
+                if (!normalizedUrl) continue;
+                const id = addReportNode(normalizedUrl, 'url', normalizedUrl);
                 addEdge(reportId, id, 'related');
             }
+            for (const ipValue of iocs.ip_addresses || []) {
+                for (const ip of normalizeIp(ipValue)) {
+                    if (!isValidIpv4(ip)) continue;
+                    const id = addReportNode(ip, 'ip', ip);
+                    addEdge(reportId, id, 'related');
+                }
+            }
 
-            const knownIocKeys = ['md5_hashes', 'hashes', 'domains', 'emails', 'urls'];
+            const knownIocKeys = ['md5_hashes', 'hashes', 'domains', 'emails', 'urls', 'ip_addresses'];
             for (const [key, values] of Object.entries(iocs)) {
                 if (knownIocKeys.includes(key) || !Array.isArray(values)) continue;
                 const containerId = addNode(`${key}_${reportId}`, 'container', key, null);
                 childIds.push(containerId);
                 for (const val of values) {
-                    const nodeId = addNode(val, 'default', val, containerId);
+                    const normalizedVal = normalizeDefangedToken(val);
+                    if (!normalizedVal) continue;
+                    const nodeId = addNode(normalizedVal, 'default', normalizedVal, containerId);
                     childIds.push(nodeId);
                     addEdge(reportId, nodeId, key);
                 }
@@ -2736,14 +2800,16 @@ class ContextMenuModule {
                 addEdge(reportId, id, 'associated_malware');
             }
             for (const item of rel.c2_infrastructure || []) {
-                if (item.domain) {
-                    const id = addReportNode(item.domain, 'domain', item.domain);
+                const normalizedDomain = normalizeDomain(item?.domain);
+                if (normalizedDomain) {
+                    const id = addReportNode(normalizedDomain, 'domain', normalizedDomain);
                     addEdge(reportId, id, 'c2_infrastructure');
                 }
             }
             for (const item of rel.shared_domains || []) {
-                if (item.domain) {
-                    const id = addReportNode(item.domain, 'domain', item.domain);
+                const normalizedDomain = normalizeDomain(item?.domain);
+                if (normalizedDomain) {
+                    const id = addReportNode(normalizedDomain, 'domain', normalizedDomain);
                     addEdge(reportId, id, 'shared_domain');
                 }
             }
