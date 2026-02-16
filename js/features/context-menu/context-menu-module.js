@@ -3030,8 +3030,22 @@ class ContextMenuModule {
         };
 
         const splitSummaryFields = (summary, structuredSummary) => {
-            const structuredTitle = coerceText(structuredSummary?.title);
-            const structuredBody = coerceText(structuredSummary?.body);
+            const structured = structuredSummary && typeof structuredSummary === 'object' ? structuredSummary : null;
+            const structuredTitle = coerceText(structured?.title || structured?.heading || structured?.name);
+            const structuredBodyCandidates = structured
+                ? [
+                    structured.body,
+                    structured.text,
+                    structured.description,
+                    structured.content,
+                    structured.summary,
+                    structured.details,
+                    structured.value
+                ]
+                : [];
+            const structuredBody = structuredBodyCandidates
+                .map(coerceText)
+                .find(Boolean) || '';
 
             if (structuredTitle || structuredBody) {
                 return {
@@ -3046,9 +3060,11 @@ class ContextMenuModule {
             }
 
             const [titleLine, ...bodyLines] = rawText.split(/\r?\n/);
+            const parsedTitle = coerceText(titleLine);
+            const parsedBody = coerceText(bodyLines.join('\n'));
             return {
-                title: coerceText(titleLine),
-                body: coerceText(bodyLines.join('\n'))
+                title: parsedTitle,
+                body: parsedBody || (parsedTitle === rawText ? '' : rawText)
             };
         };
 
@@ -3077,14 +3093,23 @@ class ContextMenuModule {
                 id: summaryId,
                 type: 'text',
                 label: calloutPayload.title || summaryLabel,
-                info: summaryText,
-                callout: { ...calloutPayload },
-                calloutTitle: calloutPayload.title,
-                calloutBody: calloutPayload.body,
-                calloutFormat: calloutPayload.format,
-                calloutBodyFormat: calloutPayload.format,
+                info: calloutPayload.body || summaryText,
                 domain: 'cybersecurity'
             };
+            if (typeof calloutUtils.syncCalloutLegacyFields === 'function') {
+                calloutUtils.syncCalloutLegacyFields(nodeData, calloutPayload, {
+                    defaultFormat: 'text',
+                    syncTitle: true,
+                    overwriteInfo: true,
+                    includeDerivedFields: true
+                });
+            } else {
+                nodeData.callout = { ...calloutPayload };
+                nodeData.calloutTitle = calloutPayload.title;
+                nodeData.calloutBody = calloutPayload.body;
+                nodeData.calloutFormat = calloutPayload.format;
+                nodeData.calloutBodyFormat = calloutPayload.format;
+            }
 
             if (window.IntegrationsManager && typeof window.IntegrationsManager.getOrCreateNode === 'function') {
                 const { id: nodeId, created } = await window.IntegrationsManager.getOrCreateNode(cy, summaryId, nodeData);
@@ -3095,6 +3120,12 @@ class ContextMenuModule {
                 const cyNode = cy.getElementById(nodeId);
                 if (cyNode && cyNode.length) {
                     cyNode.data(nodeData);
+                    cyNode.data('callout', { ...calloutPayload });
+                    cyNode.data('calloutTitle', calloutPayload.title);
+                    cyNode.data('calloutBody', calloutPayload.body);
+                    cyNode.data('calloutFormat', calloutPayload.format);
+                    cyNode.data('calloutBodyFormat', calloutPayload.format);
+                    cyNode.data('info', calloutPayload.body || summaryText);
                 }
                 if (created || !existingNode || existingNode.length === 0) {
                     addedNodeIds.push(nodeId);
@@ -3118,6 +3149,12 @@ class ContextMenuModule {
             const cyNode = cy.getElementById(summaryId);
             if (cyNode && cyNode.length) {
                 cyNode.data(nodeData);
+                cyNode.data('callout', { ...calloutPayload });
+                cyNode.data('calloutTitle', calloutPayload.title);
+                cyNode.data('calloutBody', calloutPayload.body);
+                cyNode.data('calloutFormat', calloutPayload.format);
+                cyNode.data('calloutBodyFormat', calloutPayload.format);
+                cyNode.data('info', calloutPayload.body || summaryText);
             }
             addEdge(baseId, summaryId, 'summary');
             return summaryId;
