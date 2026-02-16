@@ -107,6 +107,142 @@ const stripReportUrl = (text, url) => {
         .trim();
 };
 
+const splitSummaryFields = (summaryText, structured) => {
+    if (structured && typeof structured === 'object') {
+        const structuredTitle = typeof structured.title === 'string' ? structured.title.trim() : '';
+        const structuredBody = typeof structured.body === 'string' ? structured.body.trim() : '';
+        return {
+            title: structuredTitle,
+            body: structuredBody
+        };
+    }
+
+    const text = typeof summaryText === 'string' ? summaryText.trim() : '';
+    if (!text) {
+        return { title: '', body: '' };
+    }
+
+    const parts = text.split(/\n+/);
+    if (parts.length > 1) {
+        const possibleTitle = parts.shift().trim();
+        return { title: possibleTitle, body: parts.join('\n').trim() };
+    }
+    return { title: '', body: text };
+};
+
+const estimateSummaryDimensions = (summaryText) => {
+    const maxWidth = window.QuantickleConfig?.summaryNodeMaxWidth || 400;
+    const maxHeight = window.QuantickleConfig?.summaryNodeMaxHeight || 300;
+    const charWidth = 7;
+    const lineHeight = 20;
+    const padding = 20;
+    const normalizedText = typeof summaryText === 'string' ? summaryText : '';
+    const lines = normalizedText.split(/\r?\n/);
+    const longest = lines.reduce((m, l) => Math.max(m, l.length), 0);
+    const width = Math.min((longest * charWidth) + padding, maxWidth);
+    const charsPerLine = Math.max(Math.floor((width - padding) / charWidth), 1);
+    const totalLines = lines.reduce((s, l) => s + Math.ceil(l.length / charsPerLine), 0);
+    const height = Math.min((totalLines * lineHeight) + padding, maxHeight);
+    return { width, height };
+};
+
+const createOrUpdateSummaryNode = ({
+    cy,
+    nodeId,
+    summary,
+    summaryHtml,
+    structuredSummary,
+    nodeDataRef = null,
+    graphManagerNodeRef = null,
+    domain = 'cybersecurity'
+}) => {
+    if (!cy || !nodeId) return null;
+
+    const wrapSummaryHtml = window.wrapSummaryHtml || defaultWrapSummaryHtml;
+    const { title: summaryTitle, body: summaryBody } = splitSummaryFields(summary, structuredSummary);
+    const summaryText = (typeof summary === 'string' ? summary.trim() : '') || [summaryTitle, summaryBody].filter(Boolean).join('\n');
+    if (!summaryText && !summaryBody) return null;
+
+    const html = summaryHtml || wrapSummaryHtml({ title: summaryTitle, body: summaryBody || summaryText });
+    const calloutUtils = window.QuantickleUtils || {};
+    const calloutPayload = typeof calloutUtils.normalizeCalloutPayload === 'function'
+        ? calloutUtils.normalizeCalloutPayload({
+            title: summaryTitle,
+            body: summaryBody || summaryText,
+            format: 'text'
+        }, { defaultFormat: 'text' })
+        : {
+            title: summaryTitle || '',
+            body: summaryBody || summaryText,
+            format: 'text'
+        };
+
+    const { width, height } = estimateSummaryDimensions(summaryText);
+
+    const applyData = (target) => {
+        if (!target) return;
+        target.type = target.type || 'text';
+        target.domain = target.domain || domain;
+        target.label = calloutPayload.title || target.label || 'Summary';
+        target.info = summaryText;
+        target.infoHtml = html;
+        target.width = width;
+        target.height = height;
+        if (typeof calloutUtils.syncCalloutLegacyFields === 'function') {
+            calloutUtils.syncCalloutLegacyFields(target, calloutPayload, {
+                defaultFormat: 'text',
+                html,
+                syncTitle: true,
+                overwriteInfo: true,
+                includeDerivedFields: true
+            });
+        } else {
+            target.callout = { ...calloutPayload };
+            target.calloutTitle = calloutPayload.title;
+            target.calloutBody = calloutPayload.body;
+            target.calloutFormat = calloutPayload.format;
+            target.calloutBodyFormat = calloutPayload.format;
+        }
+    };
+
+    applyData(nodeDataRef);
+    applyData(graphManagerNodeRef);
+
+    const cyNode = cy.getElementById(nodeId);
+    if (cyNode && cyNode.length) {
+        const cyData = {
+            info: summaryText,
+            infoHtml: html,
+            width,
+            height,
+            label: (nodeDataRef && nodeDataRef.label) || calloutPayload.title || 'Summary',
+            callout: (nodeDataRef && nodeDataRef.callout) ? { ...nodeDataRef.callout } : { ...calloutPayload }
+        };
+        cyNode.data(cyData);
+        ['calloutTitle', 'calloutBody', 'calloutFormat', 'calloutBodyFormat'].forEach(key => {
+            if (nodeDataRef && Object.prototype.hasOwnProperty.call(nodeDataRef, key)) {
+                cyNode.data(key, nodeDataRef[key]);
+            }
+        });
+        cyNode.style({
+            width,
+            height,
+            'text-max-width': width,
+            'text-wrap': 'wrap'
+        });
+    }
+
+    return {
+        nodeId,
+        summaryText,
+        calloutPayload,
+        html,
+        width,
+        height
+    };
+};
+
+
 class ContextMenuModule {
     constructor(dependencies) {
         // Required dependencies injected via constructor
@@ -2581,108 +2717,28 @@ class ContextMenuModule {
             });
         };
 
-        const wrapSummaryHtml = window.wrapSummaryHtml || defaultWrapSummaryHtml;
-
-        const splitSummaryFields = (summaryText, structured) => {
-            if (structured && typeof structured === 'object') {
-                const structuredTitle = typeof structured.title === 'string' ? structured.title.trim() : '';
-                const structuredBody = typeof structured.body === 'string' ? structured.body.trim() : '';
-                return {
-                    title: structuredTitle,
-                    body: structuredBody
-                };
-            }
-            const text = typeof summaryText === 'string' ? summaryText : '';
-            if (!text) {
-                return { title: '', body: '' };
-            }
-            const parts = text.split(/\n+/);
-            if (parts.length > 1) {
-                const possibleTitle = parts.shift().trim();
-                return { title: possibleTitle, body: parts.join('\n').trim() };
-            }
-            return { title: '', body: text.trim() };
-        };
-
         const addSummaryNode = (reportId, summary, parent, summaryHtml, structuredSummary) => {
-            if (!summary && !structuredSummary) return;
-            const baseId = `summary_${reportId}`.replace(/[^a-zA-Z0-9_]/g, '_');
-            const nodeId = addNode(baseId, 'text', summary, parent);
-            const html = summaryHtml || wrapSummaryHtml(summary);
-            const { title: summaryTitle, body: summaryBody } = splitSummaryFields(summary, structuredSummary);
-            const calloutUtils = window.QuantickleUtils || {};
-            const calloutPayload = calloutUtils.normalizeCalloutPayload
-                ? calloutUtils.normalizeCalloutPayload({ title: summaryTitle, body: summaryBody, format: 'text' }, { defaultFormat: 'text' })
-                : { title: summaryTitle || '', body: summaryBody || '', format: 'text' };
-
-            // Estimate dimensions based on content length with configurable limits
-            const maxWidth = window.QuantickleConfig?.summaryNodeMaxWidth || 400;
-            const maxHeight = window.QuantickleConfig?.summaryNodeMaxHeight || 300;
-            const charWidth = 7; // approx width per character in px
-            const lineHeight = 20; // px per line
-            const padding = 20; // internal padding
-
-            const lines = summary.split(/\n/);
-            const longest = lines.reduce((m, l) => Math.max(m, l.length), 0);
-            let width = Math.min(longest * charWidth + padding, maxWidth);
-            const charsPerLine = Math.max(Math.floor((width - padding) / charWidth), 1);
-            const totalLines = lines.reduce((s, l) => s + Math.ceil(l.length / charsPerLine), 0);
-            let height = Math.min(totalLines * lineHeight + padding, maxHeight);
-
+            if (!summary && !structuredSummary) return null;
+            const summaryBaseId = `summary_${reportId}`.replace(/[^a-zA-Z0-9_]/g, '_');
+            const nodeId = addNode(summaryBaseId, 'text', summary, parent);
             const data = nodeDataMap.get(nodeId);
-            if (data) {
-                data.info = summary;
-                data.infoHtml = html;
-                data.width = width;
-                data.height = height;
-                if (calloutUtils.syncCalloutLegacyFields) {
-                    calloutUtils.syncCalloutLegacyFields(data, calloutPayload, {
-                        defaultFormat: 'text',
-                        html,
-                        syncTitle: true,
-                        overwriteInfo: true,
-                        includeDerivedFields: true
-                    });
-                } else {
-                    data.callout = { ...calloutPayload };
-                    data.calloutTitle = calloutPayload.title;
-                    data.calloutBody = calloutPayload.body;
-                    data.calloutFormat = calloutPayload.format;
-                    data.calloutBodyFormat = calloutPayload.format;
-                }
-            }
-            const cyNode = cy.getElementById(nodeId);
-            if (cyNode && cyNode.length) {
-                cyNode.data('info', summary);
-                cyNode.data('infoHtml', html);
-                cyNode.data('width', width);
-                cyNode.data('height', height);
-                cyNode.style({
-                    width,
-                    height,
-                    'text-max-width': width,
-                    'text-wrap': 'wrap'
-                });
-                cyNode.data('label', calloutPayload.title || '');
-                cyNode.data('callout', data && data.callout ? { ...data.callout } : { ...calloutPayload });
-                ['calloutTitle', 'calloutBody', 'calloutFormat', 'calloutBodyFormat'].forEach(key => {
-                    if (data && Object.prototype.hasOwnProperty.call(data, key)) {
-                        cyNode.data(key, data[key]);
-                    }
-                });
-            }
+            const gmNode = window.GraphManager?.currentGraph?.nodes?.find(n => {
+                const d = n.data || n;
+                return d.id === nodeId;
+            });
+            const gmData = gmNode ? (gmNode.data || gmNode) : null;
 
-            if (window.GraphManager && window.GraphManager.currentGraph) {
-                const gmNode = window.GraphManager.currentGraph.nodes.find(n => {
-                    const d = n.data || n;
-                    return d.id === nodeId;
-                });
-                if (gmNode) {
-                    const gmData = gmNode.data || gmNode;
-                    gmData.width = width;
-                    gmData.height = height;
-                }
-            }
+            createOrUpdateSummaryNode({
+                cy,
+                nodeId,
+                summary,
+                summaryHtml,
+                structuredSummary,
+                nodeDataRef: data,
+                graphManagerNodeRef: gmData,
+                domain: 'cybersecurity'
+            });
+
             addEdge(reportId, nodeId, 'summary');
             return nodeId;
         };
@@ -3014,150 +3070,58 @@ class ContextMenuModule {
         }
 
         const baseId = baseNode.id();
-        const calloutUtils = window.QuantickleUtils || {};
 
-        const coerceText = value => {
-            if (typeof value === 'string') return value.trim();
-            if (Array.isArray(value)) {
-                return value
-                    .map(entry => (entry == null ? '' : String(entry).trim()))
-                    .filter(Boolean)
-                    .join('\n')
-                    .trim();
-            }
-            if (value == null) return '';
-            return String(value).trim();
-        };
-
-        const splitSummaryFields = (summary, structuredSummary) => {
-            const structured = structuredSummary && typeof structuredSummary === 'object' ? structuredSummary : null;
-            const structuredTitle = coerceText(structured?.title || structured?.heading || structured?.name);
-            const structuredBodyCandidates = structured
-                ? [
-                    structured.body,
-                    structured.text,
-                    structured.description,
-                    structured.content,
-                    structured.summary,
-                    structured.details,
-                    structured.value
-                ]
-                : [];
-            const structuredBody = structuredBodyCandidates
-                .map(coerceText)
-                .find(Boolean) || '';
-
-            if (structuredTitle || structuredBody) {
-                return {
-                    title: structuredTitle,
-                    body: structuredBody
-                };
-            }
-
-            const rawText = coerceText(summary);
-            if (!rawText) {
-                return { title: '', body: '' };
-            }
-
-            const [titleLine, ...bodyLines] = rawText.split(/\r?\n/);
-            const parsedTitle = coerceText(titleLine);
-            const parsedBody = coerceText(bodyLines.join('\n'));
-            return {
-                title: parsedTitle,
-                body: parsedBody || (parsedTitle === rawText ? '' : rawText)
-            };
-        };
-
-        const addSummaryCalloutNode = async (summary, structuredSummary) => {
+        const addSummaryNode = async (summary, structuredSummary) => {
             if (!summary && !structuredSummary) return null;
-
-            const { title: summaryTitle, body: summaryBody } = splitSummaryFields(summary, structuredSummary);
-            const summaryText = coerceText(summary) || [summaryTitle, summaryBody].filter(Boolean).join('\n');
-            if (!summaryText && !summaryBody) return null;
-
             const summaryId = `osint_summary_${baseId}`;
-            const summaryLabel = summaryTitle || 'Summary';
-            const calloutPayload = typeof calloutUtils.normalizeCalloutPayload === 'function'
-                ? calloutUtils.normalizeCalloutPayload({
-                    title: summaryTitle || summaryLabel,
-                    body: summaryBody || summaryText,
-                    format: 'text'
-                }, { defaultFormat: 'text' })
-                : {
-                    title: summaryTitle || summaryLabel,
-                    body: summaryBody || summaryText,
-                    format: 'text'
-                };
-
-            const nodeData = {
+            let nodeData = {
                 id: summaryId,
                 type: 'text',
-                label: calloutPayload.title || summaryLabel,
-                info: calloutPayload.body || summaryText,
+                label: 'Summary',
+                info: '',
                 domain: 'cybersecurity'
             };
-            if (typeof calloutUtils.syncCalloutLegacyFields === 'function') {
-                calloutUtils.syncCalloutLegacyFields(nodeData, calloutPayload, {
-                    defaultFormat: 'text',
-                    syncTitle: true,
-                    overwriteInfo: true,
-                    includeDerivedFields: true
-                });
-            } else {
-                nodeData.callout = { ...calloutPayload };
-                nodeData.calloutTitle = calloutPayload.title;
-                nodeData.calloutBody = calloutPayload.body;
-                nodeData.calloutFormat = calloutPayload.format;
-                nodeData.calloutBodyFormat = calloutPayload.format;
-            }
+            let nodeId = summaryId;
 
             if (window.IntegrationsManager && typeof window.IntegrationsManager.getOrCreateNode === 'function') {
-                const { id: nodeId, created } = await window.IntegrationsManager.getOrCreateNode(cy, summaryId, nodeData);
+                const result = await window.IntegrationsManager.getOrCreateNode(cy, summaryId, nodeData);
+                nodeId = result.id;
                 const existingNode = cy.getElementById(nodeId);
                 if (!existingNode || existingNode.length === 0) {
                     cy.add({ group: 'nodes', data: { ...nodeData, id: nodeId } });
-                }
-                const cyNode = cy.getElementById(nodeId);
-                if (cyNode && cyNode.length) {
-                    cyNode.data(nodeData);
-                    cyNode.data('callout', { ...calloutPayload });
-                    cyNode.data('calloutTitle', calloutPayload.title);
-                    cyNode.data('calloutBody', calloutPayload.body);
-                    cyNode.data('calloutFormat', calloutPayload.format);
-                    cyNode.data('calloutBodyFormat', calloutPayload.format);
-                    cyNode.data('info', calloutPayload.body || summaryText);
-                }
-                if (created || !existingNode || existingNode.length === 0) {
+                    addedNodeIds.push(nodeId);
+                } else if (result.created) {
                     addedNodeIds.push(nodeId);
                 }
-                addEdge(baseId, nodeId, 'summary');
-                return nodeId;
-            }
-
-            if (window.GraphManager && typeof window.GraphManager.addNode === 'function') {
+                nodeData = cy.getElementById(nodeId).data();
+            } else if (window.GraphManager && typeof window.GraphManager.addNode === 'function') {
                 window.GraphManager.addNode(nodeData);
                 addedNodeIds.push(summaryId);
-                addEdge(baseId, summaryId, 'summary');
-                return summaryId;
+                const gmNode = window.GraphManager.currentGraph?.nodes?.find(n => (n.data ? n.data.id : n.id) === summaryId);
+                nodeData = (gmNode && (gmNode.data || gmNode)) || nodeData;
+                nodeId = summaryId;
+            } else {
+                const existingNode = cy.getElementById(summaryId);
+                if (!existingNode || existingNode.length === 0) {
+                    cy.add({ group: 'nodes', data: nodeData });
+                    addedNodeIds.push(summaryId);
+                }
+                nodeId = summaryId;
+                nodeData = cy.getElementById(nodeId).data();
             }
 
-            const existingNode = cy.getElementById(summaryId);
-            if (!existingNode || existingNode.length === 0) {
-                cy.add({ group: 'nodes', data: nodeData });
-                addedNodeIds.push(summaryId);
-            }
-            const cyNode = cy.getElementById(summaryId);
-            if (cyNode && cyNode.length) {
-                cyNode.data(nodeData);
-                cyNode.data('callout', { ...calloutPayload });
-                cyNode.data('calloutTitle', calloutPayload.title);
-                cyNode.data('calloutBody', calloutPayload.body);
-                cyNode.data('calloutFormat', calloutPayload.format);
-                cyNode.data('calloutBodyFormat', calloutPayload.format);
-                cyNode.data('info', calloutPayload.body || summaryText);
-            }
-            addEdge(baseId, summaryId, 'summary');
-            return summaryId;
+            const gmData = window.GraphManager?.currentGraph?.nodes?.find(n => (n.data ? n.data.id : n.id) === nodeId);
+            createOrUpdateSummaryNode({
+                cy,
+                nodeId,
+                summary,
+                structuredSummary,
+                nodeDataRef: nodeData,
+                graphManagerNodeRef: gmData ? (gmData.data || gmData) : null,
+                domain: 'cybersecurity'
+            });
+            addEdge(baseId, nodeId, 'summary');
+            return nodeId;
         };
 
         const addedNodeIds = [];
@@ -3205,7 +3169,7 @@ class ContextMenuModule {
             const summaryText = typeof parsed.summary === 'string'
                 ? parsed.summary
                 : [structuredSummary?.title, structuredSummary?.body].filter(Boolean).join('\n');
-            await addSummaryCalloutNode(summaryText, structuredSummary);
+            await addSummaryNode(summaryText, structuredSummary);
         }
 
         for (const name of parsed.companies || []) {
