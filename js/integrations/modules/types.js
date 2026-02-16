@@ -28,8 +28,12 @@
  */
 
 /**
+ * @typedef {'info'|'success'|'warning'|'error'|'loading'|'testing'} IntegrationStatusLevel
+ */
+
+/**
  * @typedef {Object} IntegrationStatusService
- * @property {(message: string|{message: string, level?: 'info'|'success'|'warning'|'error', statusId?: string, toast?: boolean}, level?: 'info'|'success'|'warning'|'error') => void} notify Required.
+ * @property {(message: string|{message: string, level?: IntegrationStatusLevel, statusId?: string, toast?: boolean}, level?: IntegrationStatusLevel) => void} notify Required.
  */
 
 /**
