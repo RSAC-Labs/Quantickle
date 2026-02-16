@@ -562,6 +562,22 @@ app.get('/api/examples', async (req, res) => {
     }
 });
 
+app.get('/api/openai/models', async (req, res) => {
+    const authorizationHeader = req.headers['x-proxy-authorization'] || req.headers['authorization'];
+    if (!authorizationHeader) {
+        return res.status(400).json({ error: 'Missing Authorization header' });
+    }
+
+    let targetUrl;
+    try {
+        targetUrl = new URL('https://api.openai.com/v1/models');
+    } catch (_) {
+        return res.status(500).json({ error: 'Failed to build OpenAI URL' });
+    }
+
+    return proxyPassthrough(req, res, targetUrl);
+});
+
 // Proxy SerpApi requests to avoid browser CORS issues
 app.get('/api/serpapi', async (req, res) => {
     const { q } = req.query;

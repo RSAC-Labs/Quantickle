@@ -96,7 +96,8 @@ window.IntegrationsManager = {
 
         const API_BASE_PATHS = Object.freeze({
             misp: '/api/integrations/misp',
-            neo4j: '/api/neo4j'
+            neo4j: '/api/neo4j',
+            openai: '/api/openai'
         });
 
         const createApiAdapter = (basePath) => ({
@@ -222,6 +223,7 @@ window.IntegrationsManager = {
             server: {
                 misp: createApiAdapter(API_BASE_PATHS.misp),
                 neo4j: createApiAdapter(API_BASE_PATHS.neo4j),
+                openai: createApiAdapter(API_BASE_PATHS.openai),
                 serpapi: {
                     request: (params, options = {}) => {
                         if (typeof params === 'string') {

@@ -47,7 +47,7 @@
                     notify('Testing connection...', 'testing');
 
                     try {
-                        const response = await services.network.fetch('https://api.openai.com/v1/models', {
+                        const response = await services?.server?.openai?.request('/models', {
                             headers: { 'Authorization': `Bearer ${apiKey}` }
                         });
                         if (!response.ok) {

@@ -1,6 +1,7 @@
 {
   "allowlist": [
     "virustotal.com",
-    "www.virustotal.com"
+    "www.virustotal.com",
+    "api.openai.com"
   ]
 }
