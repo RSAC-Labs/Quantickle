@@ -2248,6 +2248,32 @@ class ContextMenuModule {
         ({ result, error } = tryParse(repaired));
         if (result) return result;
 
+        const normalizeJsonLiterals = str => str
+            .replace(/\bNone\b/g, 'null')
+            .replace(/\bTrue\b/g, 'true')
+            .replace(/\bFalse\b/g, 'false');
+
+        const quotedKeys = repaired.replace(/([{,]\s*)([A-Za-z_][A-Za-z0-9_-]*)(\s*:)/g, '$1"$2"$3');
+        ({ result, error } = tryParse(quotedKeys));
+        if (result) return result;
+
+        const singleQuoteFixed = quotedKeys.replace(/'([^'\\]*(?:\\.[^'\\]*)*)'/g, (m, inner) => {
+            const escaped = inner
+                .replace(/\\"/g, '"')
+                .replace(/"/g, '\\"');
+            return `"${escaped}"`;
+        });
+        ({ result, error } = tryParse(singleQuoteFixed));
+        if (result) return result;
+
+        const trailingCommaFixed = singleQuoteFixed.replace(/,\s*([}\]])/g, '$1');
+        ({ result, error } = tryParse(trailingCommaFixed));
+        if (result) return result;
+
+        const literalFixed = normalizeJsonLiterals(trailingCommaFixed);
+        ({ result, error } = tryParse(literalFixed));
+        if (result) return result;
+
         console.error('Failed to parse AI response:', error);
         return null;
     }
