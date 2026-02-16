@@ -10,6 +10,8 @@
  * @typedef {Object} IntegrationModule
  * @property {string} id
  * @property {(services: IntegrationServices) => (void|Promise<void>)} [init]
+ * @property {string[]} [allowedHosts] Optional list of hostnames this module may access directly. During registration, these values are merged into
+ *   `window.IntegrationsManager.runtime.integrationHosts` (see `js/integrations/modules/registry.js`) after trimming and lowercasing each entry.
  * @property {Object.<string, (ctx: IntegrationActionContext, params?: any) => any>} actions
  */
 
