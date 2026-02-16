@@ -142,14 +142,17 @@ Linux).
    Open `.env` and set any values you need. Common options include:
    - `PORT` — server port (defaults to 3000)
    - `PROXY_ALLOWLIST` — comma-separated hosts for `/api/proxy`
+   - `INTEGRATION_ALLOWLIST` — comma-separated hosts for backend integration adapters (for example `api.openai.com`)
    - `CORS_ORIGINS` — comma-separated allowed origins. Default port should probably match the server port above
    - `SERPAPI_API_KEY` — key for the SerpApi integration
    - `NEO4J_URL`, `NEO4J_USER`, `NEO4J_PASSWORD` — Neo4j credentials
-4. Review the default proxy allowlist at `config/proxy-allowlist.json`. If you
-   need to contact additional domains through the `/api/proxy` endpoint, add
-   them to the `allowlist` array. You can also override the list at runtime by
-   setting the `PROXY_ALLOWLIST` environment variable to a comma-separated list
-   of hostnames.
+4. Review the default allowlists:
+   - `config/proxy-allowlist.json` for `/api/proxy` host access
+   - `config/integration-allowlist.json` for backend integration adapters (such as OpenAI and VirusTotal)
+
+   Add required domains to the corresponding `allowlist` array. You can also
+   override these at runtime via comma-separated `PROXY_ALLOWLIST` and
+   `INTEGRATION_ALLOWLIST` environment variables.
 5. Start the server:
    ```bash
    npm start
