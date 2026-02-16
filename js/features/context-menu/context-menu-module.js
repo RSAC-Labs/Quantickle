@@ -3014,16 +3014,79 @@ class ContextMenuModule {
         }
 
         const baseId = baseNode.id();
-        if (parsed.summary) {
-            let summaryText;
-            if (typeof parsed.summary === 'object') {
-                summaryText = [parsed.summary.title, parsed.summary.body].filter(Boolean).join('\n');
-            } else {
-                summaryText = parsed.summary;
+        const calloutUtils = window.QuantickleUtils || {};
+
+        const addSummaryCalloutNode = async (summary, structuredSummary) => {
+            if (!summary && !structuredSummary) return null;
+
+            const summaryText = typeof summary === 'string'
+                ? summary
+                : [structuredSummary?.title, structuredSummary?.body].filter(Boolean).join('\n');
+            if (!summaryText) return null;
+
+            const summaryId = `osint_summary_${baseId}`;
+            const summaryLabel = structuredSummary?.title || 'Summary';
+            const calloutPayload = typeof calloutUtils.normalizeCalloutPayload === 'function'
+                ? calloutUtils.normalizeCalloutPayload({
+                    title: structuredSummary?.title || summaryLabel,
+                    body: structuredSummary?.body || summaryText,
+                    format: 'text'
+                }, { defaultFormat: 'text' })
+                : {
+                    title: structuredSummary?.title || summaryLabel,
+                    body: structuredSummary?.body || summaryText,
+                    format: 'text'
+                };
+
+            const nodeData = {
+                id: summaryId,
+                type: 'text',
+                label: calloutPayload.title || summaryLabel,
+                info: summaryText,
+                callout: { ...calloutPayload },
+                calloutTitle: calloutPayload.title,
+                calloutBody: calloutPayload.body,
+                calloutFormat: calloutPayload.format,
+                calloutBodyFormat: calloutPayload.format,
+                domain: 'cybersecurity'
+            };
+
+            if (window.IntegrationsManager && typeof window.IntegrationsManager.getOrCreateNode === 'function') {
+                const { id: nodeId, created } = await window.IntegrationsManager.getOrCreateNode(cy, summaryId, nodeData);
+                const existingNode = cy.getElementById(nodeId);
+                if (!existingNode || existingNode.length === 0) {
+                    cy.add({ group: 'nodes', data: { ...nodeData, id: nodeId } });
+                }
+                const cyNode = cy.getElementById(nodeId);
+                if (cyNode && cyNode.length) {
+                    cyNode.data(nodeData);
+                }
+                if (created || !existingNode || existingNode.length === 0) {
+                    addedNodeIds.push(nodeId);
+                }
+                addEdge(baseId, nodeId, 'summary');
+                return nodeId;
             }
-            const existingInfo = baseNode.data('info');
-            baseNode.data('info', existingInfo ? `${existingInfo}<p>${summaryText}</p>` : summaryText);
-        }
+
+            if (window.GraphManager && typeof window.GraphManager.addNode === 'function') {
+                window.GraphManager.addNode(nodeData);
+                addedNodeIds.push(summaryId);
+                addEdge(baseId, summaryId, 'summary');
+                return summaryId;
+            }
+
+            const existingNode = cy.getElementById(summaryId);
+            if (!existingNode || existingNode.length === 0) {
+                cy.add({ group: 'nodes', data: nodeData });
+                addedNodeIds.push(summaryId);
+            }
+            const cyNode = cy.getElementById(summaryId);
+            if (cyNode && cyNode.length) {
+                cyNode.data(nodeData);
+            }
+            addEdge(baseId, summaryId, 'summary');
+            return summaryId;
+        };
 
         const addedNodeIds = [];
         const addNode = async (id, type, label) => {
@@ -3063,6 +3126,14 @@ class ContextMenuModule {
                 cy.add({ group: 'edges', data: { id: `${source}-${target}`, source, target, label: rel, type: rel } });
             }
         };
+
+        if (parsed.summary) {
+            const structuredSummary = typeof parsed.summary === 'object' ? parsed.summary : null;
+            const summaryText = structuredSummary
+                ? [structuredSummary.title, structuredSummary.body].filter(Boolean).join('\n')
+                : parsed.summary;
+            await addSummaryCalloutNode(summaryText, structuredSummary);
+        }
 
         for (const name of parsed.companies || []) {
             const id = await addNode(name, 'company', name);
