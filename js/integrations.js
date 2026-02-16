@@ -928,8 +928,12 @@ window.IntegrationsManager = {
         this.runtime.opmlHostFetchTimestamps[hostname] = Date.now();
     },
 
-    runOpmlDailyCheck: async function(options = {}) {
+    runOpmlCheck: async function(options = {}) {
         return this.runAction('opml', 'runScan', { source: 'manager' }, options);
+    },
+
+    runOpmlDailyCheck: async function(options = {}) {
+        return this.runOpmlCheck(options);
     },
 
     processOpmlFeed: async function(feed, statusId = 'opmlStatus') {
