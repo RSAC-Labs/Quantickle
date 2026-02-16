@@ -11,6 +11,37 @@ const normalizeContent = text =>
 const QUALIFYING_IOC_KEYS = ['md5_hashes', 'sha1_hashes', 'sha256_hashes', 'ip_addresses'];
 const DOMAIN_PATTERN = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i;
 
+const MAX_OPENAI_CONTEXT_CHARS = 24000;
+const MAX_OPENAI_DOC_CHARS = 3000;
+const MAX_OPENAI_DOCS = 10;
+
+const looksBinaryLike = text => {
+  const raw = String(text || '');
+  if (!raw) return false;
+  const sample = raw.slice(0, 5000);
+  const nulBytes = (sample.match(/\u0000/g) || []).length;
+  if (nulBytes > 0) return true;
+
+  const controlChars = (sample.match(/[\x00-\x08\x0E-\x1F\x7F]/g) || []).length;
+  const suspiciousReplacement = (sample.match(/�/g) || []).length;
+  const total = sample.length || 1;
+  const controlRatio = controlChars / total;
+  const replacementRatio = suspiciousReplacement / total;
+
+  return controlRatio > 0.1 || replacementRatio > 0.05;
+};
+
+const truncateForPrompt = (text, maxChars = MAX_OPENAI_DOC_CHARS) => {
+  const normalized = normalizeContent(text);
+  if (normalized.length <= maxChars) {
+    return { text: normalized, truncated: false };
+  }
+  return {
+    text: normalized.slice(0, maxChars).trimEnd() + ' …[truncated]',
+    truncated: true
+  };
+};
+
 export const selectQualifyingIocs = iocs => {
   if (!iocs || typeof iocs !== 'object') {
     return {};
@@ -273,13 +304,66 @@ export class RAGPipeline {
       console.error('[RAGPipeline] No document content to build prompt');
       return null;
     }
-    const snippets = valid.map(doc => {
+
+    const snippets = [];
+    let contextChars = 0;
+    let truncatedCount = 0;
+    let skippedBinaryCount = 0;
+
+    for (const doc of valid) {
+      if (snippets.length >= MAX_OPENAI_DOCS || contextChars >= MAX_OPENAI_CONTEXT_CHARS) {
+        break;
+      }
+
+      if (looksBinaryLike(doc.content)) {
+        skippedBinaryCount += 1;
+        continue;
+      }
+
       const meta = doc.metadata || {};
       const title = meta.title ? `${meta.title} ` : '';
       const url = meta.url ? `(${meta.url}) ` : '';
-      const body = doc.content.trim().replace(/\n/g, ' ');
-      return `- ${title}${url}${body}`;
-    });
+      const { text: body, truncated } = truncateForPrompt(doc.content, MAX_OPENAI_DOC_CHARS);
+      if (!body) {
+        continue;
+      }
+
+      if (truncated) {
+        truncatedCount += 1;
+      }
+
+      const snippet = `- ${title}${url}${body}`;
+      const remaining = MAX_OPENAI_CONTEXT_CHARS - contextChars;
+      if (remaining <= 0) {
+        break;
+      }
+
+      if (snippet.length > remaining) {
+        const trimmed = snippet.slice(0, Math.max(0, remaining - 14)).trimEnd();
+        if (trimmed) {
+          snippets.push(`${trimmed} …[truncated]`);
+          contextChars = MAX_OPENAI_CONTEXT_CHARS;
+          truncatedCount += 1;
+        }
+        break;
+      }
+
+      snippets.push(snippet);
+      contextChars += snippet.length + 1;
+    }
+
+    if (skippedBinaryCount > 0) {
+      console.error(`[RAGPipeline] Skipped ${skippedBinaryCount} binary-like document(s) while building prompt`);
+    }
+    if (truncatedCount > 0) {
+      console.error(`[RAGPipeline] Truncated ${truncatedCount} document snippet(s) for OpenAI context limits`);
+    }
+
+    if (snippets.length === 0) {
+      console.error('[RAGPipeline] No usable textual content to build prompt after filtering/truncation');
+      return null;
+    }
+
     const context = snippets.join('\n');
     let template;
     let placeholder;

@@ -3014,16 +3014,151 @@ class ContextMenuModule {
         }
 
         const baseId = baseNode.id();
-        if (parsed.summary) {
-            let summaryText;
-            if (typeof parsed.summary === 'object') {
-                summaryText = [parsed.summary.title, parsed.summary.body].filter(Boolean).join('\n');
-            } else {
-                summaryText = parsed.summary;
+        const calloutUtils = window.QuantickleUtils || {};
+
+        const coerceText = value => {
+            if (typeof value === 'string') return value.trim();
+            if (Array.isArray(value)) {
+                return value
+                    .map(entry => (entry == null ? '' : String(entry).trim()))
+                    .filter(Boolean)
+                    .join('\n')
+                    .trim();
             }
-            const existingInfo = baseNode.data('info');
-            baseNode.data('info', existingInfo ? `${existingInfo}<p>${summaryText}</p>` : summaryText);
-        }
+            if (value == null) return '';
+            return String(value).trim();
+        };
+
+        const splitSummaryFields = (summary, structuredSummary) => {
+            const structured = structuredSummary && typeof structuredSummary === 'object' ? structuredSummary : null;
+            const structuredTitle = coerceText(structured?.title || structured?.heading || structured?.name);
+            const structuredBodyCandidates = structured
+                ? [
+                    structured.body,
+                    structured.text,
+                    structured.description,
+                    structured.content,
+                    structured.summary,
+                    structured.details,
+                    structured.value
+                ]
+                : [];
+            const structuredBody = structuredBodyCandidates
+                .map(coerceText)
+                .find(Boolean) || '';
+
+            if (structuredTitle || structuredBody) {
+                return {
+                    title: structuredTitle,
+                    body: structuredBody
+                };
+            }
+
+            const rawText = coerceText(summary);
+            if (!rawText) {
+                return { title: '', body: '' };
+            }
+
+            const [titleLine, ...bodyLines] = rawText.split(/\r?\n/);
+            const parsedTitle = coerceText(titleLine);
+            const parsedBody = coerceText(bodyLines.join('\n'));
+            return {
+                title: parsedTitle,
+                body: parsedBody || (parsedTitle === rawText ? '' : rawText)
+            };
+        };
+
+        const addSummaryCalloutNode = async (summary, structuredSummary) => {
+            if (!summary && !structuredSummary) return null;
+
+            const { title: summaryTitle, body: summaryBody } = splitSummaryFields(summary, structuredSummary);
+            const summaryText = coerceText(summary) || [summaryTitle, summaryBody].filter(Boolean).join('\n');
+            if (!summaryText && !summaryBody) return null;
+
+            const summaryId = `osint_summary_${baseId}`;
+            const summaryLabel = summaryTitle || 'Summary';
+            const calloutPayload = typeof calloutUtils.normalizeCalloutPayload === 'function'
+                ? calloutUtils.normalizeCalloutPayload({
+                    title: summaryTitle || summaryLabel,
+                    body: summaryBody || summaryText,
+                    format: 'text'
+                }, { defaultFormat: 'text' })
+                : {
+                    title: summaryTitle || summaryLabel,
+                    body: summaryBody || summaryText,
+                    format: 'text'
+                };
+
+            const nodeData = {
+                id: summaryId,
+                type: 'text',
+                label: calloutPayload.title || summaryLabel,
+                info: calloutPayload.body || summaryText,
+                domain: 'cybersecurity'
+            };
+            if (typeof calloutUtils.syncCalloutLegacyFields === 'function') {
+                calloutUtils.syncCalloutLegacyFields(nodeData, calloutPayload, {
+                    defaultFormat: 'text',
+                    syncTitle: true,
+                    overwriteInfo: true,
+                    includeDerivedFields: true
+                });
+            } else {
+                nodeData.callout = { ...calloutPayload };
+                nodeData.calloutTitle = calloutPayload.title;
+                nodeData.calloutBody = calloutPayload.body;
+                nodeData.calloutFormat = calloutPayload.format;
+                nodeData.calloutBodyFormat = calloutPayload.format;
+            }
+
+            if (window.IntegrationsManager && typeof window.IntegrationsManager.getOrCreateNode === 'function') {
+                const { id: nodeId, created } = await window.IntegrationsManager.getOrCreateNode(cy, summaryId, nodeData);
+                const existingNode = cy.getElementById(nodeId);
+                if (!existingNode || existingNode.length === 0) {
+                    cy.add({ group: 'nodes', data: { ...nodeData, id: nodeId } });
+                }
+                const cyNode = cy.getElementById(nodeId);
+                if (cyNode && cyNode.length) {
+                    cyNode.data(nodeData);
+                    cyNode.data('callout', { ...calloutPayload });
+                    cyNode.data('calloutTitle', calloutPayload.title);
+                    cyNode.data('calloutBody', calloutPayload.body);
+                    cyNode.data('calloutFormat', calloutPayload.format);
+                    cyNode.data('calloutBodyFormat', calloutPayload.format);
+                    cyNode.data('info', calloutPayload.body || summaryText);
+                }
+                if (created || !existingNode || existingNode.length === 0) {
+                    addedNodeIds.push(nodeId);
+                }
+                addEdge(baseId, nodeId, 'summary');
+                return nodeId;
+            }
+
+            if (window.GraphManager && typeof window.GraphManager.addNode === 'function') {
+                window.GraphManager.addNode(nodeData);
+                addedNodeIds.push(summaryId);
+                addEdge(baseId, summaryId, 'summary');
+                return summaryId;
+            }
+
+            const existingNode = cy.getElementById(summaryId);
+            if (!existingNode || existingNode.length === 0) {
+                cy.add({ group: 'nodes', data: nodeData });
+                addedNodeIds.push(summaryId);
+            }
+            const cyNode = cy.getElementById(summaryId);
+            if (cyNode && cyNode.length) {
+                cyNode.data(nodeData);
+                cyNode.data('callout', { ...calloutPayload });
+                cyNode.data('calloutTitle', calloutPayload.title);
+                cyNode.data('calloutBody', calloutPayload.body);
+                cyNode.data('calloutFormat', calloutPayload.format);
+                cyNode.data('calloutBodyFormat', calloutPayload.format);
+                cyNode.data('info', calloutPayload.body || summaryText);
+            }
+            addEdge(baseId, summaryId, 'summary');
+            return summaryId;
+        };
 
         const addedNodeIds = [];
         const addNode = async (id, type, label) => {
@@ -3063,6 +3198,15 @@ class ContextMenuModule {
                 cy.add({ group: 'edges', data: { id: `${source}-${target}`, source, target, label: rel, type: rel } });
             }
         };
+
+        if (parsed.summary || parsed.summaryStructured) {
+            const structuredSummary = parsed.summaryStructured
+                || (typeof parsed.summary === 'object' ? parsed.summary : null);
+            const summaryText = typeof parsed.summary === 'string'
+                ? parsed.summary
+                : [structuredSummary?.title, structuredSummary?.body].filter(Boolean).join('\n');
+            await addSummaryCalloutNode(summaryText, structuredSummary);
+        }
 
         for (const name of parsed.companies || []) {
             const id = await addNode(name, 'company', name);
