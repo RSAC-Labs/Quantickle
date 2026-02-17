@@ -261,6 +261,9 @@
             if (!edgeData || !edgeData.source || !edgeData.target) {
                 return false;
             }
+            if (edgeData.source === edgeData.target) {
+                return false;
+            }
             const edgeCache = options.edgeCache instanceof Set ? options.edgeCache : null;
             const edgeKey = `${edgeData.source}::${edgeData.target}`;
             if (edgeCache) {
