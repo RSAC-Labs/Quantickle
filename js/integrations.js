@@ -2854,6 +2854,9 @@ window.IntegrationsManager = {
             if (!info || !info.id) {
                 return;
             }
+            if (reportNodeId === info.id) {
+                return;
+            }
             const sanitizedValue = (info.value || '')
                 .toString()
                 .replace(/[^a-zA-Z0-9]+/g, '_')
@@ -2877,6 +2880,9 @@ window.IntegrationsManager = {
             const isIncoming = direction === 'incoming';
             const sourceId = isIncoming ? targetInfo.id : sourceInfo.id;
             const targetId = isIncoming ? sourceInfo.id : targetInfo.id;
+            if (sourceId === targetId) {
+                return;
+            }
             const label = relationship.label || 'related-to';
             const type = relationship.type || 'misp-relationship';
 
