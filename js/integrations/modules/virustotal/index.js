@@ -913,8 +913,16 @@
 
                         const infoHtml = infoData.infoHtml || formatInfoHTML(infoFields);
                         const infoText = infoData.info || formatInfoText(infoFields);
-                        node.data('info', infoText);
-                        node.data('infoHtml', infoHtml);
+                        const existingInfo = node.data('info');
+                        const existingInfoHtml = node.data('infoHtml');
+
+                        if (!existingInfo) {
+                            node.data('info', infoText);
+                        }
+
+                        if (!existingInfoHtml) {
+                            node.data('infoHtml', infoHtml);
+                        }
                         results.updated++;
                     }
                 } catch (error) {
