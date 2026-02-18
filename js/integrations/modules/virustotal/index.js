@@ -154,6 +154,34 @@
             return lines.join('\n');
         };
 
+        const hasNodeInfoContent = value => {
+            if (value === undefined || value === null) {
+                return false;
+            }
+            if (typeof value === 'string') {
+                return value.trim() !== '';
+            }
+            return true;
+        };
+
+        const setNodeInfoFields = (node, infoText, infoHtml, options = {}) => {
+            if (!node || node.length === 0) {
+                return;
+            }
+
+            const { overwrite = false } = options;
+            const existingInfo = node.data('info');
+            const existingInfoHtml = node.data('infoHtml');
+
+            if (overwrite || !hasNodeInfoContent(existingInfo)) {
+                node.data('info', infoText);
+            }
+
+            if (overwrite || !hasNodeInfoContent(existingInfoHtml)) {
+                node.data('infoHtml', infoHtml);
+            }
+        };
+
         const getOrCreateNode = async (cy, id, data = {}, options = {}) => {
             if (!id) {
                 return { id: null, created: false };
@@ -1215,8 +1243,7 @@
                     };
 
                     const { id: relatedNodeId, created } = await getOrCreateNode(cy, relatedNodeData.id, relatedNodeData, bulkOptions);
-                    cy.getElementById(relatedNodeId).data('info', infoText);
-                    cy.getElementById(relatedNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(relatedNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         newNodeIds.push(relatedNodeId);
@@ -1266,8 +1293,7 @@
                     };
 
                     const { id: droppedNodeId, created } = await getOrCreateNode(cy, droppedNodeData.id, droppedNodeData, bulkOptions);
-                    cy.getElementById(droppedNodeId).data('info', infoText);
-                    cy.getElementById(droppedNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(droppedNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         newNodeIds.push(droppedNodeId);
@@ -1317,8 +1343,7 @@
                     };
 
                     const { id: parentNodeId, created } = await getOrCreateNode(cy, parentNodeData.id, parentNodeData, bulkOptions);
-                    cy.getElementById(parentNodeId).data('info', infoText);
-                    cy.getElementById(parentNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(parentNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         newNodeIds.push(parentNodeId);
@@ -1361,8 +1386,7 @@
                     };
 
                     const { id: domainNodeId, created } = await getOrCreateNode(cy, domainNodeData.id, domainNodeData, bulkOptions);
-                    cy.getElementById(domainNodeId).data('info', infoText);
-                    cy.getElementById(domainNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(domainNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         newNodeIds.push(domainNodeId);
@@ -1413,8 +1437,7 @@
                     };
 
                     const { id: ipNodeId, created } = await getOrCreateNode(cy, ipNodeData.id, ipNodeData, bulkOptions);
-                    cy.getElementById(ipNodeId).data('info', infoText);
-                    cy.getElementById(ipNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(ipNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         newNodeIds.push(ipNodeId);
@@ -1457,8 +1480,7 @@
                     };
 
                     const { id: urlNodeId, created } = await getOrCreateNode(cy, urlNodeData.id, urlNodeData, bulkOptions);
-                    cy.getElementById(urlNodeId).data('info', infoText);
-                    cy.getElementById(urlNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(urlNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         newNodeIds.push(urlNodeId);
@@ -1498,8 +1520,7 @@
                     };
 
                     const { id: submitterNodeId, created } = await getOrCreateNode(cy, submitterNodeData.id, submitterNodeData, bulkOptions);
-                    cy.getElementById(submitterNodeId).data('info', infoText);
-                    cy.getElementById(submitterNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(submitterNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         newNodeIds.push(submitterNodeId);
@@ -1549,8 +1570,7 @@
                     };
 
                     const { id: relatedNodeId, created } = await getOrCreateNode(cy, relatedNodeData.id, relatedNodeData, bulkOptions);
-                    cy.getElementById(relatedNodeId).data('info', infoText);
-                    cy.getElementById(relatedNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(relatedNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         newNodeIds.push(relatedNodeId);
@@ -1714,8 +1734,7 @@
                 };
 
                 const { id: ipNodeId, created } = await getOrCreateNode(cy, ipNodeData.id, ipNodeData, bulkOptions);
-                cy.getElementById(ipNodeId).data('info', infoText);
-                cy.getElementById(ipNodeId).data('infoHtml', infoHtml);
+                setNodeInfoFields(cy.getElementById(ipNodeId), infoText, infoHtml);
                 if (created) {
                     nodesAdded++;
                     createdNodes.push(ipNodeId);
@@ -1754,8 +1773,7 @@
                     };
 
                     const { id: subNodeId, created } = await getOrCreateNode(cy, subNodeData.id, subNodeData, bulkOptions);
-                    cy.getElementById(subNodeId).data('info', infoText);
-                    cy.getElementById(subNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(subNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         createdNodes.push(subNodeId);
@@ -1795,8 +1813,7 @@
                     };
 
                     const { id: siblingNodeId, created } = await getOrCreateNode(cy, siblingNodeData.id, siblingNodeData, bulkOptions);
-                    cy.getElementById(siblingNodeId).data('info', infoText);
-                    cy.getElementById(siblingNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(siblingNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         createdNodes.push(siblingNodeId);
@@ -1860,8 +1877,7 @@
                     };
 
                     const { id: createdFileNodeId, created } = await getOrCreateNode(cy, fileNodeData.id, fileNodeData, bulkOptions);
-                    cy.getElementById(createdFileNodeId).data('info', infoText);
-                    cy.getElementById(createdFileNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(createdFileNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         createdNodes.push(createdFileNodeId);
@@ -1906,8 +1922,7 @@
                     };
 
                     const { id: urlNodeId, created } = await getOrCreateNode(cy, urlNodeData.id, urlNodeData, bulkOptions);
-                    cy.getElementById(urlNodeId).data('info', infoText);
-                    cy.getElementById(urlNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(urlNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         createdNodes.push(urlNodeId);
@@ -2056,8 +2071,7 @@
                     };
 
                     const { id: domainNodeId, created } = await getOrCreateNode(cy, domainNodeData.id, domainNodeData, bulkOptions);
-                    cy.getElementById(domainNodeId).data('info', infoText);
-                    cy.getElementById(domainNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(domainNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         newNodeIds.push(domainNodeId);
@@ -2121,8 +2135,7 @@
                     };
 
                     const { id: createdFileNodeId, created } = await getOrCreateNode(cy, fileNodeData.id, fileNodeData, bulkOptions);
-                    cy.getElementById(createdFileNodeId).data('info', infoText);
-                    cy.getElementById(createdFileNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(createdFileNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         newNodeIds.push(createdFileNodeId);
@@ -2167,8 +2180,7 @@
                     };
 
                     const { id: urlNodeId, created } = await getOrCreateNode(cy, urlNodeData.id, urlNodeData, bulkOptions);
-                    cy.getElementById(urlNodeId).data('info', infoText);
-                    cy.getElementById(urlNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(urlNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         newNodeIds.push(urlNodeId);
@@ -2251,8 +2263,7 @@
             };
 
             const { id: urlNodeId, created: urlCreated } = await getOrCreateNode(cy, urlNodeData.id, urlNodeData, bulkOptions);
-            cy.getElementById(urlNodeId).data('info', urlInfoText);
-            cy.getElementById(urlNodeId).data('infoHtml', urlInfoHtml);
+            setNodeInfoFields(cy.getElementById(urlNodeId), urlInfoText, urlInfoHtml, { overwrite: true });
             if (urlCreated) {
                 nodesAdded++;
             }
@@ -2280,8 +2291,7 @@
                         };
 
                         const { id: domainNodeId, created } = await getOrCreateNode(cy, domainNodeData.id, domainNodeData, bulkOptions);
-                        cy.getElementById(domainNodeId).data('info', infoText);
-                        cy.getElementById(domainNodeId).data('infoHtml', infoHtml);
+                        setNodeInfoFields(cy.getElementById(domainNodeId), infoText, infoHtml);
                         if (created) {
                             nodesAdded++;
                         }
