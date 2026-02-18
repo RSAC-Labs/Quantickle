@@ -1007,7 +1007,6 @@
                         if (error.status === 403) {
                             relationshipTracker.recordForbidden(key, endpoint);
                         }
-                        console.warn('VirusTotal relationship request failed:', endpoint, error);
                         relationships[key] = [];
                     }
                 }
@@ -1056,7 +1055,6 @@
                         if (error.status === 403) {
                             relationshipTracker.recordForbidden(key, endpoint);
                         }
-                        console.warn('VirusTotal relationship request failed:', endpoint, error);
                         relationships[key] = [];
                     }
                 }
@@ -1100,7 +1098,6 @@
                         if (error.status === 403) {
                             relationshipTracker.recordForbidden(key, endpoint);
                         }
-                        console.warn('VirusTotal relationship request failed:', endpoint, error);
                         relationships[key] = [];
                     }
                 }
