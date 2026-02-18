@@ -559,7 +559,7 @@ window.DomainLoader = {
             return null;
         }
 
-        if (trimmed.startsWith('data:')) {
+        if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
             return trimmed;
         }
 
@@ -623,11 +623,11 @@ window.DomainLoader = {
             return cached;
         }
 
-        if (normalized.startsWith('data:')) {
+        if (normalized.startsWith('data:') || normalized.startsWith('blob:')) {
             return normalized;
         }
 
-        if (source.startsWith('data:')) {
+        if (source.startsWith('data:') || source.startsWith('blob:')) {
             if (mapped && this.iconUrlCache) {
                 this.iconUrlCache.set(normalized, source);
             }
@@ -672,7 +672,7 @@ window.DomainLoader = {
             return cached;
         }
 
-        if (source.startsWith('data:')) {
+        if (source.startsWith('data:') || source.startsWith('blob:')) {
             if (mapped && this.iconUrlCache) {
                 this.iconUrlCache.set(normalized, source);
             }
@@ -760,10 +760,23 @@ window.DomainLoader = {
     // always available without additional network requests.
     validateIconConfigs: async function(iconConfigs) {
         const entries = Object.entries(iconConfigs);
+        const originalValues = entries.map(([_, url]) => url);
         const promises = entries.map(([_, url]) => this.resolveIcon(url));
         const results = await Promise.all(promises);
+
         entries.forEach(([key], idx) => {
-            iconConfigs[key] = results[idx];
+            const resolved = results[idx];
+            const original = originalValues[idx];
+
+            // Blob/object URLs are session-scoped and become invalid across reloads.
+            // Keep durable disk/URL references in IconConfigs so saved node types
+            // continue to resolve icons after startup.
+            if (typeof resolved === 'string' && resolved.startsWith('blob:') && typeof original === 'string' && original.trim()) {
+                iconConfigs[key] = original;
+                return;
+            }
+
+            iconConfigs[key] = resolved;
         });
     },
 
@@ -809,6 +822,11 @@ window.DomainLoader = {
 
             if (typeof type.iconSource !== 'string' || type.iconSource.trim() === '') {
                 type.iconSource = iconValues[idx];
+            }
+
+            if (typeof icon === 'string' && icon.startsWith('blob:') && typeof iconValues[idx] === 'string' && iconValues[idx].trim()) {
+                type.icon = iconValues[idx];
+                return;
             }
 
             type.icon = icon;
