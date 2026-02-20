@@ -1,6 +1,7 @@
 {
 "allowlist": [
 	"*.circl.lu",
+	"securelist.com",
 	"*.securelist.com",
 	"*.talosintelligence.com",
 	"*.paloaltonetworks.com",
