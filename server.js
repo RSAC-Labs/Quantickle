@@ -378,16 +378,137 @@ app.use(express.static(PUBLIC_DIR));
 app.use('/assets', express.static(ASSETS_DIR));
 app.use('/config', express.static(CONFIG_DIR));
 
+function getConfiguredNeo4jUrl() {
+    return process.env.NEO4J_URL || 'http://localhost:7474';
+}
+
+function getConfiguredMispFeedUrl() {
+    const envValue = typeof process.env.MISP_CIRCL === 'string' ? process.env.MISP_CIRCL.trim() : '';
+    return envValue || DEFAULT_MISP_FEED_URL;
+}
+
 app.get('/api/neo4j/config', (req, res) => {
     res.json({
-        url: process.env.NEO4J_URL || 'http://localhost:7474'
+        url: getConfiguredNeo4jUrl()
     });
 });
 
 app.get('/api/integrations/misp/config', (req, res) => {
-    const envValue = typeof process.env.MISP_CIRCL === 'string' ? process.env.MISP_CIRCL.trim() : '';
     res.json({
-        feedUrl: envValue || DEFAULT_MISP_FEED_URL
+        feedUrl: getConfiguredMispFeedUrl()
+    });
+});
+
+function buildProxyRequestHeaders(req, { forceJsonContentType = false } = {}) {
+    const headers = { ...req.headers };
+    delete headers.host;
+    delete headers.connection;
+    delete headers['content-length'];
+
+    const forwardedAuthorization = req.headers['x-proxy-authorization'] || req.headers['authorization'];
+    if (forwardedAuthorization) {
+        headers.authorization = forwardedAuthorization;
+    }
+
+    delete headers['x-proxy-authorization'];
+    delete headers['x-neo4j-url'];
+    delete headers['x-neo4j-username'];
+    delete headers['x-neo4j-password'];
+
+    if (forceJsonContentType) {
+        headers['content-type'] = 'application/json';
+    }
+
+    return headers;
+}
+
+async function proxyPassthrough(
+    req,
+    res,
+    targetUrl,
+    { forceJsonContentType = false, allowedHosts = [] } = {}
+) {
+    const normalizedTargetHost = String(targetUrl.hostname || '').toLowerCase();
+    const explicitAllowlist = Array.isArray(allowedHosts)
+        ? allowedHosts.map(host => String(host || '').toLowerCase()).filter(Boolean)
+        : [];
+    const isExplicitlyAllowed = explicitAllowlist.includes(normalizedTargetHost);
+
+    if (!isAllowedHost(normalizedTargetHost) && !isExplicitlyAllowed) {
+        return res.status(403).json({ error: 'Host not allowed' });
+    }
+
+    const method = req.method.toUpperCase();
+    const hasBody = !['GET', 'HEAD'].includes(method);
+    const contentType = req.headers['content-type'] || '';
+    const fetchOptions = {
+        method,
+        headers: buildProxyRequestHeaders(req, { forceJsonContentType })
+    };
+
+    if (hasBody && req.body !== undefined) {
+        if (Buffer.isBuffer(req.body)) {
+            fetchOptions.body = req.body;
+        } else if (typeof req.body === 'string') {
+            fetchOptions.body = req.body;
+        } else if (contentType.includes('application/json') || forceJsonContentType) {
+            fetchOptions.body = JSON.stringify(req.body);
+        }
+    }
+
+    try {
+        const upstreamResponse = await fetch(targetUrl.toString(), fetchOptions);
+        const bodyBuffer = Buffer.from(await upstreamResponse.arrayBuffer());
+
+        res.status(upstreamResponse.status);
+        const upstreamContentType = upstreamResponse.headers.get('content-type');
+        if (upstreamContentType) {
+            res.set('Content-Type', upstreamContentType);
+        }
+
+        return res.send(bodyBuffer);
+    } catch (err) {
+        console.error('Passthrough proxy request failed', err);
+        return res.status(500).json({ error: 'Proxy request failed' });
+    }
+}
+
+app.all('/api/integrations/misp/*', async (req, res) => {
+    const mispBaseUrl = getConfiguredMispFeedUrl();
+    let baseUrl;
+    try {
+        baseUrl = new URL(mispBaseUrl);
+    } catch (_) {
+        return res.status(500).json({ error: 'Invalid MISP feed URL configuration' });
+    }
+
+    const wildcardPath = req.params[0] || '';
+    const querySuffix = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    const targetUrl = new URL(`./${wildcardPath}${querySuffix}`, baseUrl);
+
+    return proxyPassthrough(req, res, targetUrl);
+});
+
+app.all('/api/neo4j/db/*', async (req, res) => {
+    const neo4jBaseUrl = (typeof req.headers['x-neo4j-url'] === 'string' && req.headers['x-neo4j-url'].trim())
+        || getConfiguredNeo4jUrl();
+    let baseUrl;
+    let configuredBaseUrl;
+    try {
+        baseUrl = new URL(neo4jBaseUrl);
+        configuredBaseUrl = new URL(getConfiguredNeo4jUrl());
+    } catch (_) {
+        return res.status(400).json({ error: 'Invalid Neo4j URL' });
+    }
+
+    const wildcardPath = req.params[0] || '';
+    const querySuffix = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    const targetUrl = new URL(`./db/${wildcardPath}${querySuffix}`, baseUrl);
+    const allowedNeo4jHosts = [baseUrl.hostname, configuredBaseUrl?.hostname].filter(Boolean);
+
+    return proxyPassthrough(req, res, targetUrl, {
+        forceJsonContentType: true,
+        allowedHosts: allowedNeo4jHosts
     });
 });
 
@@ -439,6 +560,22 @@ app.get('/api/examples', async (req, res) => {
         console.error('Failed to list example graphs', err);
         res.status(500).json({ error: 'Failed to list example graphs' });
     }
+});
+
+app.get('/api/openai/models', async (req, res) => {
+    const authorizationHeader = req.headers['x-proxy-authorization'] || req.headers['authorization'];
+    if (!authorizationHeader) {
+        return res.status(400).json({ error: 'Missing Authorization header' });
+    }
+
+    let targetUrl;
+    try {
+        targetUrl = new URL('https://api.openai.com/v1/models');
+    } catch (_) {
+        return res.status(500).json({ error: 'Failed to build OpenAI URL' });
+    }
+
+    return proxyPassthrough(req, res, targetUrl);
 });
 
 // Proxy SerpApi requests to avoid browser CORS issues

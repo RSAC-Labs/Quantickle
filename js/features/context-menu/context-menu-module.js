@@ -107,6 +107,142 @@ const stripReportUrl = (text, url) => {
         .trim();
 };
 
+const splitSummaryFields = (summaryText, structured) => {
+    if (structured && typeof structured === 'object') {
+        const structuredTitle = typeof structured.title === 'string' ? structured.title.trim() : '';
+        const structuredBody = typeof structured.body === 'string' ? structured.body.trim() : '';
+        return {
+            title: structuredTitle,
+            body: structuredBody
+        };
+    }
+
+    const text = typeof summaryText === 'string' ? summaryText.trim() : '';
+    if (!text) {
+        return { title: '', body: '' };
+    }
+
+    const parts = text.split(/\n+/);
+    if (parts.length > 1) {
+        const possibleTitle = parts.shift().trim();
+        return { title: possibleTitle, body: parts.join('\n').trim() };
+    }
+    return { title: '', body: text };
+};
+
+const estimateSummaryDimensions = (summaryText) => {
+    const maxWidth = window.QuantickleConfig?.summaryNodeMaxWidth || 400;
+    const maxHeight = window.QuantickleConfig?.summaryNodeMaxHeight || 300;
+    const charWidth = 7;
+    const lineHeight = 20;
+    const padding = 20;
+    const normalizedText = typeof summaryText === 'string' ? summaryText : '';
+    const lines = normalizedText.split(/\r?\n/);
+    const longest = lines.reduce((m, l) => Math.max(m, l.length), 0);
+    const width = Math.min((longest * charWidth) + padding, maxWidth);
+    const charsPerLine = Math.max(Math.floor((width - padding) / charWidth), 1);
+    const totalLines = lines.reduce((s, l) => s + Math.ceil(l.length / charsPerLine), 0);
+    const height = Math.min((totalLines * lineHeight) + padding, maxHeight);
+    return { width, height };
+};
+
+const createOrUpdateSummaryNode = ({
+    cy,
+    nodeId,
+    summary,
+    summaryHtml,
+    structuredSummary,
+    nodeDataRef = null,
+    graphManagerNodeRef = null,
+    domain = 'cybersecurity'
+}) => {
+    if (!cy || !nodeId) return null;
+
+    const wrapSummaryHtml = window.wrapSummaryHtml || defaultWrapSummaryHtml;
+    const { title: summaryTitle, body: summaryBody } = splitSummaryFields(summary, structuredSummary);
+    const summaryText = (typeof summary === 'string' ? summary.trim() : '') || [summaryTitle, summaryBody].filter(Boolean).join('\n');
+    if (!summaryText && !summaryBody) return null;
+
+    const html = summaryHtml || wrapSummaryHtml({ title: summaryTitle, body: summaryBody || summaryText });
+    const calloutUtils = window.QuantickleUtils || {};
+    const calloutPayload = typeof calloutUtils.normalizeCalloutPayload === 'function'
+        ? calloutUtils.normalizeCalloutPayload({
+            title: summaryTitle,
+            body: summaryBody || summaryText,
+            format: 'text'
+        }, { defaultFormat: 'text' })
+        : {
+            title: summaryTitle || '',
+            body: summaryBody || summaryText,
+            format: 'text'
+        };
+
+    const { width, height } = estimateSummaryDimensions(summaryText);
+
+    const applyData = (target) => {
+        if (!target) return;
+        target.type = target.type || 'text';
+        target.domain = target.domain || domain;
+        target.label = calloutPayload.title || target.label || 'Summary';
+        target.info = summaryText;
+        target.infoHtml = html;
+        target.width = width;
+        target.height = height;
+        if (typeof calloutUtils.syncCalloutLegacyFields === 'function') {
+            calloutUtils.syncCalloutLegacyFields(target, calloutPayload, {
+                defaultFormat: 'text',
+                html,
+                syncTitle: true,
+                overwriteInfo: true,
+                includeDerivedFields: true
+            });
+        } else {
+            target.callout = { ...calloutPayload };
+            target.calloutTitle = calloutPayload.title;
+            target.calloutBody = calloutPayload.body;
+            target.calloutFormat = calloutPayload.format;
+            target.calloutBodyFormat = calloutPayload.format;
+        }
+    };
+
+    applyData(nodeDataRef);
+    applyData(graphManagerNodeRef);
+
+    const cyNode = cy.getElementById(nodeId);
+    if (cyNode && cyNode.length) {
+        const cyData = {
+            info: summaryText,
+            infoHtml: html,
+            width,
+            height,
+            label: (nodeDataRef && nodeDataRef.label) || calloutPayload.title || 'Summary',
+            callout: (nodeDataRef && nodeDataRef.callout) ? { ...nodeDataRef.callout } : { ...calloutPayload }
+        };
+        cyNode.data(cyData);
+        ['calloutTitle', 'calloutBody', 'calloutFormat', 'calloutBodyFormat'].forEach(key => {
+            if (nodeDataRef && Object.prototype.hasOwnProperty.call(nodeDataRef, key)) {
+                cyNode.data(key, nodeDataRef[key]);
+            }
+        });
+        cyNode.style({
+            width,
+            height,
+            'text-max-width': width,
+            'text-wrap': 'wrap'
+        });
+    }
+
+    return {
+        nodeId,
+        summaryText,
+        calloutPayload,
+        html,
+        width,
+        height
+    };
+};
+
+
 class ContextMenuModule {
     constructor(dependencies) {
         // Required dependencies injected via constructor
@@ -2110,6 +2246,25 @@ class ContextMenuModule {
     }
 
     mergeIocLists(base = {}, extra = {}) {
+        const normalizeDefangedToken = value => String(value || '')
+            .replace(/\[(?:\.|dot)\]|\((?:\.|dot)\)|\{(?:\.|dot)\}/gi, '.')
+            .replace(/hxxps?:\/\//gi, m => (m.toLowerCase().startsWith('hxxps') ? 'https://' : 'http://'))
+            .trim();
+        const normalizeDomain = value => normalizeDefangedToken(value)
+            .replace(/^[a-z]+:\/\//i, '')
+            .replace(/^www\./i, '')
+            .split(/[/?#:]/)[0]
+            .replace(/^\.+|\.+$/g, '')
+            .toLowerCase();
+        const normalizeIp = value => normalizeDefangedToken(value)
+            .replace(/[^0-9.]/g, '');
+        const isValidIpv4 = value => {
+            const parts = value.split('.');
+            if (parts.length !== 4) {
+                return false;
+            }
+            return parts.every(part => /^\d{1,3}$/.test(part) && Number(part) >= 0 && Number(part) <= 255);
+        };
         const normalize = src => {
             const out = {};
             if (!src || typeof src !== 'object') {
@@ -2117,7 +2272,17 @@ class ContextMenuModule {
             }
             for (const [key, vals] of Object.entries(src)) {
                 if (Array.isArray(vals)) {
-                    out[key] = Array.from(new Set(vals));
+                    let normalizedVals = vals;
+                    if (key === 'domains') {
+                        normalizedVals = vals
+                            .map(normalizeDomain)
+                            .filter(Boolean);
+                    } else if (key === 'ip_addresses') {
+                        normalizedVals = vals
+                            .map(normalizeIp)
+                            .filter(isValidIpv4);
+                    }
+                    out[key] = Array.from(new Set(normalizedVals));
                 }
             }
             return out;
@@ -2217,6 +2382,32 @@ class ContextMenuModule {
             (m, prefix, inner) => `${prefix}{${inner}}`
         );
         ({ result, error } = tryParse(repaired));
+        if (result) return result;
+
+        const normalizeJsonLiterals = str => str
+            .replace(/\bNone\b/g, 'null')
+            .replace(/\bTrue\b/g, 'true')
+            .replace(/\bFalse\b/g, 'false');
+
+        const quotedKeys = repaired.replace(/([{,]\s*)([A-Za-z_][A-Za-z0-9_-]*)(\s*:)/g, '$1"$2"$3');
+        ({ result, error } = tryParse(quotedKeys));
+        if (result) return result;
+
+        const singleQuoteFixed = quotedKeys.replace(/'([^'\\]*(?:\\.[^'\\]*)*)'/g, (m, inner) => {
+            const escaped = inner
+                .replace(/\\"/g, '"')
+                .replace(/"/g, '\\"');
+            return `"${escaped}"`;
+        });
+        ({ result, error } = tryParse(singleQuoteFixed));
+        if (result) return result;
+
+        const trailingCommaFixed = singleQuoteFixed.replace(/,\s*([}\]])/g, '$1');
+        ({ result, error } = tryParse(trailingCommaFixed));
+        if (result) return result;
+
+        const literalFixed = normalizeJsonLiterals(trailingCommaFixed);
+        ({ result, error } = tryParse(literalFixed));
         if (result) return result;
 
         console.error('Failed to parse AI response:', error);
@@ -2526,108 +2717,28 @@ class ContextMenuModule {
             });
         };
 
-        const wrapSummaryHtml = window.wrapSummaryHtml || defaultWrapSummaryHtml;
-
-        const splitSummaryFields = (summaryText, structured) => {
-            if (structured && typeof structured === 'object') {
-                const structuredTitle = typeof structured.title === 'string' ? structured.title.trim() : '';
-                const structuredBody = typeof structured.body === 'string' ? structured.body.trim() : '';
-                return {
-                    title: structuredTitle,
-                    body: structuredBody
-                };
-            }
-            const text = typeof summaryText === 'string' ? summaryText : '';
-            if (!text) {
-                return { title: '', body: '' };
-            }
-            const parts = text.split(/\n+/);
-            if (parts.length > 1) {
-                const possibleTitle = parts.shift().trim();
-                return { title: possibleTitle, body: parts.join('\n').trim() };
-            }
-            return { title: '', body: text.trim() };
-        };
-
         const addSummaryNode = (reportId, summary, parent, summaryHtml, structuredSummary) => {
-            if (!summary && !structuredSummary) return;
-            const baseId = `summary_${reportId}`.replace(/[^a-zA-Z0-9_]/g, '_');
-            const nodeId = addNode(baseId, 'text', summary, parent);
-            const html = summaryHtml || wrapSummaryHtml(summary);
-            const { title: summaryTitle, body: summaryBody } = splitSummaryFields(summary, structuredSummary);
-            const calloutUtils = window.QuantickleUtils || {};
-            const calloutPayload = calloutUtils.normalizeCalloutPayload
-                ? calloutUtils.normalizeCalloutPayload({ title: summaryTitle, body: summaryBody, format: 'text' }, { defaultFormat: 'text' })
-                : { title: summaryTitle || '', body: summaryBody || '', format: 'text' };
-
-            // Estimate dimensions based on content length with configurable limits
-            const maxWidth = window.QuantickleConfig?.summaryNodeMaxWidth || 400;
-            const maxHeight = window.QuantickleConfig?.summaryNodeMaxHeight || 300;
-            const charWidth = 7; // approx width per character in px
-            const lineHeight = 20; // px per line
-            const padding = 20; // internal padding
-
-            const lines = summary.split(/\n/);
-            const longest = lines.reduce((m, l) => Math.max(m, l.length), 0);
-            let width = Math.min(longest * charWidth + padding, maxWidth);
-            const charsPerLine = Math.max(Math.floor((width - padding) / charWidth), 1);
-            const totalLines = lines.reduce((s, l) => s + Math.ceil(l.length / charsPerLine), 0);
-            let height = Math.min(totalLines * lineHeight + padding, maxHeight);
-
+            if (!summary && !structuredSummary) return null;
+            const summaryBaseId = `summary_${reportId}`.replace(/[^a-zA-Z0-9_]/g, '_');
+            const nodeId = addNode(summaryBaseId, 'text', summary, parent);
             const data = nodeDataMap.get(nodeId);
-            if (data) {
-                data.info = summary;
-                data.infoHtml = html;
-                data.width = width;
-                data.height = height;
-                if (calloutUtils.syncCalloutLegacyFields) {
-                    calloutUtils.syncCalloutLegacyFields(data, calloutPayload, {
-                        defaultFormat: 'text',
-                        html,
-                        syncTitle: true,
-                        overwriteInfo: true,
-                        includeDerivedFields: true
-                    });
-                } else {
-                    data.callout = { ...calloutPayload };
-                    data.calloutTitle = calloutPayload.title;
-                    data.calloutBody = calloutPayload.body;
-                    data.calloutFormat = calloutPayload.format;
-                    data.calloutBodyFormat = calloutPayload.format;
-                }
-            }
-            const cyNode = cy.getElementById(nodeId);
-            if (cyNode && cyNode.length) {
-                cyNode.data('info', summary);
-                cyNode.data('infoHtml', html);
-                cyNode.data('width', width);
-                cyNode.data('height', height);
-                cyNode.style({
-                    width,
-                    height,
-                    'text-max-width': width,
-                    'text-wrap': 'wrap'
-                });
-                cyNode.data('label', calloutPayload.title || '');
-                cyNode.data('callout', data && data.callout ? { ...data.callout } : { ...calloutPayload });
-                ['calloutTitle', 'calloutBody', 'calloutFormat', 'calloutBodyFormat'].forEach(key => {
-                    if (data && Object.prototype.hasOwnProperty.call(data, key)) {
-                        cyNode.data(key, data[key]);
-                    }
-                });
-            }
+            const gmNode = window.GraphManager?.currentGraph?.nodes?.find(n => {
+                const d = n.data || n;
+                return d.id === nodeId;
+            });
+            const gmData = gmNode ? (gmNode.data || gmNode) : null;
 
-            if (window.GraphManager && window.GraphManager.currentGraph) {
-                const gmNode = window.GraphManager.currentGraph.nodes.find(n => {
-                    const d = n.data || n;
-                    return d.id === nodeId;
-                });
-                if (gmNode) {
-                    const gmData = gmNode.data || gmNode;
-                    gmData.width = width;
-                    gmData.height = height;
-                }
-            }
+            createOrUpdateSummaryNode({
+                cy,
+                nodeId,
+                summary,
+                summaryHtml,
+                structuredSummary,
+                nodeDataRef: data,
+                graphManagerNodeRef: gmData,
+                domain: 'cybersecurity'
+            });
+
             addEdge(reportId, nodeId, 'summary');
             return nodeId;
         };
@@ -2695,6 +2806,28 @@ class ContextMenuModule {
                 childIds.push(nid);
                 return nid;
             };
+            const normalizeDefangedToken = value => String(value || '')
+                .replace(/\[(?:\.|dot)\]|\((?:\.|dot)\)|\{(?:\.|dot)\}/gi, '.')
+                .replace(/hxxps?:\/\//gi, m => (m.toLowerCase().startsWith('hxxps') ? 'https://' : 'http://'))
+                .trim();
+            const normalizeDomain = value => normalizeDefangedToken(value)
+                .replace(/^[a-z]+:\/\//i, '')
+                .replace(/^www\./i, '')
+                .split(/[/?#:]/)[0]
+                .replace(/^\.+|\.+$/g, '')
+                .toLowerCase();
+            const normalizeIp = value => normalizeDefangedToken(value)
+                .replace(/[^0-9.\n]/g, '')
+                .split(/\s+/)
+                .map(v => v.trim())
+                .filter(Boolean);
+            const isValidIpv4 = value => {
+                const parts = String(value || '').split('.');
+                if (parts.length !== 4) {
+                    return false;
+                }
+                return parts.every(part => /^\d{1,3}$/.test(part) && Number(part) >= 0 && Number(part) <= 255);
+            };
 
             const iocs = rep.iocs || {};
             for (const hash of iocs.md5_hashes || []) {
@@ -2706,7 +2839,9 @@ class ContextMenuModule {
                 addEdge(reportId, id, 'related');
             }
             for (const domain of iocs.domains || []) {
-                const id = addReportNode(domain, 'domain', domain);
+                const normalizedDomain = normalizeDomain(domain);
+                if (!normalizedDomain) continue;
+                const id = addReportNode(normalizedDomain, 'domain', normalizedDomain);
                 addEdge(reportId, id, 'related');
             }
             for (const email of iocs.emails || []) {
@@ -2714,17 +2849,28 @@ class ContextMenuModule {
                 addEdge(reportId, id, 'related');
             }
             for (const url of iocs.urls || []) {
-                const id = addReportNode(url, 'url', url);
+                const normalizedUrl = normalizeDefangedToken(url);
+                if (!normalizedUrl) continue;
+                const id = addReportNode(normalizedUrl, 'url', normalizedUrl);
                 addEdge(reportId, id, 'related');
             }
+            for (const ipValue of iocs.ip_addresses || []) {
+                for (const ip of normalizeIp(ipValue)) {
+                    if (!isValidIpv4(ip)) continue;
+                    const id = addReportNode(ip, 'ip', ip);
+                    addEdge(reportId, id, 'related');
+                }
+            }
 
-            const knownIocKeys = ['md5_hashes', 'hashes', 'domains', 'emails', 'urls'];
+            const knownIocKeys = ['md5_hashes', 'hashes', 'domains', 'emails', 'urls', 'ip_addresses'];
             for (const [key, values] of Object.entries(iocs)) {
                 if (knownIocKeys.includes(key) || !Array.isArray(values)) continue;
                 const containerId = addNode(`${key}_${reportId}`, 'container', key, null);
                 childIds.push(containerId);
                 for (const val of values) {
-                    const nodeId = addNode(val, 'default', val, containerId);
+                    const normalizedVal = normalizeDefangedToken(val);
+                    if (!normalizedVal) continue;
+                    const nodeId = addNode(normalizedVal, 'default', normalizedVal, containerId);
                     childIds.push(nodeId);
                     addEdge(reportId, nodeId, key);
                 }
@@ -2736,14 +2882,16 @@ class ContextMenuModule {
                 addEdge(reportId, id, 'associated_malware');
             }
             for (const item of rel.c2_infrastructure || []) {
-                if (item.domain) {
-                    const id = addReportNode(item.domain, 'domain', item.domain);
+                const normalizedDomain = normalizeDomain(item?.domain);
+                if (normalizedDomain) {
+                    const id = addReportNode(normalizedDomain, 'domain', normalizedDomain);
                     addEdge(reportId, id, 'c2_infrastructure');
                 }
             }
             for (const item of rel.shared_domains || []) {
-                if (item.domain) {
-                    const id = addReportNode(item.domain, 'domain', item.domain);
+                const normalizedDomain = normalizeDomain(item?.domain);
+                if (normalizedDomain) {
+                    const id = addReportNode(normalizedDomain, 'domain', normalizedDomain);
                     addEdge(reportId, id, 'shared_domain');
                 }
             }
@@ -2922,16 +3070,59 @@ class ContextMenuModule {
         }
 
         const baseId = baseNode.id();
-        if (parsed.summary) {
-            let summaryText;
-            if (typeof parsed.summary === 'object') {
-                summaryText = [parsed.summary.title, parsed.summary.body].filter(Boolean).join('\n');
+
+        const addSummaryNode = async (summary, structuredSummary) => {
+            if (!summary && !structuredSummary) return null;
+            const summaryId = `osint_summary_${baseId}`;
+            let nodeData = {
+                id: summaryId,
+                type: 'text',
+                label: 'Summary',
+                info: '',
+                domain: 'cybersecurity'
+            };
+            let nodeId = summaryId;
+
+            if (window.IntegrationsManager && typeof window.IntegrationsManager.getOrCreateNode === 'function') {
+                const result = await window.IntegrationsManager.getOrCreateNode(cy, summaryId, nodeData);
+                nodeId = result.id;
+                const existingNode = cy.getElementById(nodeId);
+                if (!existingNode || existingNode.length === 0) {
+                    cy.add({ group: 'nodes', data: { ...nodeData, id: nodeId } });
+                    addedNodeIds.push(nodeId);
+                } else if (result.created) {
+                    addedNodeIds.push(nodeId);
+                }
+                nodeData = cy.getElementById(nodeId).data();
+            } else if (window.GraphManager && typeof window.GraphManager.addNode === 'function') {
+                window.GraphManager.addNode(nodeData);
+                addedNodeIds.push(summaryId);
+                const gmNode = window.GraphManager.currentGraph?.nodes?.find(n => (n.data ? n.data.id : n.id) === summaryId);
+                nodeData = (gmNode && (gmNode.data || gmNode)) || nodeData;
+                nodeId = summaryId;
             } else {
-                summaryText = parsed.summary;
+                const existingNode = cy.getElementById(summaryId);
+                if (!existingNode || existingNode.length === 0) {
+                    cy.add({ group: 'nodes', data: nodeData });
+                    addedNodeIds.push(summaryId);
+                }
+                nodeId = summaryId;
+                nodeData = cy.getElementById(nodeId).data();
             }
-            const existingInfo = baseNode.data('info');
-            baseNode.data('info', existingInfo ? `${existingInfo}<p>${summaryText}</p>` : summaryText);
-        }
+
+            const gmData = window.GraphManager?.currentGraph?.nodes?.find(n => (n.data ? n.data.id : n.id) === nodeId);
+            createOrUpdateSummaryNode({
+                cy,
+                nodeId,
+                summary,
+                structuredSummary,
+                nodeDataRef: nodeData,
+                graphManagerNodeRef: gmData ? (gmData.data || gmData) : null,
+                domain: 'cybersecurity'
+            });
+            addEdge(baseId, nodeId, 'summary');
+            return nodeId;
+        };
 
         const addedNodeIds = [];
         const addNode = async (id, type, label) => {
@@ -2971,6 +3162,15 @@ class ContextMenuModule {
                 cy.add({ group: 'edges', data: { id: `${source}-${target}`, source, target, label: rel, type: rel } });
             }
         };
+
+        if (parsed.summary || parsed.summaryStructured) {
+            const structuredSummary = parsed.summaryStructured
+                || (typeof parsed.summary === 'object' ? parsed.summary : null);
+            const summaryText = typeof parsed.summary === 'string'
+                ? parsed.summary
+                : [structuredSummary?.title, structuredSummary?.body].filter(Boolean).join('\n');
+            await addSummaryNode(summaryText, structuredSummary);
+        }
 
         for (const name of parsed.companies || []) {
             const id = await addNode(name, 'company', name);

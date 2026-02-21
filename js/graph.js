@@ -608,10 +608,79 @@ window.GraphRenderer = {
                 }
 
                 const cloned = JSON.parse(JSON.stringify(json));
-                return Array.isArray(cloned) && cloned.length > 0 ? cloned : null;
+                const sanitized = this.sanitizeClonedStylesheet(cloned);
+                return Array.isArray(sanitized) && sanitized.length > 0 ? sanitized : null;
             } catch (error) {
                 return null;
             }
+        },
+
+        sanitizeClonedStylesheet(stylesheet) {
+            if (!Array.isArray(stylesheet)) {
+                return null;
+            }
+
+            return stylesheet
+                .map(rule => {
+                    if (!rule || typeof rule !== 'object') {
+                        return null;
+                    }
+
+                    const styleBlock = rule.style && typeof rule.style === 'object'
+                        ? rule.style
+                        : (rule.css && typeof rule.css === 'object' ? rule.css : null);
+
+                    if (!styleBlock) {
+                        return { ...rule };
+                    }
+
+                    const sanitizedStyle = {};
+                    const requiredDataFields = new Set();
+
+                    Object.entries(styleBlock).forEach(([property, rawValue]) => {
+                        // Cytoscape serializes function mappers as "fn" in style JSON.
+                        // Re-applying those values causes parser errors, so drop them and
+                        // let other concrete rules provide the visual fallback.
+                        if (rawValue === 'fn') {
+                            return;
+                        }
+
+                        if (typeof rawValue === 'string') {
+                            const dataMatch = rawValue.match(/^data\(([^)]+)\)$/);
+                            if (dataMatch && dataMatch[1]) {
+                                requiredDataFields.add(dataMatch[1]);
+                            }
+                        }
+
+                        sanitizedStyle[property] = rawValue;
+                    });
+
+                    const baseSelector = typeof rule.selector === 'string' ? rule.selector : '';
+                    let selector = baseSelector;
+
+                    requiredDataFields.forEach(field => {
+                        const attributeSelector = `[${field}]`;
+                        if (!selector.includes(attributeSelector)) {
+                            selector = `${selector}${attributeSelector}`;
+                        }
+                    });
+
+                    const sanitizedRule = {
+                        ...rule,
+                        selector
+                    };
+
+                    if (rule.style && typeof rule.style === 'object') {
+                        sanitizedRule.style = sanitizedStyle;
+                    }
+
+                    if (rule.css && typeof rule.css === 'object') {
+                        sanitizedRule.css = sanitizedStyle;
+                    }
+
+                    return sanitizedRule;
+                })
+                .filter(rule => !!rule);
         },
 
         createFallbackStylesheet() {

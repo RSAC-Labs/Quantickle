@@ -2284,8 +2284,8 @@
                                     <small class="form-help">Get your API key from <a href="https://www.virustotal.com/gui/my-apikey" target="_blank">VirusTotal API settings</a></small>
                                 </div>
                                 <div class="form-actions">
-                                    <button type="button" class="btn btn-primary" onclick="saveVirusTotalConfig()">Save Configuration</button>
-                                    <button type="button" class="btn btn-secondary" onclick="testVirusTotalConnection()">Test Connection</button>
+                                    <button type="button" class="btn btn-primary" onclick="window.IntegrationsManager.runAction('virustotal', 'saveConfig', { source: 'ui' }, {})">Save Configuration</button>
+                                    <button type="button" class="btn btn-secondary" onclick="window.IntegrationsManager.runAction('virustotal', 'testConnection', { source: 'ui' }, {})">Test Connection</button>
                                     <span id="virustotalStatus" class="status-indicator"></span>
                                 </div>
                                 
@@ -2327,8 +2327,8 @@
                                     <small class="form-help">Create an API key in your <a href="https://platform.openai.com/account/api-keys" target="_blank">OpenAI account settings</a></small>
                                 </div>
                                 <div class="form-actions">
-                                    <button type="button" class="btn btn-primary" onclick="saveOpenAIConfig()">Save Configuration</button>
-                                    <button type="button" class="btn btn-secondary" onclick="testOpenAIConnection()">Test Connection</button>
+                                    <button type="button" class="btn btn-primary" onclick="window.IntegrationsManager.runAction('openai', 'saveConfig', { source: 'ui' }, {})">Save Configuration</button>
+                                    <button type="button" class="btn btn-secondary" onclick="window.IntegrationsManager.runAction('openai', 'testConnection', { source: 'ui' }, {})">Test Connection</button>
                                     <span id="openaiStatus" class="status-indicator"></span>
                                 </div>
                             </form>
@@ -2356,8 +2356,8 @@
                                     <small class="form-help">Get your API key from <a href="https://serpapi.com/dashboard" target="_blank">SerpApi dashboard</a></small>
                                 </div>
                                 <div class="form-actions">
-                                    <button type="button" class="btn btn-primary" onclick="saveSerpApiConfig()">Save Configuration</button>
-                                    <button type="button" class="btn btn-secondary" onclick="testSerpApiConnection()">Test Connection</button>
+                                    <button type="button" class="btn btn-primary" onclick="window.IntegrationsManager.runAction('serpapi', 'saveConfig', { source: 'ui' }, {})">Save Configuration</button>
+                                    <button type="button" class="btn btn-secondary" onclick="window.IntegrationsManager.runAction('serpapi', 'testConnection', { source: 'ui' }, {})">Test Connection</button>
                                     <span id="serpapiStatus" class="status-indicator"></span>
                         </div>
                     </form>
@@ -2380,7 +2380,7 @@
                                     placeholder="https://example.com/feeds.opml"
                                     autocomplete="off"
                                 />
-                                <button type="button" class="btn btn-secondary" onclick="loadOpmlFromUrl()">Load</button>
+                                <button type="button" class="btn btn-secondary" onclick="window.IntegrationsManager.runAction('opml', 'loadFromUrl', { source: 'ui' }, {})">Load</button>
                             </div>
                             <small class="form-help">Fetch an OPML file via the configured proxy allowlist, or paste the XML below.</small>
                         </div>
@@ -2394,9 +2394,9 @@
                             <small class="form-help">Feeds are stored locally. Use “Run Check Now” to scan for new articles.</small>
                         </div>
                         <div class="form-actions">
-                            <button type="button" class="btn btn-primary" onclick="importOpmlFeeds()">Import OPML</button>
-                            <button type="button" id="opmlRunButton" class="btn btn-secondary" onclick="runOpmlScanNow()">Run Check Now</button>
-                            <button type="button" id="opmlCancelButton" class="btn btn-link" onclick="cancelOpmlScan()" disabled>Cancel Run</button>
+                            <button type="button" class="btn btn-primary" onclick="window.IntegrationsManager.runAction('opml', 'importFeeds', { source: 'ui' }, {})">Import OPML</button>
+                            <button type="button" id="opmlRunButton" class="btn btn-secondary" onclick="window.IntegrationsManager.runAction('opml', 'runScan', { source: 'ui' }, { force: true, statusId: 'opmlStatus' })">Run Check Now</button>
+                            <button type="button" id="opmlCancelButton" class="btn btn-link" onclick="window.IntegrationsManager.runAction('opml', 'cancelScan', { source: 'ui' }, {})" disabled>Cancel Run</button>
                             <span id="opmlStatus" class="status-indicator"></span>
                         </div>
                         <div class="form-group">
@@ -2464,12 +2464,12 @@
                             />
                         </div>
                         <div class="form-actions">
-                            <button type="button" class="btn btn-primary" onclick="saveCirclLuConfig()">Save Configuration</button>
-                            <button type="button" class="btn btn-secondary" onclick="testCirclLuConnection()">Test Connection</button>
+                            <button type="button" class="btn btn-primary" onclick="window.IntegrationsManager.runAction('circl-misp', 'saveConfig', { source: 'ui' }, {})">Save Configuration</button>
+                            <button type="button" class="btn btn-secondary" onclick="window.IntegrationsManager.runAction('circl-misp', 'testConnection', { source: 'ui' }, {})">Test Connection</button>
                             <span id="circlLuStatus" class="status-indicator"></span>
                         </div>
                         <div class="form-actions" style="gap: 8px;">
-                            <button type="button" class="btn btn-accent" onclick="fetchCirclLuManifest()">📥 Fetch Manifest</button>
+                            <button type="button" class="btn btn-accent" onclick="window.IntegrationsManager.runAction('circl-misp', 'fetchManifest', { source: 'ui' }, {})">📥 Fetch Manifest</button>
                             <button type="button" class="btn btn-accent" onclick="syncCirclLuLatestEvent()">🔄 Sync Latest Event</button>
                             <button type="button" class="btn btn-accent" onclick="syncCirclMispWholeFeed()">🗂️ Sync Whole Feed (Slow)</button>
                         </div>
@@ -2520,8 +2520,8 @@
                             </div>
                         </div>
                         <div class="form-actions">
-                            <button type="button" class="btn btn-primary" onclick="saveNeo4jConfig()">Save Configuration</button>
-                            <button type="button" class="btn btn-secondary" onclick="testNeo4jConnection()">Test Connection</button>
+                            <button type="button" class="btn btn-primary" onclick="window.IntegrationsManager.runAction('neo4j', 'saveConfig', { source: 'ui' }, {})">Save Configuration</button>
+                            <button type="button" class="btn btn-secondary" onclick="window.IntegrationsManager.runAction('neo4j', 'testConnection', { source: 'ui' }, {})">Test Connection</button>
                             <span id="neo4jStatus" class="status-indicator"></span>
                         </div>
                     </form>
@@ -2746,7 +2746,13 @@
     <script src="js/integrations/modules/types.js"></script>
     <script src="js/integrations/modules/registry.js"></script>
     <script src="js/integrations/modules/graph-service.js"></script>
+    <!-- Integration module factories must load before js/integrations.js -->
     <script src="js/integrations/modules/virustotal/index.js"></script>
+    <script src="js/integrations/modules/openai/index.js"></script>
+    <script src="js/integrations/modules/serpapi/index.js"></script>
+    <script src="js/integrations/modules/circl-misp/index.js"></script>
+    <script src="js/integrations/modules/opml/index.js"></script>
+    <script src="js/integrations/modules/neo4j/index.js"></script>
     <script src="js/integrations.js"></script>
     <script src="js/ai-input-manager.js"></script>
     <script type="module" src="js/rag-pipeline.js"></script>

@@ -426,6 +426,7 @@ JSON endpoints used by the UI. All routes are prefixed with `/api`:
 | `GET /api/domain-files` | Lists JSON domain definitions present in `assets/domains/`. |
 | `GET /api/examples` | Returns metadata about bundled example `.qut` graphs. |
 | `GET /api/serpapi` | Proxies Google Search requests to SerpApi; requires `SERPAPI_API_KEY` in the query string or environment. |
+| `GET /api/openai/models` | Proxies OpenAI model listing requests to `api.openai.com`; requires an `Authorization: Bearer ...` header. |
 | `GET /api/proxy?url=…` | Forwards HTTP/HTTPS requests to allowed hosts with browser-like headers. |
 | `POST /api/neo4j/graph` | Persists a graph to Neo4j. Accepts the flattened Quantickle graph JSON body described above. |
 | `POST /api/neo4j/node-graphs` | Finds saved graphs that contain nodes matching the provided `labels` array. |
@@ -464,7 +465,9 @@ The server exposes a CORS-bypassing proxy that forwards HTTP(S) requests to host
 curl "http://localhost:3000/api/proxy?url=https%3A%2F%2Fopentip.kaspersky.com%2F"
 ```
 
-The allowlist lives in `config/proxy-allowlist.json`. You **must** provide this file (or set a comma-separated `PROXY_ALLOWLIST` environment variable before starting the server); otherwise the proxy logs a fatal configuration error and rejects every request with HTTP 403. Each entry should list a host or wildcard pattern that the proxy may reach. Wildcards using `*` are supported anywhere in an entry, so `*.example.com` permits any subdomain of `example.com`, and masks like `news-*` behave as expected. Subdomains also inherit their parent domain's entry, so adding `example.com` automatically permits `www.example.com`.
+The base allowlist lives in `config/proxy-allowlist.json`. You **must** provide this file (or set a comma-separated `PROXY_ALLOWLIST` environment variable before starting the server); otherwise the proxy logs a fatal configuration error and rejects every request with HTTP 403.
+
+Integration-specific hosts (for backend integration adapters like OpenAI and VirusTotal) are governed by `config/integration-allowlist.json` (or `INTEGRATION_ALLOWLIST`). At runtime, both allowlists are merged. Each entry should list a host or wildcard pattern that the proxy may reach. Wildcards using `*` are supported anywhere in an entry, so `*.example.com` permits any subdomain of `example.com`, and masks like `news-*` behave as expected. Subdomains also inherit their parent domain's entry, so adding `example.com` automatically permits `www.example.com`.
 
 A minimal allowlist file looks like:
 

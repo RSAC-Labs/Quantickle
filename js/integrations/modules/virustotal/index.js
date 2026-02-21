@@ -129,8 +129,8 @@
         };
 
         const formatInfoHTML = (infoObj) => {
-            if (window.IntegrationsManager?.formatInfoHTML) {
-                return window.IntegrationsManager.formatInfoHTML(infoObj);
+            if (services?.integrations?.formatInfoHTML) {
+                return services.integrations.formatInfoHTML(infoObj);
             }
             const rows = Object.entries(infoObj || {})
                 .filter(([_, value]) => value !== undefined && value !== null && value !== '')
@@ -144,14 +144,42 @@
         };
 
         const formatInfoText = (infoObj) => {
-            if (window.IntegrationsManager?.formatInfoText) {
-                return window.IntegrationsManager.formatInfoText(infoObj);
+            if (services?.integrations?.formatInfoText) {
+                return services.integrations.formatInfoText(infoObj);
             }
             const stripTags = value => String(value).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
             const lines = Object.entries(infoObj || {})
                 .filter(([_, value]) => value !== undefined && value !== null && value !== '')
                 .map(([key, value]) => `${stripTags(key)}: ${stripTags(value)}`);
             return lines.join('\n');
+        };
+
+        const hasNodeInfoContent = value => {
+            if (value === undefined || value === null) {
+                return false;
+            }
+            if (typeof value === 'string') {
+                return value.trim() !== '';
+            }
+            return true;
+        };
+
+        const setNodeInfoFields = (node, infoText, infoHtml, options = {}) => {
+            if (!node || node.length === 0) {
+                return;
+            }
+
+            const { overwrite = false } = options;
+            const existingInfo = node.data('info');
+            const existingInfoHtml = node.data('infoHtml');
+
+            if (overwrite || !hasNodeInfoContent(existingInfo)) {
+                node.data('info', infoText);
+            }
+
+            if (overwrite || !hasNodeInfoContent(existingInfoHtml)) {
+                node.data('infoHtml', infoHtml);
+            }
         };
 
         const getOrCreateNode = async (cy, id, data = {}, options = {}) => {
@@ -259,6 +287,9 @@
 
         const addEdgeIfNotExists = (cy, edgeData, options = {}) => {
             if (!edgeData || !edgeData.source || !edgeData.target) {
+                return false;
+            }
+            if (edgeData.source === edgeData.target) {
                 return false;
             }
             const edgeCache = options.edgeCache instanceof Set ? options.edgeCache : null;
@@ -831,6 +862,7 @@
 
                         if (nodeType === 'domain' && infoData.creationDate) {
                             node.data('creationDate', infoData.creationDate);
+                            node.data('timestamp', infoData.creationDate);
                         }
 
                         if (nodeType === 'malware') {
@@ -842,6 +874,8 @@
                             }
                             if (infoData.firstSubmissionDate) {
                                 node.data('firstSubmissionDate', infoData.firstSubmissionDate);
+                                node.data('firstSeen', infoData.firstSubmissionDate);
+                                node.data('timestamp', infoData.firstSubmissionDate);
                             }
                         }
 
@@ -851,6 +885,8 @@
                             }
                             if (infoData.lastModDate) {
                                 node.data('lastModDate', infoData.lastModDate);
+                                node.data('lastSeen', infoData.lastModDate);
+                                node.data('timestamp', infoData.lastModDate);
                             }
                             if (attributes.country && !infoData.country) {
                                 node.data('country', attributes.country);
@@ -905,8 +941,16 @@
 
                         const infoHtml = infoData.infoHtml || formatInfoHTML(infoFields);
                         const infoText = infoData.info || formatInfoText(infoFields);
-                        node.data('info', infoText);
-                        node.data('infoHtml', infoHtml);
+                        const existingInfo = node.data('info');
+                        const existingInfoHtml = node.data('infoHtml');
+
+                        if (!existingInfo) {
+                            node.data('info', infoText);
+                        }
+
+                        if (!existingInfoHtml) {
+                            node.data('infoHtml', infoHtml);
+                        }
                         results.updated++;
                     }
                 } catch (error) {
@@ -963,7 +1007,6 @@
                         if (error.status === 403) {
                             relationshipTracker.recordForbidden(key, endpoint);
                         }
-                        console.warn('VirusTotal relationship request failed:', endpoint, error);
                         relationships[key] = [];
                     }
                 }
@@ -1012,7 +1055,6 @@
                         if (error.status === 403) {
                             relationshipTracker.recordForbidden(key, endpoint);
                         }
-                        console.warn('VirusTotal relationship request failed:', endpoint, error);
                         relationships[key] = [];
                     }
                 }
@@ -1056,7 +1098,6 @@
                         if (error.status === 403) {
                             relationshipTracker.recordForbidden(key, endpoint);
                         }
-                        console.warn('VirusTotal relationship request failed:', endpoint, error);
                         relationships[key] = [];
                     }
                 }
@@ -1147,8 +1188,17 @@
                 infoHtml: fileInfoHtml
             };
             const { id: fileNodeId, created: fileCreated } = await getOrCreateNode(cy, fileNodeData.id, fileNodeData, bulkOptions);
-            cy.getElementById(fileNodeId).data('info', fileInfoText);
-            cy.getElementById(fileNodeId).data('infoHtml', fileInfoHtml);
+            const fileNode = cy.getElementById(fileNodeId);
+            fileNode.data({
+                detectionRatio: fileNodeData.detectionRatio,
+                fileName: fileNodeData.fileName,
+                fileType: fileNodeData.fileType,
+                firstSeen: fileNodeData.firstSeen,
+                lastSeen: fileNodeData.lastSeen,
+                timestamp: fileNodeData.timestamp,
+                info: fileInfoText,
+                infoHtml: fileInfoHtml
+            });
             if (fileCreated) {
                 nodesAdded++;
             }
@@ -1190,8 +1240,7 @@
                     };
 
                     const { id: relatedNodeId, created } = await getOrCreateNode(cy, relatedNodeData.id, relatedNodeData, bulkOptions);
-                    cy.getElementById(relatedNodeId).data('info', infoText);
-                    cy.getElementById(relatedNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(relatedNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         newNodeIds.push(relatedNodeId);
@@ -1241,8 +1290,7 @@
                     };
 
                     const { id: droppedNodeId, created } = await getOrCreateNode(cy, droppedNodeData.id, droppedNodeData, bulkOptions);
-                    cy.getElementById(droppedNodeId).data('info', infoText);
-                    cy.getElementById(droppedNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(droppedNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         newNodeIds.push(droppedNodeId);
@@ -1292,8 +1340,7 @@
                     };
 
                     const { id: parentNodeId, created } = await getOrCreateNode(cy, parentNodeData.id, parentNodeData, bulkOptions);
-                    cy.getElementById(parentNodeId).data('info', infoText);
-                    cy.getElementById(parentNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(parentNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         newNodeIds.push(parentNodeId);
@@ -1336,8 +1383,7 @@
                     };
 
                     const { id: domainNodeId, created } = await getOrCreateNode(cy, domainNodeData.id, domainNodeData, bulkOptions);
-                    cy.getElementById(domainNodeId).data('info', infoText);
-                    cy.getElementById(domainNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(domainNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         newNodeIds.push(domainNodeId);
@@ -1388,8 +1434,7 @@
                     };
 
                     const { id: ipNodeId, created } = await getOrCreateNode(cy, ipNodeData.id, ipNodeData, bulkOptions);
-                    cy.getElementById(ipNodeId).data('info', infoText);
-                    cy.getElementById(ipNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(ipNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         newNodeIds.push(ipNodeId);
@@ -1432,8 +1477,7 @@
                     };
 
                     const { id: urlNodeId, created } = await getOrCreateNode(cy, urlNodeData.id, urlNodeData, bulkOptions);
-                    cy.getElementById(urlNodeId).data('info', infoText);
-                    cy.getElementById(urlNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(urlNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         newNodeIds.push(urlNodeId);
@@ -1473,8 +1517,7 @@
                     };
 
                     const { id: submitterNodeId, created } = await getOrCreateNode(cy, submitterNodeData.id, submitterNodeData, bulkOptions);
-                    cy.getElementById(submitterNodeId).data('info', infoText);
-                    cy.getElementById(submitterNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(submitterNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         newNodeIds.push(submitterNodeId);
@@ -1524,8 +1567,7 @@
                     };
 
                     const { id: relatedNodeId, created } = await getOrCreateNode(cy, relatedNodeData.id, relatedNodeData, bulkOptions);
-                    cy.getElementById(relatedNodeId).data('info', infoText);
-                    cy.getElementById(relatedNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(relatedNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         newNodeIds.push(relatedNodeId);
@@ -1638,8 +1680,17 @@
                 domainNodeData,
                 bulkOptions
             );
-            cy.getElementById(domainNodeId).data('info', domainInfoText);
-            cy.getElementById(domainNodeId).data('infoHtml', domainInfoHtml);
+            const domainCreationTime = attributes.creation_date ? new Date(attributes.creation_date * 1000).toISOString() : null;
+            const domainNode = cy.getElementById(domainNodeId);
+            domainNode.data({
+                detectionRatio: domainNodeData.detectionRatio,
+                reputation: domainNodeData.reputation,
+                creationDate: domainCreationTime,
+                timestamp: domainCreationTime,
+                lastSeen: domainNodeData.lastSeen,
+                info: domainInfoText,
+                infoHtml: domainInfoHtml
+            });
             if (domainCreated) {
                 nodesAdded++;
             }
@@ -1680,8 +1731,7 @@
                 };
 
                 const { id: ipNodeId, created } = await getOrCreateNode(cy, ipNodeData.id, ipNodeData, bulkOptions);
-                cy.getElementById(ipNodeId).data('info', infoText);
-                cy.getElementById(ipNodeId).data('infoHtml', infoHtml);
+                setNodeInfoFields(cy.getElementById(ipNodeId), infoText, infoHtml);
                 if (created) {
                     nodesAdded++;
                     createdNodes.push(ipNodeId);
@@ -1720,8 +1770,7 @@
                     };
 
                     const { id: subNodeId, created } = await getOrCreateNode(cy, subNodeData.id, subNodeData, bulkOptions);
-                    cy.getElementById(subNodeId).data('info', infoText);
-                    cy.getElementById(subNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(subNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         createdNodes.push(subNodeId);
@@ -1761,8 +1810,7 @@
                     };
 
                     const { id: siblingNodeId, created } = await getOrCreateNode(cy, siblingNodeData.id, siblingNodeData, bulkOptions);
-                    cy.getElementById(siblingNodeId).data('info', infoText);
-                    cy.getElementById(siblingNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(siblingNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         createdNodes.push(siblingNodeId);
@@ -1826,8 +1874,7 @@
                     };
 
                     const { id: createdFileNodeId, created } = await getOrCreateNode(cy, fileNodeData.id, fileNodeData, bulkOptions);
-                    cy.getElementById(createdFileNodeId).data('info', infoText);
-                    cy.getElementById(createdFileNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(createdFileNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         createdNodes.push(createdFileNodeId);
@@ -1872,8 +1919,7 @@
                     };
 
                     const { id: urlNodeId, created } = await getOrCreateNode(cy, urlNodeData.id, urlNodeData, bulkOptions);
-                    cy.getElementById(urlNodeId).data('info', infoText);
-                    cy.getElementById(urlNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(urlNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         createdNodes.push(urlNodeId);
@@ -1977,8 +2023,20 @@
             };
 
             const { id: ipNodeId, created: ipCreated } = await getOrCreateNode(cy, ipNodeData.id, ipNodeData, bulkOptions);
-            cy.getElementById(ipNodeId).data('info', ipInfoText);
-            cy.getElementById(ipNodeId).data('infoHtml', ipInfoHtml);
+            const ipNode = cy.getElementById(ipNodeId);
+            ipNode.data({
+                detectionRatio: ipNodeData.detectionRatio,
+                country: ipNodeData.country,
+                asn: ipNodeData.asn,
+                asOwner: ipNodeData.asOwner,
+                network: ipNodeData.network,
+                reputation: ipNodeData.reputation,
+                lastSeen: ipNodeData.lastSeen,
+                lastModDate: ipNodeData.lastSeen,
+                timestamp: ipNodeData.timestamp,
+                info: ipInfoText,
+                infoHtml: ipInfoHtml
+            });
             if (ipCreated) {
                 nodesAdded++;
             }
@@ -2010,8 +2068,7 @@
                     };
 
                     const { id: domainNodeId, created } = await getOrCreateNode(cy, domainNodeData.id, domainNodeData, bulkOptions);
-                    cy.getElementById(domainNodeId).data('info', infoText);
-                    cy.getElementById(domainNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(domainNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         newNodeIds.push(domainNodeId);
@@ -2075,8 +2132,7 @@
                     };
 
                     const { id: createdFileNodeId, created } = await getOrCreateNode(cy, fileNodeData.id, fileNodeData, bulkOptions);
-                    cy.getElementById(createdFileNodeId).data('info', infoText);
-                    cy.getElementById(createdFileNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(createdFileNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         newNodeIds.push(createdFileNodeId);
@@ -2121,8 +2177,7 @@
                     };
 
                     const { id: urlNodeId, created } = await getOrCreateNode(cy, urlNodeData.id, urlNodeData, bulkOptions);
-                    cy.getElementById(urlNodeId).data('info', infoText);
-                    cy.getElementById(urlNodeId).data('infoHtml', infoHtml);
+                    setNodeInfoFields(cy.getElementById(urlNodeId), infoText, infoHtml);
                     if (created) {
                         nodesAdded++;
                         newNodeIds.push(urlNodeId);
@@ -2205,8 +2260,7 @@
             };
 
             const { id: urlNodeId, created: urlCreated } = await getOrCreateNode(cy, urlNodeData.id, urlNodeData, bulkOptions);
-            cy.getElementById(urlNodeId).data('info', urlInfoText);
-            cy.getElementById(urlNodeId).data('infoHtml', urlInfoHtml);
+            setNodeInfoFields(cy.getElementById(urlNodeId), urlInfoText, urlInfoHtml, { overwrite: true });
             if (urlCreated) {
                 nodesAdded++;
             }
@@ -2234,8 +2288,7 @@
                         };
 
                         const { id: domainNodeId, created } = await getOrCreateNode(cy, domainNodeData.id, domainNodeData, bulkOptions);
-                        cy.getElementById(domainNodeId).data('info', infoText);
-                        cy.getElementById(domainNodeId).data('infoHtml', infoHtml);
+                        setNodeInfoFields(cy.getElementById(domainNodeId), infoText, infoHtml);
                         if (created) {
                             nodesAdded++;
                         }
@@ -2340,13 +2393,65 @@
                 services = moduleServices;
             },
             actions: {
+                saveConfig: async () => {
+                    const apiKeyInput = document.getElementById('virustotalApiKey');
+                    const apiKey = apiKeyInput?.value.trim();
+
+                    if (!apiKey) {
+                        notifyStatus('Please enter an API key', 'error');
+                        return { ok: false };
+                    }
+
+                    if (!/^[a-fA-F0-9]{64}$/.test(apiKey)) {
+                        notifyStatus('Invalid API key format', 'error');
+                        return { ok: false };
+                    }
+
+                    await services?.credentials?.ensurePassphrase?.();
+                    setRuntime('virustotalApiKey', apiKey);
+
+                    const storageKey = getStorageKey('VIRUSTOTAL_API_KEY');
+                    if (storageKey) {
+                        storageSet(storageKey, await services?.credentials?.encrypt?.(apiKey));
+                    }
+
+                    notifyStatus('Configuration saved successfully', 'success');
+                    return { ok: true };
+                },
                 enrichFromGraph: (ctx, params) => importVirusTotalData(params?.identifier, params?.queryType),
                 quickAction: (ctx, params) => updateVirusTotalInfoForNodes(params?.nodes || []),
                 importData: (ctx, params) => importVirusTotalData(params?.identifier, params?.queryType),
                 quickUpdate: (ctx, params) => updateVirusTotalInfoForNodes(params?.nodes || []),
                 addToBlocklist: (ctx, params) => addToVTBlocklist(params?.identifier),
                 submitUrl: (ctx, params) => submitVirusTotalURL(params?.url),
-                testConnection: () => makeVirusTotalRequest('/users/me')
+                testConnection: async () => {
+                    const apiKey = getVirusTotalApiKey();
+                    if (!apiKey) {
+                        notifyStatus('No API key configured', 'error');
+                        return { ok: false };
+                    }
+
+                    notifyStatus('Testing connection...', 'testing');
+                    try {
+                        await makeVirusTotalRequest('/users/me');
+                        notifyStatus('Connection successful', 'success');
+                        return { ok: true };
+                    } catch (error) {
+                        const message = error?.message || 'Connection test failed (CORS/Network)';
+                        if (message.includes('Invalid VirusTotal API key')) {
+                            notifyStatus('Invalid API key', 'error');
+                        } else if (message.includes('VirusTotal proxy blocked')) {
+                            notifyStatus('VirusTotal proxy blocked (check proxy allowlist)', 'error');
+                        } else if (message.includes('VirusTotal access forbidden')) {
+                            notifyStatus('VirusTotal access forbidden (check account permissions)', 'error');
+                        } else if (message.includes('VirusTotal API quota exceeded')) {
+                            notifyStatus('API quota exceeded', 'error');
+                        } else {
+                            notifyStatus('Connection test failed (CORS/Network)', 'error');
+                        }
+                        return { ok: false, error };
+                    }
+                }
             },
             api: {
                 getVirusTotalApiKey,

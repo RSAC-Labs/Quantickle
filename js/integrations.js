@@ -73,6 +73,7 @@ window.IntegrationsManager = {
         opmlUpdatingListDisplay: false,
         opmlExistingGraphNames: new Set(),
         opmlExistingGraphCacheReady: false,
+        mispImportCancelRequested: false,
         vtRelationshipForbiddenEndpoints: new Set(),
         integrationHosts: []
     },
@@ -81,9 +82,45 @@ window.IntegrationsManager = {
     moduleServices: null,
 
     createModuleServices: function() {
+        const manager = this;
         const fetchFn = (typeof window !== 'undefined' && typeof window.fetch === 'function')
             ? window.fetch.bind(window)
             : (typeof fetch === 'function' ? fetch : null);
+
+        const safeFetch = (...args) => {
+            if (!fetchFn) {
+                return Promise.reject(new Error('Fetch is not available'));
+            }
+            return fetchFn(...args);
+        };
+
+        const API_BASE_PATHS = Object.freeze({
+            misp: '/api/integrations/misp',
+            neo4j: '/api/neo4j',
+            openai: '/api/openai'
+        });
+
+        const createApiAdapter = (basePath) => ({
+            request: (path = '', options = {}) => {
+                const normalizedPath = typeof path === 'string' ? path : '';
+                const endpoint = `${basePath}${normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`}`;
+                return safeFetch(endpoint, options);
+            }
+        });
+
+        const uiAdapter = {
+            beginActivity: (activityId, label) => window.UI?.beginGraphActivity?.(activityId, label) || null,
+            updateActivity: (taskId, label) => {
+                if (taskId) {
+                    window.UI?.updateGraphActivity?.(taskId, label);
+                }
+            },
+            endActivity: (taskId) => {
+                if (taskId) {
+                    window.UI?.endGraphActivity?.(taskId);
+                }
+            }
+        };
 
         return {
             config: {
@@ -140,13 +177,94 @@ window.IntegrationsManager = {
                     }
                 }
             },
+            integrations: {
+                getCirclLuConfiguration: () => manager.getCirclLuConfiguration(),
+                getDefaultMispFeedUrl: () => manager.CIRCL_MISP_DEFAULT_FEED_URL,
+                getLastMispFeedUrl: () => manager.lastCirclMispFeedUrl,
+                normalizeMispFeedUrl: (feedUrl) => manager.normalizeMispFeedUrl(feedUrl),
+                fetchCirclMispManifest: (feedUrl) => manager.fetchCirclMispManifest(feedUrl),
+                fetchMispEventPayload: (feedUrl, descriptor) => manager.fetchMispEventPayload(feedUrl, descriptor),
+                importCirclMispFeed: (options = {}) => manager.importCirclMispFeed(options),
+                fetchOpmlText: (opmlUrl) => manager.fetchOpmlText(opmlUrl),
+                parseOpmlFeeds: (opmlText) => manager.parseOpmlFeeds(opmlText),
+                setOpmlFeeds: (feeds, options = {}) => manager.setOpmlFeeds(feeds, options),
+                refreshOpmlExistingGraphCache: () => manager.refreshOpmlExistingGraphCache(),
+                processOpmlFeed: (feed, statusId) => manager.processOpmlFeed(feed, statusId),
+                persistOpmlState: () => manager.persistOpmlState(),
+                updateOpmlFeedListDisplay: (feeds) => manager.updateOpmlFeedListDisplay(feeds),
+                updateOpmlControls: () => manager.updateOpmlControls(),
+                formatInfoHTML: (info) => manager.formatInfoHTML(info),
+                formatInfoText: (info) => manager.formatInfoText(info),
+                updateNeo4jMenuVisibility: () => manager.updateNeo4jMenuVisibility()
+            },
+            credentials: {
+                ensurePassphrase: async () => {
+                    if (window.SecureStorage?.ensurePassphrase) {
+                        await window.SecureStorage.ensurePassphrase();
+                    }
+                },
+                encrypt: async (value) => {
+                    if (window.SecureStorage?.encrypt) {
+                        return window.SecureStorage.encrypt(value);
+                    }
+                    return value;
+                },
+                decrypt: async (value) => {
+                    if (window.SecureStorage?.decrypt) {
+                        return window.SecureStorage.decrypt(value);
+                    }
+                    return value;
+                }
+            },
             graph: window.GraphServiceAdapter?.create?.() || null,
             network: {
-                fetch: (...args) => {
-                    if (!fetchFn) {
-                        return Promise.reject(new Error('Fetch is not available'));
+                fetch: (...args) => safeFetch(...args)
+            },
+            server: {
+                misp: createApiAdapter(API_BASE_PATHS.misp),
+                neo4j: createApiAdapter(API_BASE_PATHS.neo4j),
+                openai: createApiAdapter(API_BASE_PATHS.openai),
+                serpapi: {
+                    request: (params, options = {}) => {
+                        if (typeof params === 'string') {
+                            return safeFetch(`/api/serpapi?${params}`, options);
+                        }
+                        const searchParams = new URLSearchParams(params || {}).toString();
+                        const suffix = searchParams ? `?${searchParams}` : '';
+                        return safeFetch(`/api/serpapi${suffix}`, options);
                     }
-                    return fetchFn(...args);
+                }
+            },
+            tasks: {
+                opml: {
+                    isRunning: () => Boolean(manager.runtime?.opmlScanInProgress),
+                    setRunning: (running) => {
+                        manager.runtime.opmlScanInProgress = Boolean(running);
+                    },
+                    isCancelRequested: () => Boolean(manager.runtime?.opmlCancelRequested),
+                    requestCancel: () => {
+                        manager.runtime.opmlCancelRequested = true;
+                        manager.updateOpmlControls?.();
+                    },
+                    resetCancel: () => {
+                        manager.runtime.opmlCancelRequested = false;
+                        manager.updateOpmlControls?.();
+                    },
+                    beginProgress: (label = 'Checking OPML feeds...') => uiAdapter.beginActivity('opml-scan', label),
+                    updateProgress: (taskId, label) => uiAdapter.updateActivity(taskId, label),
+                    endProgress: (taskId) => uiAdapter.endActivity(taskId)
+                },
+                misp: {
+                    isCancelRequested: () => Boolean(manager.runtime?.mispImportCancelRequested),
+                    requestCancel: () => {
+                        manager.runtime.mispImportCancelRequested = true;
+                    },
+                    resetCancel: () => {
+                        manager.runtime.mispImportCancelRequested = false;
+                    },
+                    beginProgress: (label = 'Loading CIRCL MISP manifest...') => uiAdapter.beginActivity('misp-import', label),
+                    updateProgress: (taskId, label) => uiAdapter.updateActivity(taskId, label),
+                    endProgress: (taskId) => uiAdapter.endActivity(taskId)
                 }
             }
         };
@@ -175,9 +293,33 @@ window.IntegrationsManager = {
             return;
         }
 
-        if (window.VirusTotalIntegrationModule?.create) {
-            this.moduleRegistry.register(window.VirusTotalIntegrationModule.create());
-        }
+        const factoryDefinitions = [
+            { id: 'virustotal', globalName: 'VirusTotalIntegrationModule' },
+            { id: 'openai', globalName: 'OpenAIIntegrationModule' },
+            { id: 'serpapi', globalName: 'SerpApiIntegrationModule' },
+            { id: 'circl-misp', globalName: 'CirclMispIntegrationModule' },
+            { id: 'opml', globalName: 'OpmlIntegrationModule' },
+            { id: 'neo4j', globalName: 'Neo4jIntegrationModule' }
+        ];
+
+        factoryDefinitions.forEach(({ id, globalName }) => {
+            const factory = window[globalName];
+            if (!factory?.create) {
+                console.warn(`Integration module script missing or invalid for ${id}: window.${globalName}.create()`);
+                return;
+            }
+
+            try {
+                const moduleInstance = factory.create();
+                if (!moduleInstance) {
+                    console.warn(`Integration module factory returned no instance for ${id}: window.${globalName}.create()`);
+                    return;
+                }
+                this.moduleRegistry.register(moduleInstance);
+            } catch (error) {
+                console.warn(`Failed to register integration module ${id}:`, error);
+            }
+        });
     },
 
     getModule: function(id) {
@@ -788,82 +930,12 @@ window.IntegrationsManager = {
         this.runtime.opmlHostFetchTimestamps[hostname] = Date.now();
     },
 
+    runOpmlCheck: async function(options = {}) {
+        return this.runAction('opml', 'runScan', { source: 'manager' }, options);
+    },
+
     runOpmlDailyCheck: async function(options = {}) {
-        const statusId = options.statusId || 'opmlStatus';
-        if (!Array.isArray(this.runtime.opmlFeeds) || this.runtime.opmlFeeds.length === 0) {
-            this.updateOpmlFeedListDisplay([]);
-            this.updateStatus(statusId, 'No OPML feeds configured', 'warning');
-            return { feedsChecked: 0, newArticles: 0, iocGraphs: 0 };
-        }
-
-        if (this.runtime.opmlScanInProgress) {
-            return { feedsChecked: 0, newArticles: 0, iocGraphs: 0, skipped: true };
-        }
-
-        this.runtime.opmlScanInProgress = true;
-        this.runtime.opmlCancelRequested = false;
-        this.updateOpmlControls();
-        this.updateStatus(statusId, 'Checking OPML feeds...', 'loading');
-        const graphTaskId = window.UI?.beginGraphActivity?.('opml-scan', 'Checking OPML feeds...');
-
-        try {
-            await this.refreshOpmlExistingGraphCache();
-        } catch (error) {
-            console.warn('Unable to refresh OPML graph cache; duplicate detection may be incomplete.', error);
-        }
-
-        let feedsChecked = 0;
-        let newArticles = 0;
-        let iocGraphs = 0;
-        let cancelled = false;
-
-        try {
-            for (const feed of this.runtime.opmlFeeds) {
-                if (this.runtime.opmlCancelRequested) {
-                    cancelled = true;
-                    break;
-                }
-                const progressLabel = feed?.title || feed?.url || 'OPML feed';
-                window.UI?.updateGraphActivity?.(
-                    graphTaskId,
-                    `Scanning ${progressLabel} (${feedsChecked + 1}/${this.runtime.opmlFeeds.length})`
-                );
-                const result = await this.processOpmlFeed(feed, statusId);
-                feedsChecked += 1;
-                newArticles += result.newArticles || 0;
-                iocGraphs += result.iocGraphs || 0;
-                if (this.runtime.opmlCancelRequested || result.cancelled) {
-                    cancelled = true;
-                    break;
-                }
-            }
-
-            if (cancelled) {
-                this.updateStatus(statusId, 'OPML scan cancelled', 'warning');
-                return { feedsChecked, newArticles, iocGraphs, cancelled: true };
-            }
-
-            this.runtime.opmlLastRun = new Date().toISOString();
-            localStorage.setItem(this.STORAGE_KEYS.OPML_LAST_RUN, this.runtime.opmlLastRun);
-            this.persistOpmlState();
-            this.updateOpmlFeedListDisplay();
-
-            const summary = `Checked ${feedsChecked} feed${feedsChecked === 1 ? '' : 's'}; ${newArticles} new article${newArticles === 1 ? '' : 's'}; ${iocGraphs} graph${iocGraphs === 1 ? '' : 's'} created`;
-            this.updateStatus(statusId, summary, 'success');
-
-            return { feedsChecked, newArticles, iocGraphs };
-        } catch (error) {
-            console.error('OPML feed check failed', error);
-            this.updateStatus(statusId, error.message || 'OPML feed check failed', 'error');
-            return { feedsChecked, newArticles, iocGraphs, error };
-        } finally {
-            if (graphTaskId) {
-                window.UI?.endGraphActivity?.(graphTaskId);
-            }
-            this.runtime.opmlScanInProgress = false;
-            this.runtime.opmlCancelRequested = false;
-            this.updateOpmlControls();
-        }
+        return this.runOpmlCheck(options);
     },
 
     processOpmlFeed: async function(feed, statusId = 'opmlStatus') {
@@ -891,8 +963,17 @@ window.IntegrationsManager = {
                 break;
             }
             const key = this.normalizeArticleKey(article);
-            if (!key || seen[key]) {
+            if (!key) {
                 continue;
+            }
+
+            if (seen[key]) {
+                const hasExistingGraph = await this.hasExistingGraphForOpmlArticle(article, feed.title);
+                if (hasExistingGraph) {
+                    continue;
+                }
+
+                this.updateStatus(statusId, `Reprocessing previously seen article: ${article.title || article.link}`, 'info');
             }
             result.newArticles += 1;
             const articleResult = await this.handleArticleForIocs(article, feed.title, statusId);
@@ -1093,6 +1174,29 @@ window.IntegrationsManager = {
     resolveOpmlGraphTitle(meta = {}) {
         const rawTitle = meta.title || meta.url || 'RSS Article';
         return this.truncateLabel(rawTitle, 120);
+    },
+
+    deriveOpmlArticleGraphTitleCandidates(article = {}, feedTitle = '') {
+        const candidates = [
+            this.resolveOpmlGraphTitle({ title: article?.title, url: article?.link }),
+            this.resolveOpmlGraphTitle({ url: article?.link }),
+            this.resolveOpmlGraphTitle({ title: article?.title }),
+            this.resolveOpmlGraphTitle({ title: feedTitle, url: article?.link })
+        ];
+
+        return Array.from(new Set(candidates
+            .map(candidate => (candidate || '').toString().trim())
+            .filter(Boolean)));
+    },
+
+    hasExistingGraphForOpmlArticle: async function(article = {}, feedTitle = '') {
+        const candidates = this.deriveOpmlArticleGraphTitleCandidates(article, feedTitle);
+        for (const candidate of candidates) {
+            if (await this.shouldSkipOpmlGraph(candidate)) {
+                return true;
+            }
+        }
+        return false;
     },
 
     registerOpmlGraphName(graphTitle) {
@@ -1619,12 +1723,15 @@ window.IntegrationsManager = {
             statusId = 'circlMispStatus',
             onEventImported,
             maxEvents = null,
-            batchSave = false
+            batchSave = false,
+            taskHooks = null
         } = options;
 
         const baseUrl = this.normalizeMispFeedUrl(feedUrl);
         this.updateStatus(statusId, 'Fetching CIRCL MISP manifest...', 'loading');
-        const graphTaskId = window.UI?.beginGraphActivity?.('misp-import', 'Loading CIRCL MISP manifest...');
+        const graphTaskId = taskHooks?.beginProgress
+            ? taskHooks.beginProgress('Loading CIRCL MISP manifest...')
+            : window.UI?.beginGraphActivity?.('misp-import', 'Loading CIRCL MISP manifest...');
 
         try {
         let descriptors = [];
@@ -1745,7 +1852,16 @@ window.IntegrationsManager = {
                 const progressMessage = `Importing CIRCL MISP event ${descriptor.info || descriptor.uuid} (${index}/${eventsToProcess.length})...`;
 
                 this.updateStatus(statusId, progressMessage, 'loading');
-                window.UI?.updateGraphActivity?.('misp-import', progressMessage);
+                if (taskHooks?.updateProgress) {
+                    taskHooks.updateProgress(graphTaskId, progressMessage);
+                } else {
+                    window.UI?.updateGraphActivity?.('misp-import', progressMessage);
+                }
+
+                if (taskHooks?.isCancelRequested?.()) {
+                    this.updateStatus(statusId, 'CIRCL MISP import cancelled', 'warning');
+                    break;
+                }
 
                 const descriptorUuid = typeof descriptor?.uuid === 'string' ? descriptor.uuid.trim() : null;
                 const graphFileName = this.buildMispGraphFileName(descriptor);
@@ -1783,10 +1899,14 @@ window.IntegrationsManager = {
                 }
 
                 const payload = await this.fetchMispEventPayload(baseUrl, descriptor);
-                const graphData = this.buildGraphFromMispEvent(payload, {
+                let graphData = this.buildGraphFromMispEvent(payload, {
                     descriptor,
                     feedUrl: baseUrl
                 });
+
+                this.assertMispGraphPresent(graphData, descriptor);
+                graphData = this.sortMispNodesIntoTypeContainers(graphData);
+                await this.preloadMispTypeDefinitions(graphData);
 
                 if (!window.DataManager || typeof window.DataManager.setGraphData !== 'function') {
                     throw new Error('DataManager not available');
@@ -1903,6 +2023,10 @@ window.IntegrationsManager = {
             }
         }
 
+        if (taskHooks?.isCancelRequested?.()) {
+            return { events: results, manifest: descriptors, cancelled: true };
+        }
+
         if (!results.length) {
             if (skippedDueToExisting > 0) {
                 const message = skippedDueToExisting === 1
@@ -1919,7 +2043,9 @@ window.IntegrationsManager = {
 
         return { events: results, manifest: descriptors };
         } finally {
-            if (graphTaskId) {
+            if (taskHooks?.endProgress) {
+                taskHooks.endProgress(graphTaskId);
+            } else if (graphTaskId) {
                 window.UI?.endGraphActivity?.(graphTaskId);
             }
         }
@@ -2547,6 +2673,104 @@ window.IntegrationsManager = {
         return graphData;
     },
 
+    assertMispGraphPresent(graphData, descriptor = {}) {
+        if (!graphData || typeof graphData !== 'object') {
+            throw new Error('MISP import did not produce graph data');
+        }
+
+        const nodes = Array.isArray(graphData.nodes) ? graphData.nodes : [];
+        if (nodes.length === 0) {
+            const eventLabel = descriptor.info || descriptor.uuid || graphData.title || 'unknown event';
+            throw new Error(`MISP event ${eventLabel} did not contain any graph nodes`);
+        }
+    },
+
+    sortMispNodesIntoTypeContainers(graphData) {
+        if (!graphData || !Array.isArray(graphData.nodes) || graphData.nodes.length === 0) {
+            return graphData;
+        }
+
+        const graphIdSeed = graphData.id || graphData.title || `misp-${Date.now()}`;
+        const normalizedGraphSeed = this.normalizeIdentifier(graphIdSeed, { fallbackPrefix: 'misp' });
+        const nodes = graphData.nodes.map(node => ({ ...node }));
+        const containerByType = new Map();
+
+        const toContainerLabel = (type) => {
+            const cleanType = String(type || 'unknown').replace(/[_-]+/g, ' ').trim();
+            return cleanType ? `${cleanType} nodes` : 'Unknown nodes';
+        };
+
+        for (const node of nodes) {
+            if (!node || typeof node !== 'object') {
+                continue;
+            }
+
+            const type = typeof node.type === 'string' ? node.type.trim() : '';
+            if (!type || type === 'container' || type === 'report') {
+                continue;
+            }
+
+            let containerId = containerByType.get(type);
+            if (!containerId) {
+                const typeKey = this.normalizeIdentifier(type, { fallbackPrefix: 'type' });
+                containerId = `misp_container_${normalizedGraphSeed}_${typeKey}`;
+                containerByType.set(type, containerId);
+            }
+
+            node.parent = containerId;
+        }
+
+        if (containerByType.size === 0) {
+            return { ...graphData, nodes };
+        }
+
+        const containerNodes = Array.from(containerByType.entries()).map(([type, id]) => ({
+            id,
+            label: toContainerLabel(type),
+            type: 'container',
+            classes: 'container',
+            isContainer: true,
+            category: 'misp-container',
+            color: '#E8EAF6',
+            metadata: {
+                source: 'MISP import',
+                groupedByType: type
+            }
+        }));
+
+        return {
+            ...graphData,
+            nodes: [...containerNodes, ...nodes]
+        };
+    },
+
+    async preloadMispTypeDefinitions(graphData) {
+        if (!graphData || !Array.isArray(graphData.nodes)) {
+            return;
+        }
+
+        const uniqueTypes = new Set();
+        graphData.nodes.forEach(node => {
+            const nodeType = node?.type;
+            if (typeof nodeType === 'string' && nodeType && nodeType !== 'container' && nodeType !== 'default') {
+                uniqueTypes.add(nodeType);
+            }
+        });
+
+        if (uniqueTypes.size === 0) {
+            return;
+        }
+
+        if (window.DomainLoader && typeof window.DomainLoader.autoLoadDomainsForGraph === 'function') {
+            await window.DomainLoader.autoLoadDomainsForGraph(graphData);
+            return;
+        }
+
+        for (const type of uniqueTypes) {
+            await this.ensureNodeTypeAvailability(type);
+        }
+    },
+
     mapMispAttributes(attributes, reportNodeId) {
         const nodes = [];
         const edges = [];
@@ -2630,6 +2854,9 @@ window.IntegrationsManager = {
             if (!info || !info.id) {
                 return;
             }
+            if (reportNodeId === info.id) {
+                return;
+            }
             const sanitizedValue = (info.value || '')
                 .toString()
                 .replace(/[^a-zA-Z0-9]+/g, '_')
@@ -2653,6 +2880,9 @@ window.IntegrationsManager = {
             const isIncoming = direction === 'incoming';
             const sourceId = isIncoming ? targetInfo.id : sourceInfo.id;
             const targetId = isIncoming ? sourceInfo.id : targetInfo.id;
+            if (sourceId === targetId) {
+                return;
+            }
             const label = relationship.label || 'related-to';
             const type = relationship.type || 'misp-relationship';
 
@@ -3154,69 +3384,7 @@ window.IntegrationsManager = {
     },
 
     makeCirclLuRequest: async function(endpoint, options = {}) {
-        const { baseUrl, username, authKey } = this.getCirclLuConfiguration();
-
-        if (!baseUrl) {
-            throw new Error('CIRCL-LU base URL not configured');
-        }
-
-        const normalizedBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
-        const url = `${normalizedBase}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
-
-        const requestOptions = { ...options };
-        const headers = { ...(options.headers || {}) };
-
-
-        let authorizationHeader = '';
-        if (username && authKey) {
-            const token = btoa(`${username}:${authKey}`);
-            authorizationHeader = `Basic ${token}`;
-        } else if (authKey) {
-            authorizationHeader = `Bearer ${authKey}`;
-        }
-
-        if (authorizationHeader) {
-            headers['Authorization'] = authorizationHeader;
-        }
-
-        let fetchUrl = url;
-        let requestUrl;
-        try {
-            requestUrl = new URL(url);
-        } catch (_) {
-            requestUrl = new URL(url, window.location.origin);
-        }
-
-        const isCrossOrigin = requestUrl.origin !== window.location.origin;
-
-        if (isCrossOrigin) {
-            fetchUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
-            const proxyHeaders = { ...headers };
-            if (authorizationHeader) {
-                proxyHeaders['X-Proxy-Authorization'] = authorizationHeader;
-                delete proxyHeaders['Authorization'];
-            }
-            requestOptions.headers = proxyHeaders;
-        } else {
-            requestOptions.headers = headers;
-        }
-
-        try {
-            const response = await fetch(fetchUrl, requestOptions);
-
-
-            if (!response.ok) {
-                throw new Error(`CIRCL-LU request failed (${response.status})`);
-            }
-
-            const contentType = response.headers.get('content-type') || '';
-            if (contentType.includes('application/json')) {
-                return await response.json();
-            }
-            return await response.text();
-        } catch (error) {
-            throw new Error(error.message || 'Failed to reach CIRCL-LU feed');
-        }
+        return this.runAction('circl-misp', 'request', { source: 'manager' }, { endpoint, options });
     },
 
     updateNeo4jMenuVisibility: function() {
@@ -3268,203 +3436,40 @@ window.togglePasswordVisibility = function(inputId) {
 };
 
 window.loadOpmlFromUrl = async function() {
-    const urlInput = document.getElementById('opmlFeedUrl');
-    const targetUrl = urlInput?.value?.trim();
-    if (!targetUrl) {
-        window.IntegrationsManager.updateStatus('opmlStatus', 'Enter an OPML URL to load', 'warning');
-        return;
-    }
-    try {
-        window.IntegrationsManager.updateStatus('opmlStatus', 'Fetching OPML...', 'loading');
-        const opmlText = await window.IntegrationsManager.fetchOpmlText(targetUrl);
-        const textarea = document.getElementById('opmlFeedInput');
-        if (textarea) {
-            textarea.value = opmlText;
-        }
-        const feeds = window.IntegrationsManager.parseOpmlFeeds(opmlText);
-        window.IntegrationsManager.setOpmlFeeds(feeds, { opmlXml: opmlText });
-        const message = feeds.length
-            ? `Loaded ${feeds.length} feed${feeds.length === 1 ? '' : 's'} from OPML`
-            : 'No feeds were detected in the OPML file';
-        window.IntegrationsManager.updateStatus('opmlStatus', message, feeds.length ? 'success' : 'warning');
-    } catch (error) {
-        console.error('Failed to load OPML from URL', error);
-        window.IntegrationsManager.updateStatus('opmlStatus', 'Unable to fetch OPML file (check proxy allowlist)', 'error');
-    }
+    return window.IntegrationsManager.runAction('opml', 'loadFromUrl', { source: 'ui' }, {});
 };
 
 window.importOpmlFeeds = async function() {
-    const textarea = document.getElementById('opmlFeedInput');
-    const opmlText = textarea?.value?.trim();
-    if (!opmlText) {
-        window.IntegrationsManager.updateStatus('opmlStatus', 'Paste OPML XML before importing', 'warning');
-        return;
-    }
-    const feeds = window.IntegrationsManager.parseOpmlFeeds(opmlText);
-    window.IntegrationsManager.setOpmlFeeds(feeds, { opmlXml: opmlText });
-    const message = feeds.length
-        ? `Imported ${feeds.length} feed${feeds.length === 1 ? '' : 's'} from OPML`
-        : 'No feeds found in OPML input';
-    window.IntegrationsManager.updateStatus('opmlStatus', message, feeds.length ? 'success' : 'warning');
+    return window.IntegrationsManager.runAction('opml', 'importFeeds', { source: 'ui' }, {});
 };
 
 window.runOpmlScanNow = async function() {
-    const result = await window.IntegrationsManager.runOpmlDailyCheck({ force: true, statusId: 'opmlStatus' });
-    if (result && result.error) {
-        window.IntegrationsManager.updateStatus('opmlStatus', result.error.message || 'OPML scan failed', 'error');
-    }
+    return window.IntegrationsManager.runAction('opml', 'runScan', { source: 'ui' }, { force: true, statusId: 'opmlStatus' });
 };
 
 window.cancelOpmlScan = function() {
-    if (!window.IntegrationsManager.runtime.opmlScanInProgress) {
-        window.IntegrationsManager.updateStatus('opmlStatus', 'No OPML scan is currently running.', 'info');
-        return;
-    }
-    window.IntegrationsManager.runtime.opmlCancelRequested = true;
-    window.IntegrationsManager.updateOpmlControls();
-    window.IntegrationsManager.updateStatus('opmlStatus', 'Cancelling OPML scan...', 'info');
+    return window.IntegrationsManager.runAction('opml', 'cancelScan', { source: 'ui' }, {});
 };
 
+// Compatibility wrappers: keep existing global names while delegating into module actions.
 window.saveVirusTotalConfig = async function() {
-    const apiKeyInput = document.getElementById('virustotalApiKey');
-    const apiKey = apiKeyInput?.value.trim();
-
-    if (!apiKey) {
-        window.IntegrationsManager.updateStatus('virustotalStatus', 'Please enter an API key', 'error');
-        return;
-    }
-
-    // Validate API key format (VirusTotal keys are 64 character hex strings)
-    if (!/^[a-fA-F0-9]{64}$/.test(apiKey)) {
-        window.IntegrationsManager.updateStatus('virustotalStatus', 'Invalid API key format', 'error');
-        return;
-    }
-
-    // Prompt for passphrase if not already provided
-    await SecureStorage.ensurePassphrase();
-
-    window.IntegrationsManager.runtime.virustotalApiKey = apiKey;
-    localStorage.setItem(
-        window.IntegrationsManager.STORAGE_KEYS.VIRUSTOTAL_API_KEY,
-        await SecureStorage.encrypt(apiKey)
-    );
-    window.IntegrationsManager.updateStatus('virustotalStatus', 'Configuration saved successfully', 'success');
-};
-
-window.saveCirclLuConfig = async function() {
-    const usernameInput = document.getElementById('circlLuAuthUsername');
-    const authKeyInput = document.getElementById('circlLuAuthKey');
-    const lastSyncInput = document.getElementById('circlLuLastSync');
-
-    const username = usernameInput?.value.trim();
-    const authKey = authKeyInput?.value.trim();
-    const lastSync = lastSyncInput?.value.trim();
-
-    await SecureStorage.ensurePassphrase();
-
-    window.IntegrationsManager.runtime.circlLuAuthUsername = username || '';
-    window.IntegrationsManager.runtime.circlLuAuthKey = authKey || '';
-    window.IntegrationsManager.runtime.circlLuLastSync = lastSync || '';
-
-    if (username) {
-        localStorage.setItem(
-            window.IntegrationsManager.STORAGE_KEYS.CIRCL_LU_AUTH_USERNAME,
-            await SecureStorage.encrypt(username)
-        );
-    } else {
-        localStorage.removeItem(window.IntegrationsManager.STORAGE_KEYS.CIRCL_LU_AUTH_USERNAME);
-    }
-
-    if (authKey) {
-        localStorage.setItem(
-            window.IntegrationsManager.STORAGE_KEYS.CIRCL_LU_AUTH_KEY,
-            await SecureStorage.encrypt(authKey)
-        );
-    } else {
-        localStorage.removeItem(window.IntegrationsManager.STORAGE_KEYS.CIRCL_LU_AUTH_KEY);
-    }
-
-    if (lastSync) {
-        localStorage.setItem(window.IntegrationsManager.STORAGE_KEYS.CIRCL_LU_LAST_SYNC, lastSync);
-    } else {
-        localStorage.removeItem(window.IntegrationsManager.STORAGE_KEYS.CIRCL_LU_LAST_SYNC);
-    }
-
-    window.IntegrationsManager.updateStatus('circlLuStatus', 'Configuration saved successfully', 'success');
+    return window.IntegrationsManager.runAction('virustotal', 'saveConfig', { source: 'ui' }, {});
 };
 
 window.testVirusTotalConnection = async function() {
-    const apiKey = window.IntegrationsManager.runtime.virustotalApiKey;
+    return window.IntegrationsManager.runAction('virustotal', 'testConnection', { source: 'ui' }, {});
+};
 
-    if (!apiKey) {
-        window.IntegrationsManager.updateStatus('virustotalStatus', 'No API key configured', 'error');
-        return;
-    }
-    
-    window.IntegrationsManager.updateStatus('virustotalStatus', 'Testing connection...', 'testing');
-
-    try {
-        await window.IntegrationsManager.runAction('virustotal', 'testConnection', { source: 'ui' }, {});
-        window.IntegrationsManager.updateStatus('virustotalStatus', 'Connection successful', 'success');
-    } catch (error) {
-        console.error('VirusTotal connection test failed:', error);
-        if (error.message.includes('Invalid VirusTotal API key')) {
-            window.IntegrationsManager.updateStatus('virustotalStatus', 'Invalid API key', 'error');
-        } else if (error.message.includes('VirusTotal proxy blocked')) {
-            window.IntegrationsManager.updateStatus('virustotalStatus', 'VirusTotal proxy blocked (check proxy allowlist)', 'error');
-        } else if (error.message.includes('VirusTotal access forbidden')) {
-            window.IntegrationsManager.updateStatus('virustotalStatus', 'VirusTotal access forbidden (check account permissions)', 'error');
-        } else if (error.message.includes('VirusTotal API quota exceeded')) {
-            window.IntegrationsManager.updateStatus('virustotalStatus', 'API quota exceeded', 'error');
-        } else {
-            window.IntegrationsManager.updateStatus('virustotalStatus', 'Connection test failed (CORS/Network)', 'error');
-        }
-    }
+window.saveCirclLuConfig = async function() {
+    return window.IntegrationsManager.runAction('circl-misp', 'saveConfig', { source: 'ui' }, {});
 };
 
 window.testCirclLuConnection = async function() {
-    window.IntegrationsManager.updateStatus('circlLuStatus', 'Testing connection...', 'testing');
-
-    try {
-        await window.IntegrationsManager.makeCirclLuRequest('/manifest.json', { method: 'GET' });
-        window.IntegrationsManager.updateStatus('circlLuStatus', 'Connection successful', 'success');
-    } catch (error) {
-        console.error('CIRCL-LU connection test failed:', error);
-        window.IntegrationsManager.updateStatus('circlLuStatus', error.message || 'Connection test failed', 'error');
-    }
+    return window.IntegrationsManager.runAction('circl-misp', 'testConnection', { source: 'ui' }, {});
 };
 
 window.fetchCirclLuManifest = async function() {
-    window.IntegrationsManager.updateStatus('circlLuStatus', 'Fetching manifest...', 'testing');
-
-    try {
-        const manifest = await window.IntegrationsManager.makeCirclLuRequest('/manifest.json', { method: 'GET' });
-        console.info('CIRCL-LU manifest:', manifest);
-        window.IntegrationsManager.updateStatus('circlLuStatus', 'Manifest fetched (check console for details)', 'success');
-    } catch (error) {
-        console.error('Failed to fetch CIRCL-LU manifest:', error);
-        window.IntegrationsManager.updateStatus('circlLuStatus', error.message || 'Failed to fetch manifest', 'error');
-    }
-};
-
-window.syncCirclLuLatestEvent = async function() {
-    window.IntegrationsManager.updateStatus('circlLuStatus', 'Syncing latest event...', 'testing');
-
-    try {
-        const event = await window.IntegrationsManager.makeCirclLuRequest('/events/latest', { method: 'GET' });
-        console.info('CIRCL-LU latest event:', event);
-        const timestamp = new Date().toISOString();
-        window.IntegrationsManager.runtime.circlLuLastSync = timestamp;
-        const lastSyncInput = document.getElementById('circlLuLastSync');
-        if (lastSyncInput) {
-            lastSyncInput.value = timestamp;
-        }
-        localStorage.setItem(window.IntegrationsManager.STORAGE_KEYS.CIRCL_LU_LAST_SYNC, timestamp);
-        window.IntegrationsManager.updateStatus('circlLuStatus', 'Latest event synced (check console for details)', 'success');
-    } catch (error) {
-        console.error('Failed to sync CIRCL-LU latest event:', error);
-        window.IntegrationsManager.updateStatus('circlLuStatus', error.message || 'Failed to sync latest event', 'error');
-    }
+    return window.IntegrationsManager.runAction('circl-misp', 'fetchManifest', { source: 'ui' }, {});
 };
 
 // VirusTotal Query Functions
@@ -3693,7 +3698,7 @@ window.importSelectedCirclMispEvents = async function() {
     const autoSave = !!(autoSaveToggle && autoSaveToggle.checked);
 
     try {
-        await window.IntegrationsManager.importCirclMispFeed({
+        await window.IntegrationsManager.runAction('circl-misp', 'importData', { source: 'ui' }, {
             feedUrl,
             selectedEventUuids: selected.length ? selected : null,
             autoSave,
@@ -3719,7 +3724,7 @@ window.syncCirclLuLatestEvent = async function(options = {}) {
         || window.IntegrationsManager.CIRCL_MISP_DEFAULT_FEED_URL;
 
     try {
-        const result = await window.IntegrationsManager.importCirclMispFeed({
+        const result = await window.IntegrationsManager.runAction('circl-misp', 'importData', { source: 'ui' }, {
             feedUrl,
             selectedEventUuids: null,
             autoSave: !!options.autoSave,
@@ -3751,7 +3756,7 @@ window.syncCirclMispWholeFeed = async function(options = {}) {
         || window.IntegrationsManager.CIRCL_MISP_DEFAULT_FEED_URL;
 
     try {
-        const result = await window.IntegrationsManager.importCirclMispFeed({
+        const result = await window.IntegrationsManager.runAction('circl-misp', 'importData', { source: 'ui' }, {
             feedUrl,
             selectedEventUuids: null,
             autoSave: false,
@@ -3770,243 +3775,36 @@ window.syncCirclMispWholeFeed = async function(options = {}) {
     }
 };
 
+
+window.importCirclMispEvents = async function(options = {}) {
+    return window.IntegrationsManager.runAction('circl-misp', 'importData', { source: 'ui' }, options);
+};
+
 window.makeCirclLuRequest = async function(resource = 'manifest.json', options = {}) {
-    const feedUrl = options.feedUrl
-        || window.IntegrationsManager?.CIRCL_LU_BASE_URL
-        || window.IntegrationsManager?.lastCirclMispFeedUrl
-        || window.IntegrationsManager?.CIRCL_MISP_DEFAULT_FEED_URL;
-
-    if (!window.IntegrationsManager || !feedUrl) {
-        throw new Error('CIRCL MISP integration is not available');
-    }
-
-    const normalizedFeed = window.IntegrationsManager.normalizeMispFeedUrl(feedUrl);
-
-    try {
-        if (typeof resource === 'string' && /manifest\.json$/i.test(resource.trim())) {
-            const { manifest, descriptors } = await window.IntegrationsManager.fetchCirclMispManifest(normalizedFeed);
-            window.IntegrationsManager.lastCirclMispManifest = descriptors;
-            window.IntegrationsManager.lastCirclMispFeedUrl = normalizedFeed;
-            return manifest;
-        }
-
-        const descriptor = typeof resource === 'object' && resource
-            ? { ...resource }
-            : { path: resource };
-
-        if (!descriptor.uuid && typeof descriptor.path === 'string') {
-            const uuidFromPath = descriptor.path.replace(/\.json(\.gz)?$/i, '').split('/').pop();
-            descriptor.uuid = uuidFromPath || descriptor.uuid;
-        }
-
-        return await window.IntegrationsManager.fetchMispEventPayload(normalizedFeed, descriptor);
-    } catch (error) {
-        console.error('CIRCL MISP proxy request failed', error);
-        const status = error.status || (/status\s+(\d{3})/i.exec(error.message || '')?.[1]) || 'unknown';
-        const wrapped = new Error(`CIRCL-LU request failed (${status})`);
-        wrapped.cause = error;
-        throw wrapped;
-    }
+    return window.IntegrationsManager.runAction('circl-misp', 'requestResource', { source: 'ui' }, { resource, options });
 };
 
 
 window.saveOpenAIConfig = async function() {
-    const apiKeyInput = document.getElementById('openaiApiKey');
-    const apiKey = apiKeyInput?.value.trim();
-
-    if (!apiKey) {
-        window.IntegrationsManager.updateStatus('openaiStatus', 'Please enter an API key', 'error');
-        return;
-    }
-
-    // Basic validation for OpenAI API keys which start with 'sk-'. OpenAI has
-    // introduced multiple key formats (project keys, user keys, etc.) that may
-    // contain mixed casing, hyphens, underscores and other safe characters.
-    // Avoid rejecting valid keys by simply checking the prefix and enforcing a
-    // reasonable minimum length.
-    if (!apiKey.startsWith('sk-') || apiKey.length < 20) {
-        window.IntegrationsManager.updateStatus('openaiStatus', 'Invalid API key format', 'error');
-        return;
-    }
-
-    await SecureStorage.ensurePassphrase();
-
-    window.IntegrationsManager.runtime.openaiApiKey = apiKey;
-    localStorage.setItem(
-        window.IntegrationsManager.STORAGE_KEYS.OPENAI_API_KEY,
-        await SecureStorage.encrypt(apiKey)
-    );
-    window.IntegrationsManager.updateStatus('openaiStatus', 'Configuration saved successfully', 'success');
+    return window.IntegrationsManager.runAction('openai', 'saveConfig', { source: 'ui' }, {});
 };
 
 window.testOpenAIConnection = async function() {
-    const apiKey = window.IntegrationsManager.getOpenAIApiKey();
-
-    if (!apiKey) {
-        window.IntegrationsManager.updateStatus('openaiStatus', 'No API key configured', 'error');
-        return;
-    }
-
-    window.IntegrationsManager.updateStatus('openaiStatus', 'Testing connection...', 'testing');
-
-    try {
-        const response = await fetch('https://api.openai.com/v1/models', {
-            headers: { 'Authorization': `Bearer ${apiKey}` }
-        });
-        if (!response.ok) {
-            throw new Error('Invalid API key');
-        }
-        window.IntegrationsManager.updateStatus('openaiStatus', 'Connection successful', 'success');
-    } catch (error) {
-        console.error('OpenAI connection test failed:', error);
-        window.IntegrationsManager.updateStatus('openaiStatus', 'Connection test failed (CORS/Network)', 'error');
-    }
+    return window.IntegrationsManager.runAction('openai', 'testConnection', { source: 'ui' }, {});
 };
 
 window.saveSerpApiConfig = async function() {
-    const apiKeyInput = document.getElementById('serpApiKey');
-    const apiKey = apiKeyInput?.value.trim();
-
-    if (!apiKey) {
-        window.IntegrationsManager.updateStatus('serpapiStatus', 'Please enter an API key', 'error');
-        return;
-    }
-
-    // Basic validation for SerpApi keys (alphanumeric, at least 20 chars)
-    if (!/^[A-Za-z0-9]{20,}$/.test(apiKey)) {
-        window.IntegrationsManager.updateStatus('serpapiStatus', 'Invalid API key format', 'error');
-        return;
-    }
-
-    await SecureStorage.ensurePassphrase();
-
-    window.IntegrationsManager.runtime.serpApiKey = apiKey;
-    localStorage.setItem(
-        window.IntegrationsManager.STORAGE_KEYS.SERPAPI_API_KEY,
-        await SecureStorage.encrypt(apiKey)
-    );
-    window.IntegrationsManager.updateStatus('serpapiStatus', 'Configuration saved successfully', 'success');
+    return window.IntegrationsManager.runAction('serpapi', 'saveConfig', { source: 'ui' }, {});
 };
 
 window.testSerpApiConnection = async function() {
-    const apiKey = window.IntegrationsManager.getSerpApiKey();
-
-    if (!apiKey) {
-        window.IntegrationsManager.updateStatus('serpapiStatus', 'No API key configured', 'error');
-        return;
-    }
-
-    window.IntegrationsManager.updateStatus('serpapiStatus', 'Testing connection...', 'testing');
-
-    try {
-        const response = await fetch(`/api/serpapi?q=coffee&api_key=${apiKey}`);
-        if (!response.ok) {
-            throw new Error('Invalid API key');
-        }
-        window.IntegrationsManager.updateStatus('serpapiStatus', 'Connection successful', 'success');
-    } catch (error) {
-        console.error('SerpApi connection test failed:', error);
-        window.IntegrationsManager.updateStatus('serpapiStatus', 'Connection test failed (CORS/Network)', 'error');
-    }
+    return window.IntegrationsManager.runAction('serpapi', 'testConnection', { source: 'ui' }, {});
 };
 
 window.saveNeo4jConfig = async function() {
-    const usernameInput = document.getElementById('neo4jUsername');
-    const passwordInput = document.getElementById('neo4jPassword');
-
-    const url = window.IntegrationsManager.runtime.neo4jUrl?.trim();
-    const username = usernameInput?.value.trim();
-    const password = passwordInput?.value.trim();
-
-    if (!url || !username || !password) {
-        window.IntegrationsManager.updateStatus(
-            'neo4jStatus',
-            url ? 'Please enter username and password' : 'Server Neo4j URL is not configured',
-            'error'
-        );
-        if (typeof window.IntegrationsManager.updateNeo4jMenuVisibility === 'function') {
-            window.IntegrationsManager.updateNeo4jMenuVisibility();
-        }
-        return;
-    }
-
-    await SecureStorage.ensurePassphrase();
-
-    window.IntegrationsManager.runtime.neo4jUrl = url;
-    window.IntegrationsManager.runtime.neo4jUsername = username;
-    window.IntegrationsManager.runtime.neo4jPassword = password;
-
-    localStorage.setItem(window.IntegrationsManager.STORAGE_KEYS.NEO4J_USERNAME, await SecureStorage.encrypt(username));
-    localStorage.setItem(window.IntegrationsManager.STORAGE_KEYS.NEO4J_PASSWORD, await SecureStorage.encrypt(password));
-
-    window.IntegrationsManager.updateStatus('neo4jStatus', 'Configuration saved successfully', 'success');
-
-    if (typeof window.IntegrationsManager.updateNeo4jMenuVisibility === 'function') {
-        window.IntegrationsManager.updateNeo4jMenuVisibility();
-    }
+    return window.IntegrationsManager.runAction('neo4j', 'saveConfig', { source: 'ui' }, {});
 };
 
 window.testNeo4jConnection = async function() {
-    const creds = window.IntegrationsManager.getNeo4jCredentials();
-
-    if (!creds.url || !creds.username || !creds.password) {
-        window.IntegrationsManager.updateStatus('neo4jStatus', 'No credentials configured', 'error');
-        return;
-    }
-
-    window.IntegrationsManager.updateStatus('neo4jStatus', 'Testing connection...', 'testing');
-
-    try {
-        const auth = btoa(`${creds.username}:${creds.password}`);
-        let testUrl = creds.url;
-        let database = 'neo4j';
-
-        try {
-            const parsed = new URL(testUrl);
-
-            if (parsed.protocol === 'neo4j:' || parsed.protocol === 'bolt:') {
-                testUrl = `http://${parsed.hostname}:7474`;
-            } else {
-                testUrl = `${parsed.protocol}//${parsed.host}`;
-            }
-
-            const pathParts = parsed.pathname.split('/').filter(Boolean);
-            if (pathParts[0] === 'db' && pathParts[1]) {
-                database = pathParts[1];
-            }
-        } catch (urlError) {
-            console.warn('Unable to parse Neo4j URL, using raw value:', urlError);
-        }
-
-        const url = `${testUrl.replace(/\/$/, '')}/db/${database}/tx/commit`;
-        const body = JSON.stringify({ statements: [{ statement: 'RETURN 1' }] });
-
-        console.log('[Neo4j HTTP] POST', url, body);
-
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Basic ${auth}`,
-                'Content-Type': 'application/json'
-            },
-            body
-        });
-
-        const responseText = await response.clone().text();
-        console.log('[Neo4j HTTP] Response', response.status, responseText);
-
-        if (!response.ok) {
-            throw new Error(`Status ${response.status}`);
-        }
-
-        const result = JSON.parse(responseText);
-        if (result.errors && result.errors.length > 0) {
-            throw new Error(result.errors[0].message);
-        }
-
-        window.IntegrationsManager.updateStatus('neo4jStatus', 'Connection successful', 'success');
-    } catch (error) {
-        console.error('Neo4j connection test failed:', error);
-        window.IntegrationsManager.updateStatus('neo4jStatus', 'Connection test failed', 'error');
-    }
+    return window.IntegrationsManager.runAction('neo4j', 'testConnection', { source: 'ui' }, {});
 };
