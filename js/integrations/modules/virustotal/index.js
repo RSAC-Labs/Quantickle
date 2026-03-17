@@ -81,6 +81,10 @@
             return attributes.as_name || attributes.asn_owner || attributes.as_owner || attributes.asn_name || '';
         };
 
+        const extractRelationUrl = (relation) => {
+            return relation?.attributes?.url || relation?.id || '';
+        };
+
         const getVTBlocklist = () => {
             const runtimeList = getRuntime('vtBlocklist');
             if (Array.isArray(runtimeList)) {
@@ -1454,7 +1458,7 @@
 
             if (relationships.contacted_urls && Array.isArray(relationships.contacted_urls)) {
                 for (const relation of relationships.contacted_urls) {
-                    const url = relation.id || relation.attributes?.url;
+                    const url = extractRelationUrl(relation);
                     if (!url) continue;
 
                     const infoFields = {
@@ -1896,7 +1900,7 @@
 
             if (relationships.detected_urls && Array.isArray(relationships.detected_urls)) {
                 for (const relation of relationships.detected_urls) {
-                    const url = relation.attributes?.url || relation.id;
+                    const url = extractRelationUrl(relation);
                     if (!url) continue;
 
                     const infoFields = {
@@ -2154,7 +2158,7 @@
 
             if (relationships.detected_urls && Array.isArray(relationships.detected_urls)) {
                 for (const relation of relationships.detected_urls) {
-                    const url = relation.attributes?.url || relation.id;
+                    const url = extractRelationUrl(relation);
                     if (!url) continue;
 
                     const infoFields = {
