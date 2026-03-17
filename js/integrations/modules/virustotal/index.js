@@ -81,8 +81,39 @@
             return attributes.as_name || attributes.asn_owner || attributes.as_owner || attributes.asn_name || '';
         };
 
-        const extractRelationUrl = (relation) => {
-            return relation?.attributes?.url || relation?.id || '';
+        const virusTotalUrlResolutionCache = new Map();
+
+        const extractRelationUrl = async (relation) => {
+            const directUrl = relation?.attributes?.url;
+            if (typeof directUrl === 'string' && directUrl.trim() !== '') {
+                return directUrl;
+            }
+
+            const relationId = relation?.id;
+            if (typeof relationId !== 'string' || relationId.trim() === '') {
+                return '';
+            }
+
+            const trimmedRelationId = relationId.trim();
+
+            if (virusTotalUrlResolutionCache.has(trimmedRelationId)) {
+                return virusTotalUrlResolutionCache.get(trimmedRelationId);
+            }
+
+            let resolvedUrl = trimmedRelationId;
+
+            try {
+                const urlObject = await makeVirusTotalRequest(`/urls/${trimmedRelationId}`);
+                const fetchedUrl = urlObject?.data?.attributes?.url;
+                if (typeof fetchedUrl === 'string' && fetchedUrl.trim() !== '') {
+                    resolvedUrl = fetchedUrl;
+                }
+            } catch (error) {
+                console.warn('Unable to resolve URL relationship id to canonical URL:', trimmedRelationId, error);
+            }
+
+            virusTotalUrlResolutionCache.set(trimmedRelationId, resolvedUrl);
+            return resolvedUrl;
         };
 
         const getVTBlocklist = () => {
@@ -1458,7 +1489,7 @@
 
             if (relationships.contacted_urls && Array.isArray(relationships.contacted_urls)) {
                 for (const relation of relationships.contacted_urls) {
-                    const url = extractRelationUrl(relation);
+                    const url = await extractRelationUrl(relation);
                     if (!url) continue;
 
                     const infoFields = {
@@ -1900,7 +1931,7 @@
 
             if (relationships.detected_urls && Array.isArray(relationships.detected_urls)) {
                 for (const relation of relationships.detected_urls) {
-                    const url = extractRelationUrl(relation);
+                    const url = await extractRelationUrl(relation);
                     if (!url) continue;
 
                     const infoFields = {
@@ -2158,7 +2189,7 @@
 
             if (relationships.detected_urls && Array.isArray(relationships.detected_urls)) {
                 for (const relation of relationships.detected_urls) {
-                    const url = extractRelationUrl(relation);
+                    const url = await extractRelationUrl(relation);
                     if (!url) continue;
 
                     const infoFields = {
