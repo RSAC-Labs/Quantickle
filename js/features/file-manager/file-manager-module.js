@@ -5217,7 +5217,7 @@ class FileManagerModule {
         }
     }
 
-    async captureExportSnapshot({ desiredScale = 2, backgroundColor = '#ffffff', onError } = {}) {
+    async captureExportSnapshot({ desiredScale = 2, backgroundColor = '#ffffff', onError, allowViewportClipOnFailure = false } = {}) {
         const markNotifiedError = onError || (message => this.markExportError(message));
 
         if (!this.cy || typeof this.cy.png !== 'function') {
@@ -5320,12 +5320,63 @@ class FileManagerModule {
                 }
             }
 
+            let exportWasClippedToViewport = false;
+            let effectiveRenderedBounds = renderedBounds;
+            let effectiveBoundsWidth = boundsWidth;
+            let effectiveBoundsHeight = boundsHeight;
+            let renderedOriginX = renderedBounds && Number.isFinite(renderedBounds.x1) ? renderedBounds.x1 : 0;
+            let renderedOriginY = renderedBounds && Number.isFinite(renderedBounds.y1) ? renderedBounds.y1 : 0;
+
+            if (!pngDataUrl && allowViewportClipOnFailure) {
+                let attemptedViewportScale = scale;
+                while (attemptedViewportScale >= minScale) {
+                    try {
+                        const candidate = this.cy.png({ full: false, scale: attemptedViewportScale, bg: backgroundColor });
+
+                        if (!candidate || (typeof candidate === 'string' && !candidate.trim())) {
+                            throw new Error('Failed to capture clipped graph snapshot.');
+                        }
+
+                        if (typeof candidate !== 'string' || !candidate.startsWith('data:image/')) {
+                            throw new Error('Failed to capture a valid clipped graph image snapshot.');
+                        }
+
+                        pngDataUrl = candidate;
+                        scaleUsed = attemptedViewportScale;
+                        exportWasClippedToViewport = true;
+                        effectiveRenderedBounds = {
+                            x1: 0,
+                            y1: 0,
+                            w: Math.max(1, rect.width || 0),
+                            h: Math.max(1, rect.height || 0)
+                        };
+                        effectiveBoundsWidth = effectiveRenderedBounds.w;
+                        effectiveBoundsHeight = effectiveRenderedBounds.h;
+                        renderedOriginX = 0;
+                        renderedOriginY = 0;
+                        break;
+                    } catch (viewportError) {
+                        lastError = viewportError;
+                        const nextScale = attemptedViewportScale * scaleReductionFactor;
+                        if (nextScale < minScale) {
+                            break;
+                        }
+                        attemptedViewportScale = nextScale;
+                    }
+                }
+            }
+
             if (!pngDataUrl) {
                 const originalMessage = lastError && lastError.message ? ` ${lastError.message}` : '';
                 throw markNotifiedError(`Failed to capture graph snapshot at export scales >= ${minScale}.${originalMessage}`);
             }
 
-            if (scaleUsed < scale) {
+            if (exportWasClippedToViewport) {
+                this.notifications.show(
+                    'Graph export was clipped to the visible viewport because the full graph image exceeded browser canvas limits.',
+                    'warning'
+                );
+            } else if (scaleUsed < scale) {
                 this.notifications.show(
                     `Graph export scale was reduced from ${scale.toFixed(2)}x to ${scaleUsed.toFixed(2)}x to complete the snapshot.`,
                     'warning'
@@ -5334,16 +5385,14 @@ class FileManagerModule {
 
             const scaleX = scaleUsed;
             const scaleY = scaleUsed;
-            const renderedOriginX = renderedBounds && Number.isFinite(renderedBounds.x1) ? renderedBounds.x1 : 0;
-            const renderedOriginY = renderedBounds && Number.isFinite(renderedBounds.y1) ? renderedBounds.y1 : 0;
             const composedSnapshot = await this.composeSnapshotWithCalloutLayer(pngDataUrl, {
                 container,
                 scaleX,
                 scaleY,
                 renderedOriginX,
                 renderedOriginY,
-                renderedBoundsWidth: boundsWidth,
-                renderedBoundsHeight: boundsHeight,
+                renderedBoundsWidth: effectiveBoundsWidth,
+                renderedBoundsHeight: effectiveBoundsHeight,
                 onWarning: () => {}
             });
             const composedPngDataUrl = composedSnapshot && composedSnapshot.pngDataUrl
@@ -5357,10 +5406,10 @@ class FileManagerModule {
             return {
                 pngDataUrl: composedPngDataUrl,
                 scale: scaleUsed,
-                renderedBounds,
+                renderedBounds: effectiveRenderedBounds,
                 rect,
-                boundsWidth,
-                boundsHeight,
+                boundsWidth: effectiveBoundsWidth,
+                boundsHeight: effectiveBoundsHeight,
                 originX: 0,
                 originY: 0,
                 isBlankSnapshot: false,
@@ -5895,7 +5944,7 @@ class FileManagerModule {
                     break;
 
                 case 'png': {
-                    const snapshot = await this.captureExportSnapshot({ desiredScale: 4 });
+                    const snapshot = await this.captureExportSnapshot({ desiredScale: 4, allowViewportClipOnFailure: true });
                     notifyPartialExportWarnings(snapshot);
                     const pngResponse = await fetch(snapshot.pngDataUrl);
                     data = await pngResponse.blob();
