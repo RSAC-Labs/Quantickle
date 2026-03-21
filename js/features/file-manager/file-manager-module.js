@@ -1829,6 +1829,7 @@ class FileManagerModule {
                 const graphData = this.convertCSVToGraph(result.data, result.meta);
                 this.normalizeGraphTitle(graphData, file.name);
                 await this.prepareDomainsForGraph(graphData);
+                this.refreshGraphIconReferences(graphData);
                 this.applyGraphData(graphData, { selectImportedNodes: false });
 
                 this.currentFile = {
@@ -1874,6 +1875,7 @@ class FileManagerModule {
             const graphData = this.parseEdgeList(text);
             this.normalizeGraphTitle(graphData, file.name);
             await this.prepareDomainsForGraph(graphData);
+            this.refreshGraphIconReferences(graphData);
             this.applyGraphData(graphData, { selectImportedNodes: false });
 
             this.currentFile = {
@@ -4041,6 +4043,7 @@ class FileManagerModule {
             this.ensureGraphSavedTimestamp(graphData);
 
             await this.prepareDomainsForGraph(graphData);
+            this.refreshGraphIconReferences(graphData);
 
             this.applyGraphData(graphData, { selectImportedNodes: false });
             this.applyGraphAreaSettingsFromSource(graphData, rawGraphData);
@@ -4092,6 +4095,7 @@ class FileManagerModule {
             if (this.validateGraphData(graphData)) {
                 this.normalizeGraphTitle(graphData, file.name);
                 await this.prepareDomainsForGraph(graphData);
+                this.refreshGraphIconReferences(graphData);
 
                 this.applyGraphData(graphData, { selectImportedNodes: false });
                 this.applyGraphAreaSettingsFromSource(graphData, rawData);
@@ -4133,6 +4137,7 @@ class FileManagerModule {
         const sampleData = this.generateSampleGraph();
         this.normalizeGraphTitle(sampleData, 'sample-graph');
         await this.prepareDomainsForGraph(sampleData);
+        this.refreshGraphIconReferences(sampleData);
         this.applyGraphData(sampleData, { selectImportedNodes: false });
         this.applyGraphAreaSettingsFromSource(sampleData);
 
@@ -4361,6 +4366,7 @@ class FileManagerModule {
 
             this.normalizeGraphTitle(graphData, filename);
             await this.prepareDomainsForGraph(graphData);
+            this.refreshGraphIconReferences(graphData);
 
             this.applyGraphData(graphData, { selectImportedNodes: false });
             this.applyGraphAreaSettingsFromSource(graphData);
@@ -6344,6 +6350,7 @@ ${figureCaptionMarkup || ''}
             if (this.validateGraphData(graphData)) {
                 if (dm) dm.isLoading = true;
                 await this.prepareDomainsForGraph(graphData);
+                this.refreshGraphIconReferences(graphData);
                 this.applyGraphData(graphData, { selectImportedNodes: false });
                 if (dm) {
                     dm.isLoading = false;
@@ -7474,6 +7481,19 @@ ${figureCaptionMarkup || ''}
             console.error('[FileManager] Domain auto-loading failed:', error);
             return [];
         }
+    }
+
+    refreshGraphIconReferences(graphData) {
+        if (!graphData || !Array.isArray(graphData.nodes)) {
+            return graphData;
+        }
+
+        const graphRenderer = window.GraphRenderer;
+        if (graphRenderer && typeof graphRenderer._hydrateGraphDataNodeIcons === 'function') {
+            graphRenderer._hydrateGraphDataNodeIcons(graphData);
+        }
+
+        return graphData;
     }
 
     extractNodeLabel(node) {

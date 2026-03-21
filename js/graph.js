@@ -14798,6 +14798,31 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
         }
     },
 
+    _resolveNodeTypeIconReference(typeSettings) {
+        if (!typeSettings || typeof typeSettings !== 'object') {
+            return '';
+        }
+
+        const iconSource = typeof typeSettings.iconSource === 'string' ? typeSettings.iconSource.trim() : '';
+        if (iconSource) {
+            return iconSource;
+        }
+
+        const iconValue = typeof typeSettings.icon === 'string' ? typeSettings.icon.trim() : '';
+        if (!iconValue) {
+            return '';
+        }
+
+        if (window.IconConfigs && typeof window.IconConfigs === 'object') {
+            const mapped = window.IconConfigs[iconValue];
+            if (typeof mapped === 'string' && mapped.trim()) {
+                return mapped.trim();
+            }
+        }
+
+        return iconValue;
+    },
+
     _hydrateGraphDataNodeIcons(graphData) {
         if (!graphData || !Array.isArray(graphData.nodes) || !window.NodeTypes) {
             return;
@@ -14810,7 +14835,7 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
 
             const nodeType = this._resolveGraphNodeValue(node, 'type') || 'default';
             const typeSettings = window.NodeTypes[nodeType] || window.NodeTypes.default || null;
-            const typeIcon = typeof typeSettings?.icon === 'string' ? typeSettings.icon.trim() : '';
+            const typeIcon = this._resolveNodeTypeIconReference(typeSettings);
             if (!typeIcon) {
                 return;
             }
