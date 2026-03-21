@@ -14742,10 +14742,130 @@ Choose OK to duplicate these nodes or Cancel to ignore duplicates.`;
             || '#ffffff';
     },
 
+    _normalizeGraphIconReference(iconValue) {
+        if (typeof iconValue !== 'string') {
+            return '';
+        }
+
+        const trimmed = iconValue.trim();
+        if (!trimmed || trimmed === 'none') {
+            return '';
+        }
+
+        if (/^url\(/i.test(trimmed)) {
+            const extracted = this.extractIconUrl(trimmed);
+            return typeof extracted === 'string' ? extracted.trim() : '';
+        }
+
+        if (window.DomainLoader && typeof window.DomainLoader.normalizeIconSource === 'function') {
+            const normalized = window.DomainLoader.normalizeIconSource(trimmed);
+            if (typeof normalized === 'string' && normalized.trim()) {
+                return normalized.trim();
+            }
+        }
+
+        return trimmed;
+    },
+
+    _extractGraphIconFileName(iconValue) {
+        const normalized = this._normalizeGraphIconReference(iconValue);
+        if (!normalized) {
+            return '';
+        }
+
+        const withoutQuery = normalized.split('?')[0].split('#')[0];
+        const segments = withoutQuery.split('/').filter(Boolean);
+        return segments.length ? segments[segments.length - 1].toLowerCase() : '';
+    },
+
+    _isLocalGraphAssetReference(iconValue) {
+        const normalized = this._normalizeGraphIconReference(iconValue);
+        if (!normalized) {
+            return false;
+        }
+
+        return !/^(data:|blob:|https?:)/i.test(normalized);
+    },
+
+    _setGraphNodeValue(node, key, value) {
+        if (!node || typeof node !== 'object') {
+            return;
+        }
+
+        node[key] = value;
+        if (node.data && node.data !== node && typeof node.data === 'object') {
+            node.data[key] = value;
+        }
+    },
+
+    _hydrateGraphDataNodeIcons(graphData) {
+        if (!graphData || !Array.isArray(graphData.nodes) || !window.NodeTypes) {
+            return;
+        }
+
+        graphData.nodes.forEach(node => {
+            if (!node || typeof node !== 'object') {
+                return;
+            }
+
+            const nodeType = this._resolveGraphNodeValue(node, 'type') || 'default';
+            const typeSettings = window.NodeTypes[nodeType] || window.NodeTypes.default || null;
+            const typeIcon = typeof typeSettings?.icon === 'string' ? typeSettings.icon.trim() : '';
+            if (!typeIcon) {
+                return;
+            }
+
+            const currentIcon = this._resolveGraphNodeValue(node, 'icon');
+            const currentBackground = this._resolveGraphNodeValue(node, 'backgroundImage')
+                || this._resolveGraphNodeValue(node, 'background-image');
+
+            const normalizedTypeIcon = this._normalizeGraphIconReference(typeIcon);
+            if (!normalizedTypeIcon) {
+                return;
+            }
+
+            const typeFileName = this._extractGraphIconFileName(normalizedTypeIcon);
+            const currentIconNormalized = this._normalizeGraphIconReference(currentIcon);
+            const currentBackgroundNormalized = this._normalizeGraphIconReference(currentBackground);
+            const currentIconFileName = this._extractGraphIconFileName(currentIconNormalized);
+            const currentBackgroundFileName = this._extractGraphIconFileName(currentBackgroundNormalized);
+            const iconIsLocal = this._isLocalGraphAssetReference(currentIconNormalized);
+            const backgroundIsLocal = this._isLocalGraphAssetReference(currentBackgroundNormalized);
+
+            const shouldRefreshIcon = !!(
+                currentIconNormalized &&
+                iconIsLocal &&
+                typeFileName &&
+                currentIconFileName === typeFileName &&
+                currentIconNormalized !== normalizedTypeIcon
+            );
+
+            if (shouldRefreshIcon) {
+                this._setGraphNodeValue(node, 'icon', normalizedTypeIcon);
+            }
+
+            const shouldRefreshBackground = !!(
+                currentBackgroundNormalized &&
+                backgroundIsLocal &&
+                typeFileName &&
+                currentBackgroundFileName === typeFileName &&
+                currentBackgroundNormalized !== normalizedTypeIcon
+            );
+
+            if (shouldRefreshBackground) {
+                const refreshedBackground = this.buildBackgroundImage(normalizedTypeIcon) || 'none';
+                this._setGraphNodeValue(node, 'backgroundImage', refreshedBackground);
+                this._setGraphNodeValue(node, 'background-image', refreshedBackground);
+            }
+        });
+    },
+
     _hydrateGraphDataNodeColors(graphData) {
         if (!graphData || !Array.isArray(graphData.nodes)) {
             return;
         }
+
+        this._hydrateGraphDataNodeIcons(graphData);
 
         graphData.nodes.forEach(node => {
             if (!node || typeof node !== 'object') {
