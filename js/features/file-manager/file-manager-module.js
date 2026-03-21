@@ -1829,6 +1829,7 @@ class FileManagerModule {
                 const graphData = this.convertCSVToGraph(result.data, result.meta);
                 this.normalizeGraphTitle(graphData, file.name);
                 await this.prepareDomainsForGraph(graphData);
+                this.refreshGraphIconReferences(graphData);
                 this.applyGraphData(graphData, { selectImportedNodes: false });
 
                 this.currentFile = {
@@ -1874,6 +1875,7 @@ class FileManagerModule {
             const graphData = this.parseEdgeList(text);
             this.normalizeGraphTitle(graphData, file.name);
             await this.prepareDomainsForGraph(graphData);
+            this.refreshGraphIconReferences(graphData);
             this.applyGraphData(graphData, { selectImportedNodes: false });
 
             this.currentFile = {
@@ -4041,6 +4043,7 @@ class FileManagerModule {
             this.ensureGraphSavedTimestamp(graphData);
 
             await this.prepareDomainsForGraph(graphData);
+            this.refreshGraphIconReferences(graphData);
 
             this.applyGraphData(graphData, { selectImportedNodes: false });
             this.applyGraphAreaSettingsFromSource(graphData, rawGraphData);
@@ -4092,6 +4095,7 @@ class FileManagerModule {
             if (this.validateGraphData(graphData)) {
                 this.normalizeGraphTitle(graphData, file.name);
                 await this.prepareDomainsForGraph(graphData);
+                this.refreshGraphIconReferences(graphData);
 
                 this.applyGraphData(graphData, { selectImportedNodes: false });
                 this.applyGraphAreaSettingsFromSource(graphData, rawData);
@@ -4133,6 +4137,7 @@ class FileManagerModule {
         const sampleData = this.generateSampleGraph();
         this.normalizeGraphTitle(sampleData, 'sample-graph');
         await this.prepareDomainsForGraph(sampleData);
+        this.refreshGraphIconReferences(sampleData);
         this.applyGraphData(sampleData, { selectImportedNodes: false });
         this.applyGraphAreaSettingsFromSource(sampleData);
 
@@ -4361,6 +4366,7 @@ class FileManagerModule {
 
             this.normalizeGraphTitle(graphData, filename);
             await this.prepareDomainsForGraph(graphData);
+            this.refreshGraphIconReferences(graphData);
 
             this.applyGraphData(graphData, { selectImportedNodes: false });
             this.applyGraphAreaSettingsFromSource(graphData);
@@ -5217,7 +5223,7 @@ class FileManagerModule {
         }
     }
 
-    async captureExportSnapshot({ desiredScale = 2, backgroundColor = '#ffffff', onError } = {}) {
+    async captureExportSnapshot({ desiredScale = 2, backgroundColor = '#ffffff', onError, allowViewportClipOnFailure = false } = {}) {
         const markNotifiedError = onError || (message => this.markExportError(message));
 
         if (!this.cy || typeof this.cy.png !== 'function') {
@@ -5320,12 +5326,63 @@ class FileManagerModule {
                 }
             }
 
+            let exportWasClippedToViewport = false;
+            let effectiveRenderedBounds = renderedBounds;
+            let effectiveBoundsWidth = boundsWidth;
+            let effectiveBoundsHeight = boundsHeight;
+            let renderedOriginX = renderedBounds && Number.isFinite(renderedBounds.x1) ? renderedBounds.x1 : 0;
+            let renderedOriginY = renderedBounds && Number.isFinite(renderedBounds.y1) ? renderedBounds.y1 : 0;
+
+            if (!pngDataUrl && allowViewportClipOnFailure) {
+                let attemptedViewportScale = scale;
+                while (attemptedViewportScale >= minScale) {
+                    try {
+                        const candidate = this.cy.png({ full: false, scale: attemptedViewportScale, bg: backgroundColor });
+
+                        if (!candidate || (typeof candidate === 'string' && !candidate.trim())) {
+                            throw new Error('Failed to capture clipped graph snapshot.');
+                        }
+
+                        if (typeof candidate !== 'string' || !candidate.startsWith('data:image/')) {
+                            throw new Error('Failed to capture a valid clipped graph image snapshot.');
+                        }
+
+                        pngDataUrl = candidate;
+                        scaleUsed = attemptedViewportScale;
+                        exportWasClippedToViewport = true;
+                        effectiveRenderedBounds = {
+                            x1: 0,
+                            y1: 0,
+                            w: Math.max(1, rect.width || 0),
+                            h: Math.max(1, rect.height || 0)
+                        };
+                        effectiveBoundsWidth = effectiveRenderedBounds.w;
+                        effectiveBoundsHeight = effectiveRenderedBounds.h;
+                        renderedOriginX = 0;
+                        renderedOriginY = 0;
+                        break;
+                    } catch (viewportError) {
+                        lastError = viewportError;
+                        const nextScale = attemptedViewportScale * scaleReductionFactor;
+                        if (nextScale < minScale) {
+                            break;
+                        }
+                        attemptedViewportScale = nextScale;
+                    }
+                }
+            }
+
             if (!pngDataUrl) {
                 const originalMessage = lastError && lastError.message ? ` ${lastError.message}` : '';
                 throw markNotifiedError(`Failed to capture graph snapshot at export scales >= ${minScale}.${originalMessage}`);
             }
 
-            if (scaleUsed < scale) {
+            if (exportWasClippedToViewport) {
+                this.notifications.show(
+                    'Graph export was clipped to the visible viewport because the full graph image exceeded browser canvas limits.',
+                    'warning'
+                );
+            } else if (scaleUsed < scale) {
                 this.notifications.show(
                     `Graph export scale was reduced from ${scale.toFixed(2)}x to ${scaleUsed.toFixed(2)}x to complete the snapshot.`,
                     'warning'
@@ -5334,16 +5391,14 @@ class FileManagerModule {
 
             const scaleX = scaleUsed;
             const scaleY = scaleUsed;
-            const renderedOriginX = renderedBounds && Number.isFinite(renderedBounds.x1) ? renderedBounds.x1 : 0;
-            const renderedOriginY = renderedBounds && Number.isFinite(renderedBounds.y1) ? renderedBounds.y1 : 0;
             const composedSnapshot = await this.composeSnapshotWithCalloutLayer(pngDataUrl, {
                 container,
                 scaleX,
                 scaleY,
                 renderedOriginX,
                 renderedOriginY,
-                renderedBoundsWidth: boundsWidth,
-                renderedBoundsHeight: boundsHeight,
+                renderedBoundsWidth: effectiveBoundsWidth,
+                renderedBoundsHeight: effectiveBoundsHeight,
                 onWarning: () => {}
             });
             const composedPngDataUrl = composedSnapshot && composedSnapshot.pngDataUrl
@@ -5357,10 +5412,10 @@ class FileManagerModule {
             return {
                 pngDataUrl: composedPngDataUrl,
                 scale: scaleUsed,
-                renderedBounds,
+                renderedBounds: effectiveRenderedBounds,
                 rect,
-                boundsWidth,
-                boundsHeight,
+                boundsWidth: effectiveBoundsWidth,
+                boundsHeight: effectiveBoundsHeight,
                 originX: 0,
                 originY: 0,
                 isBlankSnapshot: false,
@@ -5895,7 +5950,7 @@ class FileManagerModule {
                     break;
 
                 case 'png': {
-                    const snapshot = await this.captureExportSnapshot({ desiredScale: 4 });
+                    const snapshot = await this.captureExportSnapshot({ desiredScale: 4, allowViewportClipOnFailure: true });
                     notifyPartialExportWarnings(snapshot);
                     const pngResponse = await fetch(snapshot.pngDataUrl);
                     data = await pngResponse.blob();
@@ -6295,6 +6350,7 @@ ${figureCaptionMarkup || ''}
             if (this.validateGraphData(graphData)) {
                 if (dm) dm.isLoading = true;
                 await this.prepareDomainsForGraph(graphData);
+                this.refreshGraphIconReferences(graphData);
                 this.applyGraphData(graphData, { selectImportedNodes: false });
                 if (dm) {
                     dm.isLoading = false;
@@ -7425,6 +7481,156 @@ ${figureCaptionMarkup || ''}
             console.error('[FileManager] Domain auto-loading failed:', error);
             return [];
         }
+    }
+
+    refreshGraphIconReferences(graphData) {
+        if (!graphData || !Array.isArray(graphData.nodes)) {
+            return graphData;
+        }
+
+        const graphRenderer = window.GraphRenderer;
+        const nodeTypes = (window.NodeTypes && typeof window.NodeTypes === 'object')
+            ? window.NodeTypes
+            : {};
+
+        const resolveNodeTypeIcon = (typeSettings) => {
+            if (!typeSettings || typeof typeSettings !== 'object') {
+                return '';
+            }
+
+            if (graphRenderer && typeof graphRenderer._resolveNodeTypeIconReference === 'function') {
+                return graphRenderer._resolveNodeTypeIconReference(typeSettings) || '';
+            }
+
+            const iconSource = typeof typeSettings.iconSource === 'string' ? typeSettings.iconSource.trim() : '';
+            if (iconSource) {
+                return iconSource;
+            }
+
+            const iconValue = typeof typeSettings.icon === 'string' ? typeSettings.icon.trim() : '';
+            if (!iconValue) {
+                return '';
+            }
+
+            if (window.IconConfigs && typeof window.IconConfigs === 'object') {
+                const mapped = window.IconConfigs[iconValue];
+                if (typeof mapped === 'string' && mapped.trim()) {
+                    return mapped.trim();
+                }
+            }
+
+            return iconValue;
+        };
+
+        const normalizeIconReference = (value) => {
+            if (typeof value !== 'string') {
+                return '';
+            }
+
+            const trimmed = value.trim();
+            if (!trimmed || trimmed === 'none') {
+                return '';
+            }
+
+            if (graphRenderer && typeof graphRenderer.extractIconUrl === 'function' && /^url\(/i.test(trimmed)) {
+                const extracted = graphRenderer.extractIconUrl(trimmed);
+                return typeof extracted === 'string' ? extracted.trim() : '';
+            }
+
+            if (window.DomainLoader && typeof window.DomainLoader.normalizeIconSource === 'function') {
+                const normalized = window.DomainLoader.normalizeIconSource(trimmed);
+                if (typeof normalized === 'string' && normalized.trim()) {
+                    return normalized.trim();
+                }
+            }
+
+            return trimmed;
+        };
+
+        const isLocalAssetReference = (value) => {
+            const normalized = normalizeIconReference(value);
+            return !!(normalized && !/^(data:|blob:|https?:)/i.test(normalized));
+        };
+
+        const buildBackgroundReference = (iconValue) => {
+            if (!iconValue) {
+                return 'none';
+            }
+
+            if (graphRenderer && typeof graphRenderer.buildBackgroundImage === 'function') {
+                return graphRenderer.buildBackgroundImage(iconValue) || 'none';
+            }
+
+            const escaped = String(iconValue).replace(/"/g, '\\"');
+            return `url("${escaped}")`;
+        };
+
+        const applyTargetIconMigration = (target, iconReference) => {
+            if (!target || typeof target !== 'object') {
+                return;
+            }
+
+            const existingIcon = target.icon;
+            const existingBackground = target.backgroundImage ?? target['background-image'];
+            const styleObject = target.style && typeof target.style === 'object' ? target.style : null;
+            const existingStyleBackground = styleObject
+                ? (styleObject.backgroundImage ?? styleObject['background-image'])
+                : null;
+
+            const shouldReplaceIcon = !existingIcon || isLocalAssetReference(existingIcon);
+            const shouldReplaceBackground = isLocalAssetReference(existingBackground);
+            const shouldReplaceStyleBackground = isLocalAssetReference(existingStyleBackground);
+
+            if (!shouldReplaceIcon && !shouldReplaceBackground && !shouldReplaceStyleBackground) {
+                return;
+            }
+
+            const backgroundReference = buildBackgroundReference(iconReference);
+
+            if (shouldReplaceIcon) {
+                target.icon = iconReference;
+            }
+
+            if (shouldReplaceBackground || shouldReplaceIcon) {
+                target.backgroundImage = backgroundReference;
+                target['background-image'] = backgroundReference;
+            }
+
+            if (styleObject && (shouldReplaceStyleBackground || shouldReplaceIcon)) {
+                styleObject.backgroundImage = backgroundReference;
+                styleObject['background-image'] = backgroundReference;
+            }
+        };
+
+        graphData.nodes.forEach(node => {
+            if (!node || typeof node !== 'object') {
+                return;
+            }
+
+            const source = node.data && typeof node.data === 'object' ? node.data : node;
+            const nodeType = source.type || node.type || 'default';
+            if (nodeType === 'image') {
+                return;
+            }
+
+            const typeSettings = nodeTypes[nodeType] || nodeTypes.default || null;
+            const iconReference = resolveNodeTypeIcon(typeSettings);
+            const normalizedIconReference = normalizeIconReference(iconReference);
+            if (!normalizedIconReference) {
+                return;
+            }
+
+            applyTargetIconMigration(node, normalizedIconReference);
+            if (node.data && node.data !== node && typeof node.data === 'object') {
+                applyTargetIconMigration(node.data, normalizedIconReference);
+            }
+        });
+
+        if (graphRenderer && typeof graphRenderer._hydrateGraphDataNodeIcons === 'function') {
+            graphRenderer._hydrateGraphDataNodeIcons(graphData);
+        }
+
+        return graphData;
     }
 
     extractNodeLabel(node) {

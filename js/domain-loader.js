@@ -547,6 +547,16 @@ window.DomainLoader = {
     defaultIcon: 'assets/icons/defaults/missing-icon.svg',
     iconUrlCache: new Map(),
 
+    rewriteLegacyIconPath: function(iconPath) {
+        if (typeof iconPath !== 'string' || iconPath.length === 0) {
+            return iconPath;
+        }
+
+        return iconPath
+            .replace(/^\/?assets\/icons\/hmon\//i, 'assets/domains/hacktivist/')
+            .replace(/^\/?assets\/domains\/hmon\//i, 'assets/domains/hacktivist/');
+    },
+
     // Normalize icon references so callers always receive either a relative
     // asset path, a fully-qualified URL or an existing data URI.
     normalizeIconSource: function(iconPath) {
@@ -567,7 +577,10 @@ window.DomainLoader = {
             return trimmed;
         }
 
-        return trimmed.replace(/^\/+/, '');
+        const rewritten = this.rewriteLegacyIconPath(trimmed);
+        return typeof rewritten === 'string'
+            ? rewritten.replace(/^\/+/, '')
+            : trimmed.replace(/^\/+/, '');
     },
     resolveIconMapping: function(iconPath) {
         const normalized = this.normalizeIconSource(iconPath);
@@ -1163,7 +1176,11 @@ window.DomainLoader = {
         if (trimmed.startsWith('data:') || /^https?:\/\//i.test(trimmed)) {
             return trimmed;
         }
-        let normalized = this.normalizeZipPath(trimmed);
+        let normalized = this.normalizeZipPath(
+            typeof this.rewriteLegacyIconPath === 'function'
+                ? this.rewriteLegacyIconPath(trimmed)
+                : trimmed
+        );
         normalized = normalized.replace(/^assets\/domains\//, '').replace(/^assets\/icons\//, '');
         if (normalized.startsWith(folder + '/')) {
             normalized = normalized.slice(folder.length + 1);
@@ -2266,19 +2283,23 @@ window.DomainLoader = {
             if (typeof iconPath !== 'string' || iconPath.length === 0) {
                 return null;
             }
-            if (iconPath.startsWith('/assets/icons/')) {
-                return iconPath.replace(/^\/+/, '').replace(/^assets\/icons\//, 'assets/domains/');
+            const rewritten = typeof this.rewriteLegacyIconPath === 'function'
+                ? this.rewriteLegacyIconPath(iconPath)
+                : iconPath;
+            const candidate = typeof rewritten === 'string' ? rewritten : iconPath;
+            if (candidate.startsWith('/assets/icons/')) {
+                return candidate.replace(/^\/+/, '').replace(/^assets\/icons\//, 'assets/domains/');
             }
-            if (iconPath.startsWith('/assets/domains/')) {
-                return iconPath.replace(/^\/+/, '');
+            if (candidate.startsWith('/assets/domains/')) {
+                return candidate.replace(/^\/+/, '');
             }
-            if (iconPath.startsWith('assets/icons/') || iconPath.startsWith('data:')) {
-                return iconPath.startsWith('assets/icons/')
-                    ? iconPath.replace(/^assets\/icons\//, 'assets/domains/')
-                    : iconPath;
+            if (candidate.startsWith('assets/icons/') || candidate.startsWith('data:')) {
+                return candidate.startsWith('assets/icons/')
+                    ? candidate.replace(/^assets\/icons\//, 'assets/domains/')
+                    : candidate;
             }
-            if (iconPath.startsWith('assets/domains/')) {
-                return iconPath;
+            if (candidate.startsWith('assets/domains/')) {
+                return candidate;
             }
             return null;
         };
